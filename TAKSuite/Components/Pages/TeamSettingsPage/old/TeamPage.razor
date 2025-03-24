@@ -1,0 +1,184 @@
+﻿@page "/team/{id:guid}"
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+@using System.ComponentModel.DataAnnotations
+@using TAKSuite.Components.Pages.RegistrationCode
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@using Microsoft.AspNetCore.Authorization
+
+
+
+
+@inject IJSRuntime JS
+@inject ToastService ToastService;
+@inject NavigationManager NavigationManager
+
+
+
+@inject RadioChannelService _radioChannelService
+@inject TeamRadioChannelService _teamRadioChannelService
+@inject RegistrationCodeService _registrationCodeService
+@inject TeamService _teamService;
+
+
+<script>
+    function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+    console.log("Testo copiato: " + text);
+    }).catch(err => {
+    console.error("Errore nella copia:", err);
+    });
+    }
+    function openInNewTab(url) {
+        window.open(url, '_blank');
+    }
+</script>
+
+<PageTitle>Squadra: @team?.Name</PageTitle>
+
+
+<AddTeamChannelModal @ref="modalAddChannel" RadioList="radioList" Model="modelChannelInput" OnModalSuccess="OnSuccessTeamChannel" OnModalError="OnError"/>
+<RegistrationCodeModal @ref="modalRegCode" Model="modelRegcode" OnSuccess="OnSuccess" OnModalHidden="OnModalHidden2" Teams="teams" />
+
+<Tabs EnableFadeEffect="true">
+    <Tab Active="true">
+        <TitleTemplate>
+            <Icon Name="IconName.HouseFill" /> Dettagli
+        </TitleTemplate>
+        <Content>
+            <div class="d-flex justify-content-between align-items-center">
+                <h3>@team?.Name</h3>
+                <Button Color="ButtonColor.Primary" @onclick="ShareOnBoarding"><Icon Name="IconName.ShareFill"></Icon> Onboarding</Button>
+            </div>
+            <h5><strong>Team leader: </strong>@team?.TeamLeader?.Name</h5>
+            <h5><strong>@team?.TeamLeader?.Nick</strong></h5>
+            <p><strong>Phone: </strong>@team?.TeamLeader?.PhoneNumber</p>
+            <p><strong>Mail: </strong>@team?.TeamLeader?.Email</p>
+        </Content>
+    </Tab>
+    <Tab>
+        <TitleTemplate>
+            <Icon Name="IconName.Headset" /> Comunicazioni
+        </TitleTemplate>
+        <Content>
+            <TeamRadioChannelViewer TeamId="id" OnAdd="OnAdd" OnEdit="OnEdit" />
+        </Content>
+    </Tab>
+    <Tab>
+        <TitleTemplate>
+            <Icon Name="IconName.PersonFill" />   Utenti
+        </TitleTemplate>
+        <Content>
+            <TeamUtentiComponent Id="@id"></TeamUtentiComponent>
+        </Content>
+    </Tab>
+</Tabs>
+
+
+
+@code {
+    [Parameter]
+    public Guid id { get; set; }
+
+    private RegistrationCodeModel? modelRegcode { get; set; } = new();
+    private RegistrationCodeModal modalRegCode = default!;
+
+
+    // [SupplyParameterFromForm]
+    private RadioChannelInput? modelChannelInput { get; set; } = new();
+    private AddTeamChannelModal modalAddChannel = default!;
+
+    private Team team;
+    private List<Team> teams;
+
+    // List<TeamRadioChannel> channelList = new();
+    List<RadioChannel> radioList = new();
+
+
+
+    private async Task OnShowModalClick(ChannelType chPos)
+    {
+        modelChannelInput.Position = chPos;
+        await modalAddChannel.ShowAsync(id);
+    }
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        Thread.Sleep(100);
+        team = await _teamService.GetAsync(id);
+        Thread.Sleep(100);
+        teams = await _teamService.GetAllAsync();
+
+        Thread.Sleep(100);
+        radioList = await _radioChannelService.GetAllAsync();
+        radioList.Sort((x, y) => x.Name.CompareTo(y.Name));
+
+        StateHasChanged();
+
+    }
+
+    private async Task ShareOnBoarding()
+    {
+        var reg = await _registrationCodeService.GetRegistrationByTeamID(id);
+        if (reg==null)
+        {
+            //NavigationManager.NavigateTo("/regcodes");
+            reg = await _registrationCodeService.CreateAsync();
+            reg.TeamId = id;
+            reg.ExpirationDate = DateTime.Now;
+            modelRegcode = new RegistrationCodeModel(reg);
+
+            await modalRegCode.ShowAsync();
+        }
+        else
+        {
+            ShareOnBoardingCode(reg);
+        }
+    }
+
+
+    private async Task OnModalHidden2()
+    {
+        modelRegcode = new();
+        modelRegcode.ExpirationDate = DateTime.Now;
+        StateHasChanged();
+    }
+    private async Task OnSuccessTeamChannel()
+    {
+        StateHasChanged();
+
+    }
+    private async Task OnSuccess()
+    {
+        await JS.InvokeVoidAsync("copyToClipboard", NavigationManager.BaseUri + "Account/Register?registration=" + modelRegcode.Id.ToString());
+        ToastService.Notify(new(ToastType.Success, "Condividi", $"Testo copiato negli appunti"));
+
+        StateHasChanged();
+    }
+    private async Task OnError(String message)
+    {
+        ToastService.Notify(new() { Title = "Attenzione", Message = message, Type = ToastType.Danger });
+        StateHasChanged();
+    }
+
+
+    private async Task ShareOnBoardingCode(RegistrationCode code)
+    {
+        await JS.InvokeVoidAsync("copyToClipboard", NavigationManager.BaseUri + "Account/Register?registration=" + code.Id.ToString());
+        ToastService.Notify(new(ToastType.Success, "Condividi", $"Testo copiato negli appunti"));
+    }
+    private async void OnAdd(TeamRadioChannel trc)
+    {
+        modelChannelInput = new RadioChannelInput(trc);
+        await modalAddChannel.ShowAsync(id);
+    }
+    private async void OnEdit(TeamRadioChannel trc)
+    {
+        modelChannelInput = new RadioChannelInput(trc);
+        modelChannelInput.Id = trc.Id;
+        await modalAddChannel.ShowAsync(id);
+    }
+}

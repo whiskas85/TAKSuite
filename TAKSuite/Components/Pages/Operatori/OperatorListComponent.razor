@@ -1,0 +1,62 @@
+﻿@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@inject UserServiceAtak userServiceAtak
+
+<h3>Lista operatori</h3>
+
+<Grid TItem="UserAtak"
+Class="table table-hover"
+HeaderRowCssClass="bg-success text-white border-bottom-0 h5"
+Data="OperatorList"
+AllowFiltering="false"
+AllowPaging="false"
+PageSize="20"
+AllowSorting="true"
+AllowRowClick="true" 
+OnRowDoubleClick="SelectItem"
+Responsive="true">
+
+    <GridColumns>
+        <GridColumn TItem="UserAtak" HeaderText="Nick" Class="align-middle" SortKeySelector="item => item.Nick">
+            @context.Nick
+        </GridColumn>
+        <GridColumn TItem="UserAtak" HeaderText="Nome" Class="align-middle" SortKeySelector="item => item.Name">
+            @context.Name
+        </GridColumn>
+        <GridColumn TItem="UserAtak" HeaderText="Telefono" Class="align-middle" SortKeySelector="item => item.PhoneNumber">
+            @context.PhoneNumber
+        </GridColumn>
+        @* <GridColumn TItem="UserAtak" Class="align-middle" HeaderText="Azioni">
+            <Button Color="ButtonColor.Primary" @onclick="() => ShareRegistrationCode(context.Id)">Condividi</Button>
+            <Button Color="ButtonColor.Danger" @onclick="() => DeleteCode(context.Id)"><Icon Name="IconName.X"/></Button>
+        </GridColumn> *@
+    </GridColumns>
+</Grid>
+
+@code {
+    [Parameter] public Guid? TeamId { get; set; }
+    [Parameter] public EventCallback<UserAtak> OnRowSelected { get; set; }
+
+
+    private List<UserAtak> OperatorList = new List<UserAtak>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var list = await userServiceAtak.GetAllAsync();
+
+        if (TeamId == null)
+        {
+            OperatorList = list;
+        }
+        else
+        {
+            OperatorList = list.Where(_ => _.TeamId == TeamId).ToList();
+        }
+
+        StateHasChanged();
+    }
+    private async Task SelectItem(GridRowEventArgs<UserAtak> args)
+    {
+        await OnRowSelected.InvokeAsync(args.Item);
+    }
+}

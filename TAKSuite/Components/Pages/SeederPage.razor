@@ -1,0 +1,23 @@
+﻿@page "/seeder"
+@rendermode InteractiveServer
+@using TAKSuite.Components.Pages.RegistrationCode
+@using TAKSuite.Data.Seeder
+
+@inject RadioChannelSeeder _seeder;
+
+<PageTitle>Home</PageTitle>
+
+<h1>Hello, world!</h1>
+
+Welcome to your new app.
+
+
+<Button Color="ButtonColor.Primary" @onclick="RadioChannelSeeder">Seed</Button>
+
+
+@code {
+    private async Task RadioChannelSeeder()
+    {
+        await _seeder.ImportRadioChannelsAsync();
+    }
+}

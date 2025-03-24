@@ -1,0 +1,60 @@
+﻿@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+
+
+<Modal @ref="modal" Title="Seleziona un operatore" OnHidden="OnHidden" Size="ModalSize.Large">
+    <BodyTemplate>
+        <OperatorListComponent TeamId="TeamId" OnRowSelected="RowSelected" />
+    </BodyTemplate>
+    <FooterTemplate>
+        @* <Button Color="ButtonColor.Primary" @onclick="OnSave">Save changes</Button> *@
+        <Button Color="ButtonColor.Secondary" @onclick="OnHidden">Close</Button>
+    </FooterTemplate>
+</Modal>
+
+
+@code {
+    [Parameter] public Guid? TeamId { get; set; }
+
+    [Parameter] public EventCallback<UserAtak> OnModalSuccess { get; set; }
+    [Parameter] public EventCallback<String> OnModalError { get; set; }
+    [Parameter] public EventCallback OnModalHidden { get; set; }
+
+    private Modal modal = default!;
+
+
+    public async Task ShowAsync(Guid teamId)
+    {
+        TeamId = TeamId;
+        await modal.ShowAsync();
+    }
+
+    public async Task HideAsync() 
+    {
+        await modal.HideAsync();
+    }
+
+
+    private async void OnHidden()
+    {
+        await modal.HideAsync();
+        await OnModalHidden.InvokeAsync();
+    }
+
+    private async void OnSuccess(UserAtak args)
+    {
+        await modal.HideAsync();
+        await OnModalSuccess.InvokeAsync(args);
+    }
+    private async void OnError(String message)
+    {
+        await modal.HideAsync();
+        await OnModalError.InvokeAsync(message);
+    }
+    private void RowSelected(UserAtak args)
+    {
+        OnSuccess(args);
+    }
+}
+
+

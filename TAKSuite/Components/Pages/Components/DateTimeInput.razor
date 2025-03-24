@@ -1,0 +1,96 @@
+﻿@using Microsoft.AspNetCore.Mvc
+@using System.Linq.Expressions
+@using System.ComponentModel.DataAnnotations
+
+<div class="form-group row mb-3">
+    <label class="col-sm-2 col-form-label" for="StartDate">@Title</label>
+    <div class="col-sm-10 d-flex align-items-center gap-2">
+        <DateInput TValue="DateOnly?" class="form-control" style="width: 70%;" @bind-Value="DateO" />
+        <TimeInput TValue="TimeOnly?" class="form-control" style="width: 30%;" @bind-Value="TimeO" />
+    </div>
+    <div class="col-sm-12">
+        <ValidationMessage For="@(() => DateO)" />
+        <ValidationMessage For="@(() => TimeO)" />
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = string.Empty;
+
+    private DateOnly? _date;
+    private TimeOnly? _time;
+    private DateTime? _dateTime;
+
+    private bool _suppressUpdate = false; // Flag per evitare cicli infiniti
+
+    [Parameter]
+    public DateTime? Value
+    {
+        get => _dateTime;
+        set
+        {
+            if (_dateTime != value)
+            {
+                _suppressUpdate = true; // Evita di scatenare aggiornamenti ridondanti
+                _dateTime = value;
+                _date = value.HasValue ? DateOnly.FromDateTime(value.Value) : null;
+                _time = value.HasValue ? TimeOnly.FromDateTime(value.Value) : null;
+                _suppressUpdate = false;
+            }
+        }
+    }
+
+    [Parameter] public EventCallback<DateTime?> ValueChanged { get; set; }
+
+
+    [Required(ErrorMessage = "La data è obbligatoria")]
+    public DateOnly? DateO
+    {
+        get => _date;
+        set
+        {
+            if (_date != value)
+            {
+                _date = value;
+                UpdateDateTime();
+            }
+        }
+    }
+
+
+    [Required(ErrorMessage = "Il tempo è obbligatorio")]
+    public TimeOnly? TimeO
+    {
+        get => _time;
+        set
+        {
+            if (_time != value)
+            {
+                _time = value;
+                UpdateDateTime();
+            }
+        }
+    }
+
+    private async Task UpdateDateTime()
+    {
+        if (_suppressUpdate) return; // Evita aggiornamenti ricorsivi
+
+        DateTime? newDateTime = (_date.HasValue && _time.HasValue)
+            ? _date.Value.ToDateTime(_time.Value)
+            : null;
+
+        if (_dateTime != newDateTime)
+        {
+            _dateTime = newDateTime;
+            await ValueChanged.InvokeAsync(_dateTime);
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_suppressUpdate) return; // Se il valore è stato settato da Value, non lo aggiorniamo di nuovo
+
+        await UpdateDateTime();
+    }
+}

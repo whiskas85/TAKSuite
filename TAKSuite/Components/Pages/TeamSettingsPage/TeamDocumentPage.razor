@@ -1,0 +1,29 @@
+﻿@page "/team/{TeamId:guid}/documentation"
+@using TAKSuite.Components.Pages.Documentation
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@inject TeamService teamService
+
+
+<h3>Documenti team</h3>
+
+<DocumentationListComponent @ref="listModel" ShowUpload="true" StartupLoading="false" Owner="@team" ShowUnlink="true" />
+
+@code {
+    [Parameter]
+    public Guid TeamId { get; set; }
+    private Team team;
+    DocumentationListComponent listModel = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        team = await teamService.GetAsync(TeamId);
+        StateHasChanged();
+
+        await listModel.RefreshList();
+        StateHasChanged();
+
+        
+    }
+
+}

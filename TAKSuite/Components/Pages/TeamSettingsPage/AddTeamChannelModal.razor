@@ -1,0 +1,190 @@
+﻿@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@inject RadioChannelService _radioChannelService
+@inject TeamRadioChannelService _teamRadioChannelService
+
+@code {
+    [Parameter] public RadioChannelInput? Model { get; set; }
+    [Parameter] public EventCallback OnModalSuccess { get; set; }
+    [Parameter] public EventCallback<String> OnModalError { get; set; }
+    [Parameter] public EventCallback OnModalHidden { get; set; }
+    [Parameter] public List<RadioChannel> RadioList { get; set; }
+
+    private Modal modal = default!;
+    private string title = "Aggiungi canale";
+    private Guid TeamId;
+
+    public async Task ShowAsync(Guid teamId)
+    {
+
+        if (Model == null)
+        {
+            Model = new();
+        }
+
+        Model.TeamID = teamId;
+        TeamId = teamId;
+
+        if (RadioList == null)
+        {
+            RadioList = await _radioChannelService.GetAllAsync();
+        }
+
+        if (Model.Id != null)
+        {
+            title = "Modifica canale";
+        }
+        else
+        {
+            title = "Aggiungi canale";
+        }
+
+
+        await modal.ShowAsync();
+    }
+
+    public async Task HideAsync() 
+    {
+        await modal.HideAsync();
+    }
+
+
+    private async void OnHidden()
+    {
+        Model = new();
+        await modal.HideAsync();
+        await OnModalHidden.InvokeAsync();
+    }
+
+    private async void OnSuccess()
+    {
+        Model = new();
+        await modal.HideAsync();
+        await OnModalSuccess.InvokeAsync();
+    }
+    private async void OnError(String message)
+    {
+        Model = new();
+        await modal.HideAsync();
+        await OnModalError.InvokeAsync(message);
+    }
+
+    private async Task OnSaveContinue()
+    {
+        var res = await SaveAsync(Model);
+        if (!res)
+        {
+            OnError("Non è stato possibile aggiungere il canale");
+            return;
+        }
+
+        if (Model.StartDate.HasValue && Model.EndDate.HasValue)
+        {
+            var span = Model.EndDate - Model.StartDate;
+            Model.StartDate = Model.EndDate;
+            Model.EndDate = Model.StartDate + span;
+        }
+
+        Model.ChannelName = "";
+        Model.RadioChannel = null;
+        Model.BackupRadioChannel = null;
+
+    }
+
+    private async Task<bool> SaveAsync(RadioChannelInput input)
+    {
+        TeamRadioChannel teamRadioChannel = new TeamRadioChannel
+            {
+                Name = input.ChannelName,
+                Position = input.Position,
+                RadioChannelId = input.RadioChannel.Value,
+                BackupRadioChannelId = input.BackupRadioChannel,
+                BeginValidityPeriod = input.StartDate,
+                EndValidityPeriod = input.EndDate,
+                TeamId = TeamId,
+            };
+
+        if (input.Id.HasValue)
+        {
+            teamRadioChannel.Id = input.Id.Value;
+        }
+        var res = await _teamRadioChannelService.AddOrUpdateAsync(teamRadioChannel);
+        return res != null;
+    }
+
+
+    private async Task OnSave()
+    {
+        var res = await SaveAsync(Model);
+
+        Model = new();
+
+
+        if (res)
+        {
+            OnSuccess();
+        }
+        else
+        {
+            OnError("Non è stato possibile aggiungere il canale");
+        }
+    }
+}
+
+
+    <Modal @ref="modal" Title="@title" OnHidden="OnHidden">
+        <BodyTemplate>
+        <EditForm Model="Model" FormName="InputForm">
+            <DataAnnotationsValidator /><div>
+                <p>Aggiunta di un canale di comunicazione. Il primo canale è quello principale, manetre il secondo è quello di backup. Il canale è valido solo dall'inizio alla fine del periodo di validità. Se lasciato vuoto è sempre valido</p>
+
+                <div class="form-group row mb-3">
+                    <label for="inputCode" class="col-sm-2 col-form-label">Nome</label>
+                    <div class="col-sm-10">
+                        <TextInput id="inputCode" class="form-control" @bind-Value="Model!.ChannelName" />
+                        <ValidationMessage For="() => Model!.ChannelName" class="text-danger" />
+                        <small class="form-text text-muted">Nome riconoscibile per il codice del canale</small>
+
+                    </div>
+                </div>
+
+                <div class="form-group row mb-3">
+                    <label class="col-sm-2 col-form-label" for="TeamId">Canale radio</label>
+                    <div class="col-sm-10">
+                        <InputSelect id="RadioCh" class="form-control" @bind-value="Model!.RadioChannel">
+                            <option value="">Seleziona un canale</option>
+                            @foreach (var item in RadioList)
+                            {
+                                <option value="@item.Id">@item.Name</option>
+                            }
+                        </InputSelect>
+                    </div>
+                </div>
+                <div class="form-group row mb-3">
+                    <label class="col-sm-2 col-form-label" for="TeamId">Canale radio backup</label>
+                    <div class="col-sm-10">
+                        <InputSelect id="RadioChBk" class="form-control" @bind-value="Model!.BackupRadioChannel">
+                            <option value="">Seleziona un canale</option>
+                            @foreach (var item in RadioList)
+                            {
+                                <option value="@item.Id">@item.Name</option>
+                            }
+                        </InputSelect>
+                    </div>
+                </div> 
+
+                <TAKSuite.Components.Pages.Components.DateTimeInput Title="Inzio validità" @bind-Value=Model.StartDate></TAKSuite.Components.Pages.Components.DateTimeInput>
+                <TAKSuite.Components.Pages.Components.DateTimeInput Title="Fine validità" @bind-Value=Model.EndDate></TAKSuite.Components.Pages.Components.DateTimeInput>
+
+            </div>
+</EditForm>
+        </BodyTemplate>
+        <FooterTemplate>
+            @if (Model.Id == null)
+            {
+                <Button Color="ButtonColor.Primary" @onclick="OnSaveContinue">Save & Continue</Button>
+            }
+            <Button Color="ButtonColor.Primary" @onclick="OnSave">Save changes</Button>
+            <Button Color="ButtonColor.Secondary" @onclick="OnHidden">Close</Button>
+        </FooterTemplate>
+    </Modal>

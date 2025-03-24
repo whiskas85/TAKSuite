@@ -1,0 +1,206 @@
+﻿@page "/regcodes2"
+@attribute [Authorize]
+
+@rendermode InteractiveServer
+
+@using System.ComponentModel.DataAnnotations
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@using Microsoft.AspNetCore.Authorization
+
+
+@inject TeamService TeamService;
+@inject RegistrationCodeService RegistrationCodeService
+@inject IJSRuntime JS
+@inject ToastService ToastService;
+@inject NavigationManager NavigationManager
+
+<script>
+    function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+    console.log("Testo copiato: " + text);
+    }).catch(err => {
+    console.error("Errore nella copia:", err);
+    });
+    }
+</script>
+
+<PageTitle>Gestione Codici di Registrazione</PageTitle>
+
+<EditForm Model="Model" OnSubmit="Submit" FormName="RegisrationForm">
+    <DataAnnotationsValidator />
+    <Modal @ref="modal" Title="Aggiunta codice di registrazione" OnHidden="OnModalHidden">
+        <BodyTemplate>
+
+            <div>
+                <div class="form-group row mb-3">
+                    <label for="inputCode" class="col-sm-2 col-form-label">Code</label>
+                    <div class="col-sm-10">
+                        <TextInput id="inputCode" class="form-control" @bind-Value="Model!.Code" />
+                        <ValidationMessage For="() => Model!.Code" class="text-danger" />
+                        <small class="form-text text-muted">Un nome riconoscibile per il codice di registrazione</small>
+
+                    </div>
+                </div>
+
+                <div class="form-group row mb-3">
+                    <label class="col-sm-2 col-form-label" for="TeamId">Squadra</label>
+                    <div class="col-sm-10">
+                        <InputSelect id="TeamId" class="form-control" @bind-value="Model!.TeamId">
+                            <option value="">Seleziona una squadra</option>
+                            @foreach (var team in teams)
+                            {
+                                <option value="@team.Id">@team.Name</option>
+                            }
+                        </InputSelect>
+                    </div>
+                </div>
+                <div class="form-group row mb-3">
+                    <label class="col-sm-2 col-form-label" for="ExpirationDate">Data di Scadenza</label>
+                    <div class="col-sm-10">
+                        <DateInput id="ExpirationDate" class="form-control" @bind-Value="Model!.ExpirationDate" />
+                    </div>
+                </div>
+
+            </div>
+
+        </BodyTemplate>
+        <FooterTemplate>
+            <Button Color="ButtonColor.Primary" type="ButtonType.Submit">Save changes</Button>
+            <Button Color="ButtonColor.Secondary" @onclick="OnHideModalClick">Close</Button>
+        </FooterTemplate>
+    </Modal>
+</EditForm>
+
+
+
+
+
+<h3>Lista codici di registrazione</h3>
+<Button Color="ButtonColor.Primary" @onclick="OnShowModalClick">Aggiungi registrazione</Button>
+
+<Grid @ref="grid"
+TItem="RegistrationCode"
+
+Class="table table-hover"
+HeaderRowCssClass="bg-success text-white border-bottom-0  h5"
+FiltersRowCssClass="bg-success text-white bg-opacity-25 border-bottom-0"
+
+DataProvider="RegCodesDataProvider"
+AllowFiltering="false"
+AllowPaging="false"
+PageSize="20"
+AllowSorting="true"
+AllowSelection="false"
+SelectionMode="GridSelectionMode.Multiple"
+SelectedItemsChanged="OnSelectedItemsChanged"
+
+Responsive="true">
+
+    <GridColumns>
+        <GridColumn TItem="RegistrationCode" HeaderText="Codice" Class="align-middle"  SortKeySelector="item => item.Code">
+            @context.Code
+        </GridColumn>
+        <GridColumn TItem="RegistrationCode" HeaderText="Nome squadra" Class="align-middle" SortKeySelector="item => item.Team.Name">
+            @context.Team.Name
+        </GridColumn>
+        <GridColumn TItem="RegistrationCode" HeaderText="Scadenza" Class="align-middle" SortKeySelector="item => item.ExpirationDate">
+            @context.ExpirationDate.Value.ToShortDateString()
+        </GridColumn>
+        <GridColumn TItem="RegistrationCode" Class="align-middle" HeaderText="Azioni">
+            <Button Color="ButtonColor.Primary" @onclick="() => ShareRegistrationCode(context.Id)">Condividi</Button>
+            <Button Color="ButtonColor.Danger" @onclick="() => DeleteCode(context.Id)">Cancella</Button>
+        </GridColumn>
+
+    </GridColumns>
+
+</Grid>
+
+<Toasts class="p-3" AutoHide="true" StackLength="3" Placement="ToastsPlacement.BottomRight" />
+
+@code {
+    [SupplyParameterFromForm]
+    private RegistrationCodeModel? Model { get; set; }
+    private Modal modal = default!;
+
+
+    private List<Team> teams = new List<Team>();
+    private List<RegistrationCode> registrationCodes =null;
+    Grid<RegistrationCode> grid = default!;
+
+
+
+
+    private async Task OnShowModalClick()
+    {
+        await modal.ShowAsync();
+    }
+    private async Task OnModalHidden()
+    {
+        Model = new();
+        Model.ExpirationDate = DateTime.Now;
+        StateHasChanged();
+    }
+    private async Task OnHideModalClick()
+    {
+        await modal.HideAsync();
+    }
+
+    private async Task Submit()
+    {
+        RegistrationCode newRegistrationCode = new();
+        newRegistrationCode.Code = Model.Code;
+        newRegistrationCode.TeamId = Model.TeamId;
+        newRegistrationCode.ExpirationDate = Model.ExpirationDate;
+
+        await RegistrationCodeService.AddAsync(newRegistrationCode);
+
+        await modal.HideAsync();
+        await grid.RefreshDataAsync();
+        StateHasChanged();
+    }
+
+
+    private async Task<GridDataProviderResult<RegistrationCode>> RegCodesDataProvider(GridDataProviderRequest<RegistrationCode> request)
+    {
+        registrationCodes = await RegistrationCodeService.GetAllAsync();
+        return await Task.FromResult(request.ApplyTo(registrationCodes));
+    }
+
+    private Task OnSelectedItemsChanged(HashSet<RegistrationCode> codes)
+    {
+        var selecteCodes = codes is not null && codes.Any() ? codes : new();
+        return Task.CompletedTask;
+    }
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        teams = await TeamService.GetAllAsync();
+        StateHasChanged();
+
+    }
+    protected override void OnInitialized()
+    {
+        Model ??= new();
+        Model.ExpirationDate = DateTime.Now;
+    }
+
+    private async Task ShareRegistrationCode(Guid id)
+    {
+        await JS.InvokeVoidAsync("copyToClipboard", NavigationManager.BaseUri + "Account/Register?registration=" + id.ToString());
+        ToastService.Notify(new(ToastType.Success, "Condividi", $"Testo copiato negli appunti"));
+    }
+
+
+
+
+
+    private async Task DeleteCode(Guid id)
+    {
+        await RegistrationCodeService.DeleteAsync(id);
+        await grid.RefreshDataAsync();
+        StateHasChanged();
+    }
+
+}

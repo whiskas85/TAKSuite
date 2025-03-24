@@ -1,0 +1,307 @@
+﻿@page "/cotpage/{uid}"
+@using System.Linq;
+@using System.Xml
+@using TAKSuite.Data
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@using TAKSuite.Helper
+@using TAKSuite.TAK.CoT
+
+@inject TeamService TeamService
+@inject MartiApiClient MartiApiClient
+@inject CoTManager CoTManager
+@inject NavigationManager NavigationManager
+
+@rendermode InteractiveServer
+
+<title>Info: @Callsign</title>
+
+<style>
+    /* Contenitore principale, centrato orizzontalmente */
+    .page-container {
+    display: flex;
+    justify-content: center; /* Centra orizzontalmente */
+    text-align: center; /* Centra il testo */
+    width: 100%; /* Occupa l'intera larghezza disponibile */
+    }
+
+    /* Contenitore dei dettagli, per evitare che gli elementi siano troppo larghi */
+    .details-container {
+    display: block;
+    max-width: 600px; /* Limita la larghezza per evitare che il contenuto diventi troppo largo */
+    width: 100%; /* La larghezza è relativa al contenitore */
+    margin: 20px; /* Aggiungi un po' di spazio attorno ai dettagli */
+    }
+
+    /* Contenitore dei pulsanti */
+    .button-container {
+    display: flex;
+    flex-direction: column; /* Disporre i pulsanti uno sotto l'altro */
+    align-items: center; /* Centrare i pulsanti orizzontalmente */
+    gap: 10px; /* Distanza tra i pulsanti */
+    }
+
+    .team-btn {
+    width: 200px; /* Imposta una larghezza fissa per tutti i pulsanti */
+    height: 60px; /* Imposta un'altezza fissa per tutti i pulsanti */
+    font-size: 18px; /* Imposta una dimensione del testo leggibile */
+    border: none;
+    border-radius: 5px; /* Bordo arrotondato per i pulsanti */
+    cursor: pointer;
+    color: white; /* Colore del testo */
+    text-align: center;
+    padding: 10px;
+    transition: background-color 0.3s ease; /* Aggiungi transizione per il cambiamento di colore */
+    }
+
+    .team-btn:hover {
+    background-color: #444; /* Cambia il colore al passaggio del mouse */
+    /* Stile per il div del team controllante */
+    .header
+
+    {
+    background: #555;
+    color: #f1f1f1;
+    padding: 10px;
+    margin-bottom: 20px;
+    text-align: center;
+    border-radius: 5px;
+    }
+
+    .fixed-top {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .details-textbox {
+    height: 200px;
+    resize: vertical;
+    font-family: monospace;
+    padding: 5px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    width: 500px;
+    }
+</style>
+<script>
+
+    // Funzione per ottenere la posizione attuale in maniera da poter cambiare il colore di un COT solamente se sei nei dintorni
+    const x = document.getElementById("demo");
+
+    function getLocation() {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(success, error);
+      } else {
+        x.innerHTML = "Geolocation is not supported by this browser.";
+      }
+    }
+
+    function success(position) {
+      x.innerHTML = "Latitude: " + position.coords.latitude +
+      "<br>Longitude: " + position.coords.longitude;
+    }
+
+    function error() {
+      alert("Sorry, no position available.");
+    }
+</script>
+
+    
+
+
+
+<div class="header" style="background-color: @GetColorFromArgb(Color);  color: @GetTextColorFromArgb(Color); border-bottom: 1px solid #ccc; width: 100%; padding: 10px 0; text-align: center; margin: 0 auto;">
+    <h3 id="controlledby">Questo punto è controllato da: @TeamController</h3>
+</div>
+
+<div class="page-container">
+    <div class="details-container">
+        <h1><strong>@Callsign</strong></h1>
+        <p><strong>Lat:</strong> @Lat <strong>Lon:</strong> @Lon</p>
+        <p><strong>Descrizione:</strong> @Remarks</p>
+
+        @* <p><strong>Color:</strong> @Color</p>
+        <p><strong>Dettagli:</strong></p>
+        <textarea rows="10" cols="60" readonly>@XmlHelper.FormatXml(Details)</textarea> *@
+
+        <h3>Premi un pulsante per conquistare l'obiettivo:</h3>
+        <div class="button-container">
+            @foreach (var team in Teams)
+            {
+                bool isDisabled = team.Color == Color;
+                <button disabled=@isDisabled @onclick="() => ControlPoint(team)" class="team-btn" style="background-color: @GetColorFromArgb(team.Color); color: @GetTextColorFromArgb(team.Color);">
+                    @team.Name
+                </button>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Uid { get; set; }
+    private int Color { get; set; }
+    private string Details { get; set; }
+    private string Callsign { get; set; }
+    private string Lat { get; set; }
+    private string Lon { get; set; }
+    private string Remarks { get; set; }
+    private string TeamController { get; set; }
+
+    private List<Team> Teams { get; set; } = new List<Team>();
+
+    private System.Net.WebSockets.ClientWebSocket? _webSocket;
+    private CancellationTokenSource _cancellationTokenSource = new();
+
+
+    private async Task ReloadPage()
+    {
+        // Ricarica la stessa pagina (soft reload)
+        NavigationManager.NavigateTo(NavigationManager.Uri, true);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await FetchTeamsAsync();  // Fetch teams data
+
+        if (!string.IsNullOrEmpty(Uid))
+        {
+            await FetchInfoAsync(Uid);
+        }
+        //await ConnectToWebSocket();
+    }
+
+
+    private async Task ConnectToWebSocket()
+    {
+        try
+        {
+            _webSocket = new System.Net.WebSockets.ClientWebSocket();
+            await _webSocket.ConnectAsync(new Uri("wss://localhost:5000/WebSocketEndpoint"), _cancellationTokenSource.Token);
+
+            // Avvia l'ascolto dei messaggi
+            _ = Task.Run(ReceiveWebSocketMessages);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"⚠️ Errore nella connessione WebSocket: {ex.Message}");
+        }
+    }
+
+    private async Task ReceiveWebSocketMessages()
+    {
+        byte[] buffer = new byte[1024];
+
+        while (_webSocket?.State == System.Net.WebSockets.WebSocketState.Open)
+        {
+            var result = await _webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), _cancellationTokenSource.Token);
+
+            if (result.MessageType == System.Net.WebSockets.WebSocketMessageType.Text)
+            {
+                string message = System.Text.Encoding.UTF8.GetString(buffer, 0, result.Count);
+                Console.WriteLine($"📩 Messaggio WebSocket ricevuto: {message}");
+
+                // Ricarica la pagina quando arriva un nuovo messaggio
+                await InvokeAsync(ReloadPage);
+            }
+        }
+    }
+
+
+    private async Task FetchInfoAsync(string uid)
+    {
+        try
+        {
+            var response = await MartiApiClient.GetInfoAsync(uid);
+            if (response != null)
+            {
+                XmlDocument doc = new XmlDocument();
+                doc.LoadXml(response);
+
+                var eventXml = doc.ChildNodes[1];
+
+                string lat = doc.SelectSingleNode("//point")?.Attributes["lat"]?.Value ?? "N/A";
+                string lon = doc.SelectSingleNode("//point")?.Attributes["lon"]?.Value ?? "N/A";
+                string callsign = doc.SelectSingleNode("//contact")?.Attributes["callsign"]?.Value ?? "N/A";
+                string remarks = doc.SelectSingleNode("//remarks")?.InnerText ?? "---";
+                int color = int.Parse(doc.SelectSingleNode("//color")?.Attributes["argb"]?.Value ?? "-1");
+
+                Callsign = callsign;
+                Lat = lat;
+                Lon = lon;
+                Remarks = remarks;
+                Color = color;
+                Details = doc.OuterXml;
+                TeamController = Teams.FirstOrDefault(t => t.Color == Color)?.Name ?? "Nessun controllo";  // Update who is controlling the point
+
+            }
+            else
+            {
+                Details = "Nessun dettaglio trovato.";
+            }
+        }
+        catch (Exception ex)
+        {
+            Details = $"Errore: {ex.Message}";
+        }
+        StateHasChanged();  // Ensure UI refreshes after data load
+    }
+
+    private async Task FetchTeamsAsync()
+    {
+        try
+        {
+            Teams = await TeamService.GetAllAsync(); // Fetch the list of teams
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Errore nel recupero dei team: {ex.Message}");
+        }
+        StateHasChanged(); // Ensure UI updates after fetching teams
+    }
+
+    private async Task ControlPoint(Team team)
+    {
+        try
+        {
+            // Change the control of the point
+            await CoTManager.ChangeCotColor(Uid, team.Color);
+            //await FetchInfoAsync(Uid);
+            //StateHasChanged(); // Ensure UI updates after control action
+            await ReloadPage();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Errore nel controllo del punto: {ex.Message}");
+        }
+        
+    }
+    // Aggiungi una funzione per calcolare la luminosità di un colore
+    private string GetTextColorFromArgb(int colorValue)
+    {
+        var argb = colorValue;
+        var a = (argb >> 24) & 0xFF;
+        var r = (argb >> 16) & 0xFF;
+        var g = (argb >> 8) & 0xFF;
+        var b = argb & 0xFF;
+
+        // Calcola la luminosità del colore (usando la formula sopra)
+        double luminosity = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+
+        // Se la luminosità è bassa (scuro), ritorna il colore del testo bianco; altrimenti nero
+        return luminosity < 128 ? "white" : "black";
+    }
+
+    private string GetColorFromArgb(int colorValue)
+    {
+        var argb = colorValue;
+        var a = (argb >> 24) & 0xFF;
+        var r = (argb >> 16) & 0xFF;
+        var g = (argb >> 8) & 0xFF;
+        var b = argb & 0xFF;
+        return $"rgba({r}, {g}, {b}, {a / 255.0})";
+    }
+}

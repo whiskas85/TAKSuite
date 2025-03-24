@@ -1,0 +1,59 @@
+﻿@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+
+
+<Modal @ref="modal" Title="Collega un documento" OnHidden="OnHidden" Size="ModalSize.Large">
+    <BodyTemplate>
+        <MiniDocumentListComponent Owner="Item" OnRowSelected="RowSelected" NotStillLinked="true"  />
+    </BodyTemplate>
+    <FooterTemplate>
+        @* <Button Color="ButtonColor.Primary" @onclick="OnSave">Save changes</Button> *@
+        <Button Color="ButtonColor.Secondary" @onclick="OnHidden">Close</Button>
+    </FooterTemplate>
+</Modal>
+
+
+@code {
+    [Parameter] public IGuidModel? Item { get; set; }
+    [Parameter] public EventCallback<Documentation> OnModalSuccess { get; set; }
+    [Parameter] public EventCallback<String> OnModalError { get; set; }
+    [Parameter] public EventCallback OnModalHidden { get; set; }
+
+    private Modal modal = default!;
+
+
+    public async Task ShowAsync(IGuidModel item)
+    {
+        Item = item;
+        await modal.ShowAsync();
+    }
+
+    public async Task HideAsync() 
+    {
+        await modal.HideAsync();
+    }
+
+
+    private async void OnHidden()
+    {
+        await modal.HideAsync();
+        //await OnModalHidden.InvokeAsync();
+    }
+
+    private async void OnSuccess(Documentation args)
+    {
+        await modal.HideAsync();
+        await OnModalSuccess.InvokeAsync(args);
+    }
+    private async void OnError(String message)
+    {
+        await modal.HideAsync();
+        //await OnModalError.InvokeAsync(message);
+    }
+    private void RowSelected(Documentation args)
+    {
+        OnSuccess(args);
+    }
+}
+
+

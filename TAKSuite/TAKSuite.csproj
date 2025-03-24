@@ -1,0 +1,80 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>aspnet-TAKSuite-a715839f-eb4e-4dc5-873d-9446b9298512</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Controller\RegistrationCodesController.cs" />
+    <Compile Remove="Controller\TeamController.cs" />
+    <Compile Remove="Data\Services\RegistrationCodeService - Copia.cs" />
+    <Compile Remove="Data\Services\TeamService - Copia.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Remove="Components\Layout\MainLayout - Copia.razor" />
+    <Content Remove="Components\Layout\MainLayout2.razor" />
+    <Content Remove="Components\Layout\NavMenu - Copia.razor" />
+    <Content Remove="Components\Pages\Counter.razor" />
+    <Content Remove="Components\Pages\MedevacPage - Copia.razor" />
+    <Content Remove="Components\Pages\RegistrationCode\RegCode2.razor" />
+    <Content Remove="Components\Pages\TeamSettingsPage\TeamPage - Copia.razor" />
+    <Content Remove="Components\Pages\Weather.razor" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Components\Layout\MainLayout - Copia.razor.css" />
+    <None Remove="Components\Layout\MainLayout2.razor.css" />
+    <None Remove="Components\Layout\NavMenu - Copia.razor.css" />
+    <None Remove="Components\Pages\MedevacPage - Copia.razor.css" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Blazor.Bootstrap" Version="3.3.1" />
+    <PackageReference Include="BlazorColorPicker" Version="3.1.2" />
+    <PackageReference Include="BlazorPro.BlazorSize" Version="9.0.0" />
+    <PackageReference Include="BouncyCastle.Cryptography" Version="2.5.1" />
+    <PackageReference Include="MailKit" Version="4.11.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.Forms" Version="9.0.2" />
+    <PackageReference Include="Microsoft.AspNetCore.Diagnostics.EntityFrameworkCore" Version="9.0.2" />
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="9.0.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.0.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="9.0.2" />
+    <PackageReference Include="Scrutor" Version="6.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Controller\" />
+    <Folder Include="TAK\API\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="wwwroot\certs\webadmin.key">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="wwwroot\certs\webadmin.pem">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Downloads\YT-BlazorBuilds-TreeView-main\YT-BlazorBuilds-TreeView-main\BlazorBuilds.Components\BlazorBuilds.Components.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Update="wwwroot\certs\ca.pem">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Update="wwwroot\images\tak trasp.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>

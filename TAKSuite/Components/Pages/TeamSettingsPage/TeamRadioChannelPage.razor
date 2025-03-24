@@ -1,0 +1,195 @@
+﻿@page "/team/{TeamId:guid}/comms"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+
+@inject TeamRadioChannelService _teamRadioChannelService
+@inject RadioChannelService _radioChannelService
+@inject TeamService _teamService;
+@inject ToastService ToastService;
+
+
+
+<AddTeamChannelModal @ref="modalAddChannel" RadioList="radioList" Model="modelChannelInput" OnModalSuccess="OnSuccessTeamChannel" OnModalError="OnError" />
+<PageTitle>Comunicazioni</PageTitle>
+@foreach (var radioChannelItem in radioChannelList)
+{
+    <h3>@radioChannelItem.Name </h3>
+    <p>Canale radio dedicato al @radioChannelItem.Name per il sottogruppo</p>
+    <div class="form-group row mb-3">
+        <div class="col-auto">
+            <Button Color="ButtonColor.Primary" @onclick="()=> Add(radioChannelItem.ChannelType)">
+                Aggiungi canale
+            </Button> 
+            @*  <Button Color="ButtonColor.Primary">
+                Aggiungi canale
+            </Button> *@
+        </div>
+    </div>
+
+
+    <p></p>
+    <Grid TItem="TeamRadioChannel"
+    Class="table table-hover border-top"
+    Data="radioChannelItem.RadioChannelList"
+
+
+    HeaderRowCssClass="bg-success text-white border-bottom-0  h5"
+    FiltersRowCssClass="bg-success text-white bg-opacity-25 border-bottom-0"
+    RowClass="GetRowClass"
+    AllowFiltering="false"
+    AllowPaging="false"
+    AllowSorting="true"
+    AllowSelection="false"
+    SelectionMode="GridSelectionMode.Multiple"
+    Responsive="true">
+
+        <GridColumns>
+            <GridColumn TItem="TeamRadioChannel" HeaderText="Nome" Class="align-middle" SortKeySelector="item => item.Name">
+                @context.Name
+            </GridColumn>
+            <GridColumn TItem="TeamRadioChannel" HeaderText="Inizio" Class="align-middle" SortKeySelector="item => item.BeginValidityPeriod" IsDefaultSortColumn="true" SortDirection="SortDirection.Ascending">
+                @context.BeginValidityPeriod
+            </GridColumn>
+            <GridColumn TItem="TeamRadioChannel" HeaderText="Fine" Class="align-middle" SortKeySelector="item => item.EndValidityPeriod">
+                @context.EndValidityPeriod
+            </GridColumn>
+
+
+            <GridColumn TItem="TeamRadioChannel" HeaderText="Canale" Class="align-middle" SortKeySelector="item => item.RadioChannel.Name">
+                @context.RadioChannel.Name - @context.RadioChannel.Frequency
+            </GridColumn>
+            <GridColumn TItem="TeamRadioChannel" HeaderText="Backup" Class="align-middle" SortKeySelector="item => item.BackupRadioChannel.Name">
+                @if (context.BackupRadioChannel != null)
+                {
+                    var x = context.BackupRadioChannel.Name + " - " + @context.BackupRadioChannel.Frequency;
+                    @x
+                }
+            </GridColumn>
+
+            <GridColumn TItem="TeamRadioChannel" Class="align-middle" HeaderText="Azioni">
+                <Button Color="ButtonColor.Primary" @onclick="() => Edit(context)"><Icon Name="IconName.PencilFill"></Icon></Button>
+                <Button Color="ButtonColor.Danger" @onclick="() => Delete(context)"><Icon Name="IconName.Trash3Fill"></Icon></Button>
+            </GridColumn>
+        </GridColumns>
+
+    </Grid>
+}
+
+@code {
+    [Parameter] 
+    public Guid TeamId { get; set; }
+
+
+
+    private RadioChannelInput? modelChannelInput { get; set; } = new();
+    private AddTeamChannelModal modalAddChannel = default!;
+
+
+    List<RadioChannel> radioList = new();
+    private Team team;
+    private List<Team> teams;
+
+    List<RadioChannelGroup> radioChannelList = new();
+
+    protected override async void OnInitialized()
+    {
+        Thread.Sleep(100);
+        team = await _teamService.GetAsync(TeamId);
+        Thread.Sleep(100);
+        teams = await _teamService.GetAllAsync();
+
+        Thread.Sleep(100);
+        radioList = await _radioChannelService.GetAllAsync();
+        radioList.Sort((x, y) => x.Name.CompareTo(y.Name));
+
+        await RefreshChannelList();
+        StateHasChanged();
+    }
+    private string GetRowClass(TeamRadioChannel trc)
+    {
+        var date = DateTime.Now;
+        if (trc.BeginValidityPeriod <= date && date < trc.EndValidityPeriod)
+            return "table-success";
+        else if (trc.BeginValidityPeriod is null && trc.EndValidityPeriod is null)
+            return "table-success";
+
+
+        return string.Empty;
+    }
+
+    private async Task<bool> RefreshChannelList()
+    {
+        Thread.Sleep(100);
+        var channelList = await _teamRadioChannelService.GetAllAsync();
+        channelList = channelList.Where(x => x.TeamId == TeamId)
+                                 .ToList();
+
+
+        radioChannelList = new()
+        {
+            new (){ Name="Radio base channel", ChannelType=ChannelType.BaseChannel, RadioChannelList = channelList.Where(_ => _.Position == ChannelType.BaseChannel).ToList()},
+            new (){ Name="Team leader Channel", ChannelType=ChannelType.TeamLeaderChannel, RadioChannelList = channelList.Where(_ => _.Position == ChannelType.TeamLeaderChannel).ToList()},
+            new (){ Name="Vice Team leader Channel",ChannelType=ChannelType.ViceTeamLeaderChannel,  RadioChannelList = channelList.Where(_ => _.Position == ChannelType.ViceTeamLeaderChannel).ToList()},
+        };
+
+
+
+        return true;
+    }
+
+
+
+    private async Task Add(ChannelType chtype)
+    {
+        TeamRadioChannel channel = new();
+        channel.Position = chtype;
+
+        modelChannelInput = new RadioChannelInput(channel);
+        await modalAddChannel.ShowAsync(TeamId);
+
+        StateHasChanged();
+    }
+    private async Task Edit(TeamRadioChannel trc)
+    {
+        modelChannelInput ??= new();
+
+        modelChannelInput.ChannelName = trc.Name;
+        modelChannelInput.Position = trc.Position;
+        modelChannelInput.RadioChannel = trc.RadioChannelId;
+        modelChannelInput.BackupRadioChannel = trc.BackupRadioChannelId;
+        modelChannelInput.StartDate = trc.BeginValidityPeriod;
+        modelChannelInput.EndDate = trc.EndValidityPeriod;
+        modelChannelInput.Id = trc.Id;
+
+        await modalAddChannel.ShowAsync(TeamId);
+
+        StateHasChanged();
+    }
+
+    private async Task Delete(TeamRadioChannel trc)
+    {
+        await _teamRadioChannelService.DeleteAsync(trc.Id);
+        await RefreshChannelList();
+
+        StateHasChanged();
+    }
+
+
+    private async Task OnSuccessTeamChannel()
+    {
+        await RefreshChannelList();
+        StateHasChanged();
+
+    }
+
+    private async Task OnError(String message)
+    {
+        ToastService.Notify(new() { Title = "Attenzione", Message = message, Type = ToastType.Danger });
+        StateHasChanged();
+    }
+
+
+
+}

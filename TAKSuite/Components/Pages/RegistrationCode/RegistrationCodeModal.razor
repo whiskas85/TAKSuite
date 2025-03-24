@@ -1,0 +1,124 @@
+﻿@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@inject RegistrationCodeService RegistrationCodeService
+@inject TeamService _teamService
+@code {
+    [Parameter] public RegistrationCodeModel? Model { get; set; }
+    [Parameter] public EventCallback OnSuccess { get; set; }
+    [Parameter] public EventCallback OnModalHidden { get; set; }
+    [Parameter] public List<Team>? Teams { get; set; } = new();
+    private Modal modal = default!;
+    private string title = "Aggiungi codice di registrazione";
+    private List<Team> teams = new();
+
+
+
+    public async Task ShowAsync()
+    {
+        if (Model == null)
+        {
+            Model = new();
+        }
+
+        if(Teams==null)
+        {
+            teams = await _teamService.GetAllAsync();
+        }
+        else
+        {
+            teams.AddRange(Teams);
+        }
+
+        if (Model.Id != null)
+        {
+            title = "Modifica codice di registrazione";
+        }
+        else
+        {
+            title = "Aggiungi codice di registrazione";
+        }
+
+
+        await modal.ShowAsync();
+        //StateHasChanged();
+    }
+
+    public async Task HideAsync() => await modal.HideAsync();
+
+
+    private async void OnHidden()
+    {
+        Model = new();
+        await OnModalHidden.InvokeAsync();
+    }
+    private async void OnSubmit()
+    {
+        var newRegistrationCode = new RegistrationCode
+            {
+                Code = Model.Code,
+                TeamId = Model.TeamId,
+                ExpirationDate = Model.ExpirationDate
+            };
+        if (Model.Id.HasValue)
+        {
+            newRegistrationCode.Id = Model.Id.Value;
+        }
+
+        if (Model.Id.HasValue && Model.Id != Guid.Empty)
+        {
+            await RegistrationCodeService.UpdateAsync(newRegistrationCode);
+        }
+        else
+        {
+            var val = await RegistrationCodeService.AddAsync(newRegistrationCode);
+            Model.Id = val.Id;
+        }
+        
+
+        await modal.HideAsync(); ;
+        await OnSuccess.InvokeAsync();
+    }
+}
+
+
+    <Modal @ref="modal" Title="@title" OnHidden="OnHidden">
+        <BodyTemplate>
+            <EditForm Model="Model" FormName="RegistrationForm">
+    <DataAnnotationsValidator />
+            <div>
+                <div class="form-group row mb-3">
+                    <label for="inputCode" class="col-sm-2 col-form-label">Code</label>
+                    <div class="col-sm-10">
+                        <TextInput id="inputCode" class="form-control" @bind-Value="Model!.Code"  />
+                        <ValidationMessage For="() => Model!.Code" class="text-danger" />
+                        <small class="form-text text-muted">Un nome riconoscibile per il codice di registrazione</small>
+                    </div>
+                </div>
+                <div class="form-group row mb-3">
+                    <label class="col-sm-2 col-form-label" for="TeamId">Squadra</label>
+                    <div class="col-sm-10">
+                        <InputSelect id="TeamId" class="form-control" @bind-value="Model!.TeamId">
+                            <option value="">Seleziona una squadra</option>
+                            @foreach (var team in teams)
+                            {
+                                <option value="@team.Id" selected="@(Model.TeamId != null && Model.TeamId == team.Id ? "selected" : null)">
+                                    @team.Name
+                                </option>
+                            }
+                        </InputSelect>
+                    </div>
+                </div>
+                <div class="form-group row mb-3">
+                    <label class="col-sm-2 col-form-label" for="ExpirationDate">Data di Scadenza</label>
+                    <div class="col-sm-10">
+                        <DateInput id="ExpirationDate" class="form-control" @bind-Value="Model!.ExpirationDate" />
+                    </div>
+                </div>
+            </div>
+        </EditForm>
+        </BodyTemplate>
+        <FooterTemplate>
+            <Button Color="ButtonColor.Primary"@onclick="OnSubmit">Save changes</Button>
+            <Button Color="ButtonColor.Secondary" @onclick="HideAsync">Close</Button>
+        </FooterTemplate>
+    </Modal>

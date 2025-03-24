@@ -1,0 +1,309 @@
+﻿@page "/waypoints-simple"
+@attribute [Authorize]
+
+@rendermode InteractiveServer
+
+@using System.ComponentModel.DataAnnotations
+@using TAKSuite.Data
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.ModelsTak
+@using TAKSuite.Data.Services
+@using TAKSuite.Data.ServicesTak
+@using TAKSuite.Helper
+@using TAKSuite.TAK.CoT
+@using TAKSuite.TAK.Helper
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+
+
+@inject TeamService TeamService;
+@inject WaypointService WaypointService
+@inject AttachmentService AttachmentService
+
+@inject IJSRuntime JS
+@inject TAKSuite.Helpers.JsInteropHelper JsHelper
+@inject ToastService ToastService;
+@inject NavigationManager NavigationManager
+@inject CoTManager CoTManager
+@inject ToastService ToastService;
+
+
+@inject UserManager<ApplicationUser> UserManager
+
+    <style>
+    .icon-header {
+        width: 50px;
+    }
+    </style>
+
+<script>
+    function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+    console.log("Testo copiato: " + text);
+    }).catch(err => {
+    console.error("Errore nella copia:", err);
+    });
+    }
+
+
+    window.openNewTab = (url, title) => {
+        let newTab = window.open();
+        newTab.document.title = title;  // Imposta dinamicamente il titolo
+        newTab.document.body.innerHTML = '<img src="' + url + '" style="width:100%; height:auto;">';  // Scrive l'immagine nel body
+    };
+
+    function downloadFile(fileDataUrl, filename) {
+        const a = document.createElement("a");
+        a.href = fileDataUrl;
+        a.download = filename;
+        a.click();
+    }
+</script>
+
+<PageTitle>Waypoint</PageTitle>
+
+
+<h3>Waypoint</h3>
+
+
+<Modal @ref="modal" Title="Lista allegati" OnHidden="OnModalHidden" Size="ModalSize.Large">
+    <BodyTemplate>
+        <Grid TItem="AtakAttachment"
+              Class="table table-hover"
+              HeaderRowCssClass="bg-success text-white border-bottom-0 h5"
+              FiltersRowCssClass="bg-success text-white bg-opacity-25 border-bottom-0"
+              DataProvider="RequestAttachmentDataProvider"
+              AllowFiltering="false"
+              AllowPaging="false"
+              PageSize="5"
+              AllowSorting="true"
+              Responsive="true">
+
+            <GridColumns>
+                <GridColumn TItem="AtakAttachment" HeaderText="" class="align-middle icon-header">
+                    <Icon Name="IconName.Paperclip"  Color="IconColor.Secondary" />
+                </GridColumn>
+                <GridColumn TItem="AtakAttachment" HeaderText="Callsign" Class="align-middle" SortKeySelector="item => item.Name">
+                    @context.Name
+                </GridColumn>
+                <GridColumn TItem="AtakAttachment" HeaderText="Apri">
+                    @if(context.MediaType.Contains("jpeg"))
+                    {                    
+                        <Button @onclick="()=> OpenAttachment(context)">
+                            <Icon Name="IconName.FileEarmarkImage" Color="IconColor.Primary" ></Icon>
+                        </Button>
+                    }else if(context.MediaType.Contains("pdf"))
+                    {
+                        <Button @onclick="()=> OpenAttachment(context)">
+                            <Icon Name="IconName.FileEarmarkPdfFill" Color="IconColor.Primary" ></Icon>
+                        </Button>
+                    }
+                    else
+                    {
+                        <Button @onclick="()=> OpenAttachment(context)">
+                            <Icon Name="IconName.FileEarmarkArrowDownFill" Color="IconColor.Primary" ></Icon>
+                        </Button>
+
+                    }
+                </GridColumn>
+
+            </GridColumns>
+
+        </Grid>
+
+
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Primary" @onclick="OnHideModalClick">Chiudi</Button>
+    </FooterTemplate>
+</Modal>
+
+
+
+
+
+<Grid @ref="grid"
+TItem="Waypoint"
+
+Class="table table-hover"
+HeaderRowCssClass="bg-success text-white border-bottom-0"
+FiltersRowCssClass="bg-success text-white bg-opacity-25 border-bottom-0"
+
+DataProvider="RequestDataProvider"
+AllowFiltering="false"
+AllowPaging="false"
+PageSize="20"
+AllowSorting="true"
+AllowSelection="false"
+SelectionMode="GridSelectionMode.Multiple"
+SelectedItemsChanged="OnSelectedItemsChanged"
+Unit="Unit.Px"
+RowClass="GetRowClass"
+
+Responsive="true">
+
+    <GridColumns>
+        
+        <GridColumn TItem="Waypoint" HeaderText="Callsign" Class="align-middle icon-header" SortKeySelector="item => item.Callsign">
+            @context.Callsign
+        </GridColumn>
+        <GridColumn TItem="Waypoint" class="align-middle icon-header" HeaderText="Completa">
+            @if (context.Color != ATAKHelper.COLOR_WAYPOINT_COMPLETED)
+            {
+                <Button @onclick="()=> CompleteWaypoint(context)"><Icon Name="IconName.Check" Color="IconColor.Success"></Icon></Button>
+            }
+        </GridColumn>
+        <GridColumn TItem="Waypoint" class="align-middle icon-header"  HeaderText="Doc">
+            <Button @onclick="()=> GetAttachmentWaypoint(context)" Position="Position.Relative">
+                <Icon Name="IconName.Paperclip" Color="IconColor.Secondary"></Icon>
+                @if(context.AttachmentUidList.Count>0)
+                {
+                    <Badge Color="BadgeColor.Danger"
+                    Position="Position.Absolute"
+                    Placement="BadgePlacement.TopRight"
+                    IndicatorType="BadgeIndicatorType.RoundedPill"
+                    VisuallyHiddenText="unread messages">@context.AttachmentUidList.Count</Badge>
+                }
+            </Button>
+        </GridColumn>
+
+    </GridColumns>
+
+</Grid>
+
+@code {
+
+    // modal ------------------------------------------------------------------------
+    private Modal modal = default!;
+    class Model
+    {
+        public string Name { get; set; }
+        public string Description { get; set; }
+        public string Uid { get; set; }
+    }
+    private Model _model = null;
+
+    private async Task OpenAttachment(AtakAttachment attach)
+    {
+        if (attach?.FileBytes != null)
+        {
+            string base64String = Convert.ToBase64String(attach.FileBytes);
+            string title = attach.Name;  // Titolo per il PDF
+            if (attach.MediaType == "image/jpeg")
+            {
+                string imageDataUrl = $"data:image/jpeg;base64,{base64String}";
+                await JS.InvokeVoidAsync("openNewTab", imageDataUrl, title);
+            }
+            else if (attach.MediaType == "application/pdf")
+            {
+                // Crea un blob URL per il PDF
+                var pdfDataUrl = $"data:application/pdf;base64,{base64String}";
+                await JS.InvokeVoidAsync("downloadFile", pdfDataUrl, title);
+            }
+        }
+    }
+    private async Task DeleteAttachment(AtakAttachment attach)
+    {
+        bool res = await AttachmentService.DeleteAsync(attach);
+        if (res)
+        {
+            ToastService.Notify(new(ToastType.Success, "Eliminazione", $"Il file {attach.Name} è stato eliminato" ));
+        }
+        else
+        {
+            ToastService.Notify(new(ToastType.Danger, "Errore", $"Attenzione non è stato possibile eliminare: {attach.Name}"));
+
+        }
+    }
+    
+    [CascadingParameter]
+    private Task<AuthenticationState> authenticationStateTask { get; set; }
+
+    private List<Waypoint> list = null;
+    Grid<Waypoint> grid = default!;
+
+    private async Task OnModalHidden()
+    {
+        _model = null;
+    }
+    private async Task OnHideModalClick()
+    {
+        await modal.HideAsync();
+    }
+    private async Task<GridDataProviderResult<AtakAttachment>> RequestAttachmentDataProvider(GridDataProviderRequest<AtakAttachment> request)
+    {
+        List<AtakAttachment> list = await AttachmentService.GetAllAsync(_model.Uid);
+        return await Task.FromResult(request.ApplyTo(list));
+    }
+
+
+
+    // --------------------------------------------------------
+
+
+    private string missionUid = "TEST FEED2";
+
+
+
+    private async Task<GridDataProviderResult<Waypoint>> RequestDataProvider(GridDataProviderRequest<Waypoint> request)
+    {
+        list = await WaypointService.GetAllAsync(missionUid);
+        list = list.OrderBy(o => o.Callsign).ToList();
+
+
+        StateHasChanged();
+        return await Task.FromResult(request.ApplyTo(list));
+    }
+    private string GetRowClass(Waypoint wpt)
+    {
+        if (wpt.Color == ATAKHelper.COLOR_WAYPOINT_COMPLETED)
+            return "table-success";
+
+        return string.Empty;
+    }
+    private async Task CompleteWaypoint(Waypoint item)
+    {
+        await CoTManager.ChangeCotColor(item.Uid, ATAKHelper.COLOR_WAYPOINT_COMPLETED);
+        await grid.RefreshDataAsync();
+        StateHasChanged();
+    }
+    private async Task UploadAttachmentWaypoint(Waypoint item)
+    {
+
+    }
+    private async Task GetAttachmentWaypoint(Waypoint item)
+    {
+        _model = new();
+        _model.Name = item.Callsign;
+        _model.Uid = item.Uid;  
+
+        await modal.ShowAsync();
+    }
+
+    private Task OnSelectedItemsChanged(HashSet<Waypoint> codes)
+    {
+        var selecteCodes = codes is not null && codes.Any() ? codes : new();
+        return Task.CompletedTask;
+    }
+
+
+
+    private async Task LogUsername()
+    {
+
+    }
+
+    protected override async Task OnInitializedAsync()
+    { 
+        // var user = await UserManager.GetUserAsync(User);
+        // var teamColor = user?.Team?.Color ?? "black"; // Usa un colore di default se non esiste
+
+        StateHasChanged();
+
+
+    }
+    protected override void OnInitialized()
+    {
+    }
+
+}

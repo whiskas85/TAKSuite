@@ -1,0 +1,12 @@
+<div @onclick="OnClick" class="vh-100 vw-100 position-fixed"
+     style="top: 0; left: 0; z-index: @(LowestInsideComponentZIndex - 1);
+         background-color: @(TransparentOutside ? "none" : "rgba(0,0,0,0.5)");">
+</div>
+
+@code {
+    [Parameter] public int LowestInsideComponentZIndex { get; set; } = 1000;
+    [Parameter] public bool TransparentOutside { get; set; } = true;
+    [Parameter] public EventCallback OnOutsideClick { get; set; }
+
+    private async Task OnClick() => await OnOutsideClick.InvokeAsync(null);
+}

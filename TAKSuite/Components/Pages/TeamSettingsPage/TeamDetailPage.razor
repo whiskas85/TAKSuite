@@ -1,0 +1,136 @@
+﻿@page "/team/{TeamId:guid}/details"
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Components.Pages.Operatori
+@using TAKSuite.Components.Pages.RegistrationCode
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@attribute [Authorize]
+
+
+@inject RegistrationCodeService _registrationCodeService
+@inject TeamService _teamService;
+@inject ToastService ToastService;
+
+@inject IJSRuntime JS
+@inject NavigationManager NavigationManager
+
+<script>
+    function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+    console.log("Testo copiato: " + text);
+    }).catch(err => {
+    console.error("Errore nella copia:", err);
+    });
+    }
+    function openInNewTab(url) {
+        window.open(url, '_blank');
+    }
+</script>
+
+
+
+
+<PageTitle>Comunicazioni</PageTitle>
+
+<RegistrationCodeModal @ref="modalRegCode" Model="modelRegcode" OnSuccess="OnSuccess" OnModalHidden="OnModalHidden2" Teams="teams" />
+
+
+
+<div class="d-flex justify-content-between align-items-center">
+    <h3>@team?.Name</h3>
+    <Button Color="ButtonColor.Primary" @onclick="ShareOnBoarding"><Icon Name="IconName.ShareFill"></Icon> Onboarding</Button>
+</div>
+
+<h5><strong>Team leader: </strong>@team?.TeamLeader?.Name <Button Color="ButtonColor.Primary" @onclick="Clicca"><Icon Name="IconName.Search"></Icon></Button><Button Color="ButtonColor.Primary" @onclick="DeleteTamLeader"><Icon Name="IconName.X"></Icon></Button> </h5>
+
+
+<h5><strong>@team?.TeamLeader?.Nick</strong></h5>
+<p><strong>Phone: </strong>@team?.TeamLeader?.PhoneNumber</p>
+<p><strong>Mail: </strong>@team?.TeamLeader?.Email</p>
+
+
+
+<TAKSuite.Components.Pages.Operatori.ModalSelectOperator @ref="modalSelect" TeamId="@TeamId" OnModalSuccess="Success" />
+@code {
+    [Parameter]
+    public Guid TeamId { get; set; }
+
+    private ModalSelectOperator modalSelect = default!;
+
+
+    private async Task Clicca()
+    {
+        await modalSelect.ShowAsync(TeamId);
+    }
+    private async Task Success(UserAtak user)
+    {
+        team.TeamLeader = user;
+        await _teamService.UpdateAsync(team);
+        StateHasChanged();
+    }
+    private async Task DeleteTamLeader()
+    {
+        team.TeamLeader = null;
+        team.TeamLeaderId = null;
+        await _teamService.UpdateAsync(team);
+        StateHasChanged();
+    }
+
+
+
+    private Team team;
+    private List<Team> teams;
+
+    private RegistrationCodeModel? modelRegcode { get; set; } = new();
+    private RegistrationCodeModal modalRegCode = default!;
+
+    protected override async void OnInitialized()
+    {
+        Thread.Sleep(100);
+        team = await _teamService.GetAsync(TeamId);
+
+        StateHasChanged();
+    }
+
+    private async Task ShareOnBoarding()
+    {
+        var reg = await _registrationCodeService.GetRegistrationByTeamID(TeamId);
+        if (reg == null)
+        {
+            //NavigationManager.NavigateTo("/regcodes");
+            reg = await _registrationCodeService.CreateAsync();
+            reg.TeamId = TeamId;
+            reg.ExpirationDate = DateTime.Now;
+            modelRegcode = new RegistrationCodeModel(reg);
+
+            await modalRegCode.ShowAsync();
+        }
+        else
+        {
+            ShareOnBoardingCode(reg);
+        }
+    }
+    private async Task ShareOnBoardingCode(RegistrationCode code)
+    {
+        await JS.InvokeVoidAsync("copyToClipboard", NavigationManager.BaseUri + "Account/Register?registration=" + code.Id.ToString());
+        ToastService.Notify(new(ToastType.Success, "Condividi", $"Testo copiato negli appunti"));
+    }
+
+
+    private async Task OnModalHidden2()
+    {
+        modelRegcode = new();
+        modelRegcode.ExpirationDate = DateTime.Now;
+        StateHasChanged();
+    }
+
+    private async Task OnSuccess()
+    {
+        await JS.InvokeVoidAsync("copyToClipboard", NavigationManager.BaseUri + "Account/Register?registration=" + modelRegcode.Id.ToString());
+        ToastService.Notify(new(ToastType.Success, "Condividi", $"Testo copiato negli appunti"));
+
+        StateHasChanged();
+    }
+
+   
+}

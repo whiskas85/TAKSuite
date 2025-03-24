@@ -1,0 +1,224 @@
+﻿@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@inject DocumentationService documentationService
+@inject TeamService teamService
+@inject IJSRuntime JS
+
+
+<script>
+    function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+    console.log("Testo copiato: " + text);
+    }).catch(err => {
+    console.error("Errore nella copia:", err);
+    });
+    }
+
+
+    window.openNewTab = (url, title) => {
+    let newTab = window.open();
+    newTab.document.title = title;  // Imposta dinamicamente il titolo
+    newTab.document.body.innerHTML = '<img src="' + url + '" style="width:100%; height:auto;">';  // Scrive l'immagine nel body
+    };
+
+    function downloadFile(fileDataUrl, filename) {
+    const a = document.createElement("a");
+    a.href = fileDataUrl;
+    a.download = filename;
+    a.click();
+    }
+</script>
+
+
+<ModalLinkDocument @ref="modalLinkDocument" OnModalSuccess="OnSuccessLinkDocument" />    
+
+
+
+@if (ShowUpload)
+{
+    <InputFile OnChange="LoadFiles" multiple />
+}
+@if (Owner is not null)
+{
+    <Button Color="ButtonColor.Primary" @onclick="() => ShowModal()">Collega documento</Button>
+}
+
+<Grid TItem="Documentation"
+Class="table table-hover"
+HeaderRowCssClass="bg-success text-white border-bottom-0 h5"
+RowClass="GetRowClass"
+Data="DocumentList"
+AllowFiltering="false"
+AllowPaging="false"
+PageSize="20"
+AllowSorting="true"
+AllowRowClick="true"
+OnRowDoubleClick="SelectItem"
+Responsive="true">
+
+    <GridColumns>
+        <GridColumn TItem="Documentation" HeaderText="Nome" Class="align-middle" IsDefaultSortColumn="true" SortKeySelector="item => item.Name">
+            @context.Name
+        </GridColumn>
+
+        <GridColumn TItem="Documentation" HeaderText="Tipo" Class="align-middle" SortKeySelector="item => item.Type">
+            @context.Type
+        </GridColumn>
+        <GridColumn TItem="Documentation" HeaderText="Data creazione" Class="align-middle" SortKeySelector="item => item.CreationDate">
+            @context.CreationDate
+        </GridColumn>
+        <GridColumn TItem="Documentation" HeaderText="Data modifica" Class="align-middle" SortKeySelector="item => item.LastModified">
+            @context.LastModified
+        </GridColumn>
+        <GridColumn TItem="Documentation" HeaderText="Valido" Class="align-middle" SortKeySelector="item => item.IsValid">
+            @context.IsValid
+        </GridColumn>
+        <GridColumn TItem="Documentation" HeaderText="Orfano?" Class="align-middle" SortKeySelector="item => item.DocumentationOwners.Count <= 0">
+            @(context.DocumentationOwners.Count <= 0)
+        </GridColumn>
+        <GridColumn TItem="Documentation" Class="align-middle" HeaderText="">
+            @if (!ShowUnlink)
+            {
+                <Tooltip Title="Rimuove fisicamente il file" Color="TooltipColor.Danger">
+                    <Button Color="ButtonColor.Danger" @onclick="() => DeleteItem(context)"><Icon Name="IconName.X"/></Button>
+                </Tooltip>
+            }
+            else
+            {
+                <Tooltip Title="Rimuove il collegamento con il documento. Non cancella fisicamente il file" Color="TooltipColor.Secondary">
+                    <Button Color="ButtonColor.Primary" @onclick="() => UnlinkItem(context)"><Icon Name="IconName.BookmarkDashFill" /></Button>
+                </Tooltip>
+            }
+        </GridColumn> 
+    </GridColumns>
+</Grid>
+
+@code {
+    [Parameter] public bool ShowUpload { get; set; }
+    [Parameter] public bool ShowUnlink { get; set; } = false;
+    [Parameter] public bool StartupLoading { get; set; } = true;
+    [Parameter] public IGuidModel? Owner { get; set; }
+
+    ModalLinkDocument modalLinkDocument = default!;
+
+    private async Task ShowModal()
+    {
+        await modalLinkDocument.ShowAsync(Owner);
+    }
+
+    private async Task OnSuccessLinkDocument(Documentation item)
+    {
+        await documentationService.LinkDocumentAsync(item, Owner);
+        await RefreshList();
+        StateHasChanged();
+    }
+
+
+    private List<Documentation> DocumentList = new List<Documentation>();
+    private int maxAllowedFiles = 10;
+    private bool isLoading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (StartupLoading)
+        {
+            await RefreshList();
+        }
+        StateHasChanged();
+    }
+    public async Task RefreshList()
+    {
+        if (Owner is null)
+        {
+            DocumentList = await documentationService.GetAllAsync();
+        }
+        else
+        {
+            DocumentList = await documentationService.GetAllByOwnerIdAsync(Owner);
+        }
+    }
+    private string GetRowClass(Documentation item)
+    {
+        var date = DateTime.Now;
+        if (!item.IsValid)
+            return "table-danger";
+        else if (item.DocumentationOwners.Count<=0)
+            return "table-warning";
+
+        return string.Empty;
+    }
+    private async Task SelectItem(GridRowEventArgs<Documentation> item)
+    {
+        await OpenAttachment(item.Item);
+    }
+
+    private async Task DeleteItem(Documentation item)
+    {
+        await documentationService.DeleteAsync(item.Id);
+        await RefreshList();
+        StateHasChanged();
+    }
+    private async Task UnlinkItem(Documentation item)
+    {
+        await documentationService.UnLinkDocumentAsync(item, Owner);
+        await RefreshList();
+        StateHasChanged();
+    }
+
+
+    private async Task OpenAttachment(Documentation attach)
+    {
+        var bytes = File.ReadAllBytes(attach.Path);
+        if (bytes != null)
+        {
+            string base64String = Convert.ToBase64String(bytes);
+            string title = attach.Name;  // Titolo per il PDF
+            if (attach.Type == "image/jpeg" || attach.Type == "image/png")
+            {
+                string imageDataUrl = $"data:image/jpeg;base64,{base64String}";
+                await JS.InvokeVoidAsync("openNewTab", imageDataUrl, title);
+            }
+            else if (attach.Type == "application/pdf")
+            {
+                // Crea un blob URL per il PDF
+                var pdfDataUrl = $"data:application/pdf;base64,{base64String}";
+                await JS.InvokeVoidAsync("downloadFile", pdfDataUrl, title);
+            }
+        }
+
+    }
+
+
+
+
+
+    private async Task LoadFiles(InputFileChangeEventArgs e)
+    {
+        isLoading = true;
+
+        foreach (var file in e.GetMultipleFiles(maxAllowedFiles))
+        {
+            try
+            {
+
+                var document = await documentationService.AddDocumentationAsync(file);
+
+                if (Owner is not null && document is not null)
+                {
+                    await documentationService.LinkDocumentAsync(document, Owner);
+                }
+
+            }
+            catch (Exception ex)
+            {
+                // Logger.LogError("File: {Filename} Error: {Error}",
+                //     file.Name, ex.Message);
+            }
+        }
+        
+        await RefreshList();
+        StateHasChanged();
+        isLoading = false;
+    }
+
+}

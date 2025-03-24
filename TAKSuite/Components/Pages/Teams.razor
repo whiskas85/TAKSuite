@@ -1,0 +1,302 @@
+﻿@page "/teams"
+@attribute [Authorize]
+
+@using System.Drawing
+@using BlazorColorPicker
+@using TAKSuite.Data
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@using TAKSuite.Helper
+@using TAKSuite.TAK.Helper
+@using Microsoft.AspNetCore.Authorization
+@inject TeamService TeamService
+@inject IJSRuntime JSRuntime
+@inject NavigationManager navigate
+
+
+@rendermode InteractiveServer
+
+<script>
+    function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+    console.log("Testo copiato: " + text);
+    }).catch(err => {
+    console.error("Errore nella copia:", err);
+    });
+    }
+    function openInNewTab(url) {
+        window.open(url, '_blank');
+    }
+</script>
+
+
+
+
+<h3>Gestione Team</h3>
+
+@if (teams == null)
+{
+    <p>Caricamento in corso...</p>
+}
+else
+{
+    <style>
+        .color-circle {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        display: inline-block;
+        border: 2px solid #ccc;
+        margin: 0 auto;
+        cursor: pointer;
+        }
+
+        .color-popup {
+        position: absolute;
+        background-color: var(--bs-body-bg);
+        border: 1px solid #ccc;
+        padding: 10px;
+        box-shadow: 0px 0px 10px rgba(0,0,0,0.1);
+        display: none;
+        z-index: 100;
+        width: 350px;
+        }
+
+        .color-popup.show {
+        display: block;
+        }
+
+        .color-button {
+        width: 25px;
+        height: 25px;
+        border: none;
+        margin: 5px;
+        border-radius: 50%;
+        cursor: pointer;
+            border: 2px solid #ccc;
+        }
+
+        .custom-button {
+        display: block;
+        width: 100%;
+        margin-top: 10px;
+        padding: 5px;
+        background-color: #ccc;
+        border: none;
+        cursor: pointer;
+        text-align: center;
+        }
+    </style>
+
+    <title>Gestione Squadre</title> 
+
+    <body>
+        @if (showColorPopup || showColorPicker)
+        {
+            <TAKSuite.Components.Pages.Components.OutsideClickDetector OnOutsideClick="@ClosePopups" LowestInsideComponentZIndex="100" />
+        }
+        
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Colore</th>
+                    <th>Nome</th>
+                    <th>Azioni</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var team in teams)
+                {
+                    <tr>
+                        <td style="position: relative;">
+                            <!-- Pallino colorato -->
+                            <div class="color-circle"
+                            style="background-color: @ColorConverterHelper.ArgbToHex(team.Color)"
+                            @onclick="() => ToggleColorPopup(team)">
+                            </div>
+
+                            <!-- Popup dei colori predefiniti -->
+                            @if (team == editingTeam && showColorPopup)
+                            {
+                                <div id="color-popup" class="color-popup show" @ref="colorPopupRef">
+                                    <h3>ATAK Color</h3>
+                                    @foreach (var predefinedColor in ATAKHelper.ATAKPredefinedColors)
+                                    {
+                                        var hexColor = ColorConverterHelper.ArgbToHex(predefinedColor);
+
+                                        <button class="color-button"
+                                                style="background-color:@hexColor;"
+                                                @onclick="() => SetPredefinedColor(hexColor, team)">
+                                        </button>
+                                    }
+                                    <button class="custom-button" @onclick="() => OpenCustomColorPicker(team)">Custom</button>
+                                </div>
+                            }
+
+                            <!-- ColorPicker -->
+                            @if (team == editingTeam && showColorPicker)
+                            {
+                                <div @ref="colorPickerRef">
+                                    <ColorPicker Title="Seleziona Colore"
+                                    IsOpened="isOpened"
+                                    Closed="@(color => SetPredefinedColor(color, team))"
+                                    MyColor="@color">
+                                    </ColorPicker>
+                                </div>
+                            }
+                        </td>
+                        <td>
+                            @if (team == editingTeam)
+                            {
+                                <input type="text" @bind="editingTeam.Name" class="form-control" />
+                            }
+                            else
+                            {
+                                @team.Name
+                            }
+                        </td>
+                        <td>
+                            @if (team == editingTeam)
+                            {
+                                <button class="btn btn-primary" @onclick="() => SaveTeam()">Salva</button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-warning" @onclick="() => EditTeam(team)">Modifica</button>
+                                <button class="btn btn-danger" @onclick="() => DeleteTeam(team.Id)">Elimina</button>
+                                <Button Color="ButtonColor.Primary" @onclick="() => NavigateTeamPage(team.Id)">Naviga</Button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </body>
+
+    <!-- Bottone per aggiungere un nuovo team -->
+    <button class="btn btn-success" @onclick="AddNewTeam">Aggiungi Nuovo Team</button>
+}
+
+@code {
+    private List<Team> teams;
+    private Team editingTeam;
+    private bool isOpened = false;
+    private bool showColorPopup = false;
+    private bool showColorPicker = false;
+    private string color = "#F1F7E9";
+
+    // Referenze ai popup
+    private ElementReference colorPopupRef;
+    private ElementReference colorPickerRef;
+
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTeams();
+    }
+
+    private async Task LoadTeams()
+    {
+        teams = await TeamService.GetAllAsync();
+    }
+
+    private void EditTeam(Team team)
+    {
+        editingTeam = team;
+        showColorPopup = false;
+        showColorPicker = false;
+        StateHasChanged();
+    }
+
+    private async Task SaveTeam()
+    {
+        if (editingTeam.Id == Guid.Empty)
+        {
+            await TeamService.AddAsync(editingTeam);
+        }
+        else
+        {
+            await TeamService.UpdateAsync(editingTeam);
+        }
+
+        editingTeam = null;
+        await LoadTeams();
+    }
+
+    private async Task NavigateTeamPage(Guid id)
+    {
+        // var url = $"/team/{id}";
+        // await JSRuntime.InvokeVoidAsync("openInNewTab", url);
+        
+        
+        var url = $"/team/{id}";
+        navigate.NavigateTo(url);
+    }
+    private async Task DeleteTeam(Guid id)
+    {
+        await TeamService.DeleteAsync(id);
+        await LoadTeams();
+    }
+
+    private void AddNewTeam()
+    {
+        editingTeam = new Team
+            {
+                Id = Guid.Empty,
+                Name = "",
+                Color = 0
+            };
+
+        teams.Add(editingTeam);
+        StateHasChanged();
+    }
+
+    private void ToggleColorPopup(Team team)
+    {
+        if (editingTeam == team && showColorPopup)
+        {
+            showColorPopup = false;
+        }
+        else
+        {
+            editingTeam = team;
+            showColorPopup = true;
+            showColorPicker = false;
+        }
+    }
+
+    // private void SetPredefinedColor(Team team, string predefinedColor)
+    // {
+    //     team.Color = ColorConverterHelper.HexToArgb(predefinedColor);
+    //     showColorPopup = false;
+    //     StateHasChanged();
+    // }
+
+    private void OpenCustomColorPicker(Team team)
+    {
+        showColorPopup = false;
+        showColorPicker = true;
+        isOpened = true;
+    }
+
+    private async Task SetPredefinedColor(string value, Team team)
+    {
+        color = value;
+        team.Color = ColorConverterHelper.HexToArgb(color);
+        isOpened = false;
+        showColorPicker = false;
+        showColorPopup = false;
+        await SaveTeam();
+                 
+    }
+
+
+    private void ClosePopups()
+    {
+        showColorPopup = false;
+        showColorPicker = false;
+        isOpened = false;
+        StateHasChanged();
+    }
+}

@@ -1,0 +1,22 @@
+﻿@page "/documentation"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@inject DocumentationService documentationService
+
+
+
+<DocumentationListComponent ShowUpload="true"/>
+
+<ModalLinkDocument @ref="modalLinkDocument" OnModalSuccess="OnSuccessLinkDocument" />    
+
+@code {
+    ModalLinkDocument modalLinkDocument = default!;
+    
+    
+    private async Task OnSuccessLinkDocument(IGuidModel model)
+    {
+        
+    }
+}

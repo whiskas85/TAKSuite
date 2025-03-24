@@ -1,0 +1,216 @@
+﻿@page "/manage-teams"
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+
+@inject TeamService TeamService
+
+
+<script>
+    function dragoverHandler(ev) {
+    ev.preventDefault();
+    }
+</script>
+<h3>Catena di comando</h3>
+
+<Button @onclick="Save" Color="ButtonColor.Primary">Salva</Button>
+
+
+
+<div class="tree-container" ondragover="dragoverHandler(event)" @ondrop="HandleDrop">
+    @foreach (var node in Nodes)
+    {
+        <TreeNode Node="node" OnDrop="OnDrop" />
+    }
+</div>
+
+@code {
+    List<TreeNodeModel> Nodes = new();
+    Dictionary<Guid, TreeNodeModel> modifiedNodes = new();
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        var teams = await TeamService.GetAllAsync();
+        Nodes = LoadTeamHierarchy(teams);
+        StateHasChanged();
+    }
+
+
+    public  List<TreeNodeModel> LoadTeamHierarchy(List<Team> teams)
+    {
+        var nodes = teams.Select(t => new TreeNodeModel
+            {
+                Id = t.Id,
+                Name = t.Name,
+                NodeType = NodeType.Team,
+                Item = t,
+                ParentId = t.ParentTeamId,
+                AllowChildren = true
+            }).ToDictionary(n => n.Id);
+
+        List<TreeNodeModel> rootNodes = new();
+
+        foreach (var node in nodes.Values)
+        {
+            if (node.ParentId.HasValue && nodes.TryGetValue(node.ParentId.Value, out var parentNode))
+            {
+                node.Parent = parentNode;
+                parentNode.Children.Add(node);
+            }
+            else
+            {
+                rootNodes.Add(node);
+            }
+        }
+
+        return rootNodes;
+    }
+
+
+
+
+    async Task HandleDrop()
+    {
+        if (DragDropService.DraggedNode is null) return;
+        var parent = DragDropService.DraggedNode.Parent;
+        if (parent is not null)
+        {
+            parent.Children.Remove(DragDropService.DraggedNode);
+            DragDropService.DraggedNode.Parent = null;
+            DragDropService.DraggedNode.ParentId = null;
+            Nodes.Add(DragDropService.DraggedNode);
+            StateHasChanged();
+        }
+    }
+    public class TeamManager
+    {
+        private readonly TeamService TeamService;
+        private readonly Dictionary<Guid, TreeNodeModel> _modifiedNodes;
+
+        public TeamManager(TeamService teamService, Dictionary<Guid, TreeNodeModel> modifiedNodes)
+        {
+            TeamService = teamService;
+            _modifiedNodes = modifiedNodes;
+        }
+
+        public async Task Save()
+        {
+            foreach (var node in _modifiedNodes.Values)
+            {
+                node.Item.ParentTeamId = node.Parent?.Id;
+            }
+
+            var res = await TeamService.UpdateRangeAsync(_modifiedNodes.Values.Select(n => n.Item).ToList());
+            if (res)
+            {
+                _modifiedNodes.Clear();
+            }
+        }
+    }
+
+    async Task Save()
+    {
+        TeamManager manager = new(TeamService, modifiedNodes);
+       
+        await manager.Save();
+        modifiedNodes.Clear();
+
+    }
+    async Task OnDrop(TreeNodeModel targetNode)
+    {
+        if (DragDropService.DraggedNode != null && DragDropService.DraggedNode != targetNode)
+        {
+            // Verifica se il nodo droppato è un discendente del nodo di destinazione
+            if (IsDescendant(DragDropService.DraggedNode, targetNode))
+            {
+                // Esegui lo scambio dei nodi
+                SwapNodes(DragDropService.DraggedNode, targetNode);
+            }
+            else
+            {
+                // Rimuovi il vecchio nodo
+                var parent = DragDropService.DraggedNode.Parent;
+                if (parent is null)
+                {
+                    Nodes.Remove(DragDropService.DraggedNode);
+                }
+                else
+                {
+                    parent.Children.Remove(DragDropService.DraggedNode);
+                }
+
+                // Aggiungi il nodo alla destinazione
+                targetNode.Children.Add(DragDropService.DraggedNode);
+
+                // Aggiorna il parent
+                DragDropService.DraggedNode.ParentId = targetNode.Id;
+                DragDropService.DraggedNode.Parent = targetNode;
+            }
+
+            // Aggiorna i nodi modificati
+            modifiedNodes[DragDropService.DraggedNode.Id] = DragDropService.DraggedNode;
+
+            DragDropService.DraggedNode = null;
+            StateHasChanged();
+        }
+    }
+
+    bool IsDescendant(TreeNodeModel ancestor, TreeNodeModel node)
+    {
+        if (ancestor == null) return false;
+        if (ancestor == node) return true;
+        foreach (var child in ancestor.Children)
+        {
+            if (IsDescendant(child, node))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Trova il primo figlio diretto di un nodo che è un antenato del targetNode
+    TreeNodeModel? FindDirectChild(TreeNodeModel node, TreeNodeModel potentialAncestor)
+    {
+        if (node.Children.Contains(potentialAncestor))
+        {
+            return potentialAncestor;
+        }
+
+        foreach (var child in node.Children)
+        {
+            var found = FindDirectChild(child, potentialAncestor);
+            if (found != null)
+            {
+                return found;
+            }
+        }
+        return null;
+    }
+    void SwapNodes(TreeNodeModel parent, TreeNodeModel child)
+    {
+        // Salva il parent originale del nodo padre
+        var grandParent = parent.Parent;
+
+        // Rimuovi il nodo figlio dalla lista dei figli del nodo padre
+        parent.Children.Remove(child);
+
+        // Aggiorna il parent del nodo figlio
+        child.Parent = grandParent;
+        if (grandParent != null)
+        {
+            grandParent.Children.Remove(parent);
+            grandParent.Children.Add(child);
+        }
+        else
+        {
+            // Se il nodo padre originale era la radice
+            Nodes.Remove(parent);
+            Nodes.Add(child);
+        }
+
+        // Aggiungi il nodo padre come figlio del nodo figlio
+        child.Children.Add(parent);
+        parent.Parent = child;
+    }
+}

@@ -1,0 +1,17 @@
+﻿@using TAKSuite.Data.ModelsTak
+
+<i class="material-icons" style="color: @GetColor(Component);">@IconName</i>
+
+@code {
+
+    [Parameter] public IColoredCoT Component { get; set; }
+    [Parameter] public string IconName { get; set; }
+
+    private string GetColor(IColoredCoT item)
+    {
+        var color = Helper.ColorConverterHelper.ArgbToHex(item.Color.Value);
+        if (color.ToLower() == "#ffffff")
+            color = "#000000";
+        return color;
+    }
+}

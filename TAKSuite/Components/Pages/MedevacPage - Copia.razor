@@ -1,0 +1,203 @@
+﻿@page "/medevac"
+@attribute [Authorize]
+
+@rendermode InteractiveServer
+
+@using System.ComponentModel.DataAnnotations
+@using GamePortal.Data
+@using GamePortal.Data.Models
+@using GamePortal.Data.ModelsTak
+@using GamePortal.Data.Services
+@using GamePortal.Data.ServicesTak
+@using GamePortal.Helper
+@using GamePortal.TAK.CoT
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+
+
+@inject MedevacService MedevacService;
+
+@inject IJSRuntime JS
+@inject GamePortal.Helpers.JsInteropHelper JsHelper
+@inject ToastService ToastService;
+@inject NavigationManager NavigationManager
+@inject CoTManager CoTManager
+
+
+@inject UserManager<ApplicationUser> UserManager
+
+<style>
+    .icon-header {
+        width: 50px;
+    }
+</style>
+<script>
+    function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+    console.log("Testo copiato: " + text);
+    }).catch(err => {
+    console.error("Errore nella copia:", err);
+    });
+    }
+
+            function updateRemainingTime() {
+        const table = document.querySelector(".atak-table-medevac");
+        if (!table) return;
+
+        const rows = table.querySelectorAll("tbody tr");
+        const countdownDuration = 30 * 60 * 1000; // 30 minuti in millisecondi
+
+        rows.forEach(row => {
+            const reportTimeCell = row.querySelector(".report-time");
+            const remainingCell = row.querySelector(".remaining-time");
+
+            if (reportTimeCell && remainingCell) {
+                const reportTimeStr = reportTimeCell.innerText.trim().replace(/\s+/g, ' ');
+                const dateTimeParts = reportTimeStr.match(/(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2}):(\d{2})/);
+
+                if (dateTimeParts) {
+                    const [, day, month, year, hours, minutes, seconds] = dateTimeParts.map(Number);
+                    const reportTime = new Date(year, month - 1, day, hours+1, minutes, seconds);
+
+                    if (!isNaN(reportTime.getTime())) {
+                        const elapsedTime = new Date().getTime() - reportTime.getTime();
+                        const remainingTime = countdownDuration - elapsedTime;
+
+                        if (remainingTime > 0) {
+                            const minutes = Math.floor(remainingTime / 60000);
+                            const seconds = Math.floor((remainingTime % 60000) / 1000);
+                            remainingCell.innerText = `${minutes}m ${seconds}s`;
+                        } else {
+                            remainingCell.innerText = "Expired";
+                        }
+                    } else {
+                        remainingCell.innerText = "Invalid date";
+                    }
+                } else {
+                    remainingCell.innerText = "Invalid date format";
+                }
+            }
+        });
+    }
+
+
+    // Aggiorna ogni secondo
+    setInterval(updateRemainingTime, 1000);
+    // Esegui subito all'avvio
+    updateRemainingTime();
+
+</script>
+
+<PageTitle>Gestione Medevac</PageTitle>
+
+
+
+<h3>Gestione Medevac</h3>
+<p>Medevac attivi</p>
+
+    <Grid @ref="grid"
+    TItem="Medevac"
+
+    Class="table table-hover atak-table-medevac"
+    HeaderRowCssClass="bg-success text-white border-bottom-0 h5"
+    FiltersRowCssClass="bg-success text-white bg-opacity-25 border-bottom-0"
+
+    DataProvider="RequestDataProvider"
+    AllowFiltering="false"
+    AllowPaging="false"
+    PageSize="20"
+    AllowSorting="true"
+    AllowSelection="false"
+    SelectionMode="GridSelectionMode.Multiple"
+    SelectedItemsChanged="OnSelectedItemsChanged"
+    Unit="Unit.Px"
+
+
+
+
+    Responsive="true">
+
+    <GridColumns>
+        <GridColumn TItem="Medevac" HeaderText="" class="align-middle icon-header" >
+            <GamePortal.Components.Pages.Components.IconComponent Component="context" IconName="add_circle" />
+        </GridColumn>
+        <GridColumn TItem="Medevac" HeaderText="Callsign" Class="align-middle" SortKeySelector="item => item.Callsign">
+            @context.Callsign
+        </GridColumn>  
+        <GridColumn TItem="Medevac" HeaderText="Report time" Class="align-middle report-time" SortKeySelector="item => item.LastUpdateTime">
+            @context.LastUpdateTime
+        </GridColumn>
+
+        <GridColumn TItem="Medevac" HeaderText="Reporter" Class="align-middle" SortKeySelector="item => item.ReporterCallsign">
+            @context.ReporterCallsign
+        </GridColumn>
+
+        <GridColumn TItem="Medevac" HeaderText="Remarks" Class="align-middle" SortKeySelector="item => item.Remarks">
+            @context.Remarks
+        </GridColumn>
+
+        <GridColumn TItem="Medevac" HeaderText="Remaining" Class="align-middle remaining-time" SortKeySelector="item => item.Remarks">
+            <span id="remaining-@context.Uid">remaining</span>
+        </GridColumn>
+        <GridColumn TItem="Medevac" HeaderText="Resolve case" Class="align-middle">
+            <Button @onclick="()=> CompleteWaypoint(context)"><Icon Name="IconName.Check" Color="IconColor.Success"></Icon></Button>
+        </GridColumn>
+    </GridColumns>
+
+</Grid>
+
+<Toasts class="p-3" AutoHide="true" StackLength="3" Placement="ToastsPlacement.BottomRight" />
+@* <button @onclick="@LogUsername">Log username</button> *@
+@code {
+    private List<Medevac> list = null;
+    Grid<Medevac> grid = default!;
+
+
+    private async Task<GridDataProviderResult<Medevac>> RequestDataProvider(GridDataProviderRequest<Medevac> request)
+    {
+        list = await MedevacService.GetAllAsync("TEST FEED2");
+        return await Task.FromResult(request.ApplyTo(list));
+    }
+
+    private Task OnSelectedItemsChanged(HashSet<Medevac> codes)
+    {
+        var selecteCodes = codes is not null && codes.Any() ? codes : new();
+        return Task.CompletedTask;
+    }
+
+    private async Task CompleteWaypoint(Medevac item)
+    {
+        bool res = await CoTManager.DeleteMissionUidAsync("TEST FEED2", item.Uid);
+        await grid.RefreshDataAsync();
+        StateHasChanged();
+    }
+
+
+
+    protected override async Task OnInitializedAsync()
+    { 
+        // var user = await UserManager.GetUserAsync(User);
+        // var teamColor = user?.Team?.Color ?? "black"; // Usa un colore di default se non esiste
+        CoTManager.CoTMessageReceived += MessageProcessing; 
+        StateHasChanged();
+
+
+    }
+
+    private void MessageProcessing(CoTManager.CoTMessageEventArgs e)
+    {
+        if (e.Message.Contains("b-r-f-h-c"))
+            grid.RefreshDataAsync();
+    }
+
+
+    public void Dispose()
+    {
+        CoTManager.CoTMessageReceived -= MessageProcessing;
+    }
+
+    protected override void OnInitialized()
+    {
+    }
+
+}

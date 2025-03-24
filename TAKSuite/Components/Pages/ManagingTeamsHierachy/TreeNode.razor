@@ -1,0 +1,70 @@
+@using Microsoft.AspNetCore.Components.Web
+<style>
+    ul {
+        list-style-type: none;
+    }
+    
+
+    li {
+        padding: 10px !important;
+    }
+</style>
+@code {
+    [Parameter] public TreeNodeModel Node { get; set; } = new();
+    [Parameter] public EventCallback<TreeNodeModel> OnDrop { get; set; }
+
+    void HandleDragStart()
+    {
+        DragDropService.DraggedNode = Node;
+    }
+
+    async Task HandleDrop()
+    {
+        if (DragDropService.DraggedNode != null && DragDropService.DraggedNode != Node)
+        {
+            await OnDrop.InvokeAsync(Node);
+        }
+    }
+}
+<script>
+    function dragoverHandler(ev) {
+        let allowChildren = ev.target.closest("a")?.getAttribute("data-allow-children");
+        console.log(allowChildren )
+        if (allowChildren=="true") {
+            ev.preventDefault();
+        }
+    }
+</script>
+
+
+<div class="nav-item tree-node-item" draggable="true" @ondragstart="HandleDragStart" ondragover="dragoverHandler(event)" @ondrop="HandleDrop">
+
+    <a class="nav-link" data-allow-children="@Node.AllowChildren.ToString().ToLower()">
+        <span class="nav-link-icon ps-2" >
+            @switch (Node.NodeType)
+            {
+                case NodeType.Team:
+                    <Icon Name="IconName.PeopleFill" />    
+                    break;
+                case NodeType.Operator:
+                    <Icon Name="IconName.Person" />
+                    break;
+                case NodeType.Documentation:
+                    <Icon Name="IconName.FileTypeDoc" />
+                    break;
+                case NodeType.Task:
+                    <Icon Name="IconName.ListCheck" />
+                    break;
+            }
+        </span>
+        <span class="nav-link-text ms-2 expanded-only" >@Node.Name</span>
+    </a>
+</div>
+<div class="tree-container">
+    <ul>
+    @foreach (var child in Node.Children)
+    {
+        <li><TreeNode Node="child" OnDrop="OnDrop" /></li>
+    }
+    </ul>
+</div>

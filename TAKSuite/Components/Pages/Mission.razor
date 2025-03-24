@@ -1,0 +1,197 @@
+﻿@page "/mission"
+@rendermode InteractiveServer
+
+@using TAKSuite.TAK.CoT
+@using Microsoft.AspNetCore.Authorization
+@using System.Text.Json
+
+@attribute [StreamRendering]
+@attribute [Authorize]
+
+@inject NavigationManager Navigation
+@inject TAKSuite.Helpers.JsInteropHelper JsHelper
+@inject MartiApiClient MartiApiClient
+
+<PageTitle>Mission</PageTitle>
+
+<h1>@missionName</h1>
+
+<p>@missionDescription</p>
+<p>Creation data: @missionCreateTime</p>
+
+@if (bmpSmMissions == null || otherMissions == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <h3>Lista obiettivi</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Colore</th>
+                <th>Callsign</th>
+                <th>Ultima Modifica</th>
+                <th>Link</th>
+                <th>Collegamenti</th>
+                <th>Azioni</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var mission in bmpSmMissions)
+            {
+                <tr>
+                    <td style="width: 20px; text-align: center;">
+                        <div style="width: 20px; height: 20px; border-radius: 50%; background-color: @GetColorFromArgb(mission.Color); border: 1px solid black;"></div>
+                    </td>
+
+                    <td>@mission.Callsign</td>
+                    <td>@mission.Timestamp</td>
+                    <td>
+                        @* Aggiungi il link che punta alla pagina cotpage con l'UID come parametro *@
+                        <button class="btn btn-primary" @onclick=" ()=> NavigateToCotPage(mission.Uid)">Dettagli</button>
+                    </td>
+                    <td></td>
+                    <td><button class="btn btn-primary" @onclick="() => PerformAction(mission)">Azione</button></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <h3>Altri punti</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Colore</th>
+                <th>Callsign</th>
+                <th>Ultima Modifica</th>
+                <th>Link</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var mission in otherMissions)
+            {
+                <tr>
+                    <td style="width: 20px; text-align: center;">
+                        <div style="width: 20px; height: 20px; border-radius: 50%; background-color: @GetColorFromArgb(mission.Color); border: 1px solid black;"></div>
+                    </td>
+
+                    <td>@mission.Callsign</td>
+                    <td>@mission.Timestamp</td>
+                    <td></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    // [Parameter]
+    // public string id { get; set; }
+
+
+    private string? missionName;
+    private string? missionDescription;
+    private string? missionCreateTime;
+    private List<MissionRow>? bmpSmMissions;   // Missioni con tipo b-m-p-s-m
+    private List<MissionRow>? otherMissions;   // Missioni con altri tipi
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Carica i dati della missione all'inizializzazione
+        var data = await MartiApiClient.GetMissionDataAsync("TEST FEED2");
+
+        if (data != null)
+        {
+            // Parso i dati JSON in un oggetto JsonDocument
+            using (var doc = JsonDocument.Parse(data))
+            {
+                var missionData = doc.RootElement
+                              .GetProperty("data")[0];
+
+                missionName = missionData.GetProperty("name").GetString();
+                missionDescription = missionData.GetProperty("description").GetString();
+                missionCreateTime = missionData.GetProperty("createTime").GetDateTime().ToString("yyyy-MM-dd HH:mm:ss");
+
+                var uids = doc.RootElement
+                              .GetProperty("data")[0]
+                              .GetProperty("uids");
+
+                bmpSmMissions = new List<MissionRow>();
+                otherMissions = new List<MissionRow>();
+
+                // Estrazione delle informazioni per ogni UID
+                foreach (var uid in uids.EnumerateArray())
+                {
+                    var callsign = uid.GetProperty("details").GetProperty("callsign").GetString();
+                    var color = uid.GetProperty("details").GetProperty("color").GetString();
+                    var timestamp = uid.GetProperty("timestamp").GetDateTime().ToString("yyyy-MM-dd HH:mm:ss");
+                    var type = uid.GetProperty("details").GetProperty("type").GetString();
+                    var cotUid = uid.GetProperty("data").GetString();  // Aggiungi l'UID
+
+                    // Aggiungi una gestione di errore se i dati sono mancanti
+                    if (string.IsNullOrEmpty(callsign) || string.IsNullOrEmpty(color) || string.IsNullOrEmpty(cotUid))
+                    {
+                        continue;  // Salta la missione se non ha informazioni complete
+                    }
+
+                    var missionRow = new MissionRow
+                    {
+                        Callsign = callsign,
+                        Color = color,
+                        Timestamp = timestamp,
+                        Uid = cotUid  // Assegna l'UID
+                    };
+
+                    // Se il tipo è b-m-p-s-m, aggiungi alla lista delle missioni di tipo b-m-p-s-m
+                    if (type == "b-m-p-s-m")
+                    {
+                        bmpSmMissions.Add(missionRow);
+                    }
+                    else
+                    {
+                        // Altrimenti, aggiungi alla lista delle altre missioni
+                        otherMissions.Add(missionRow);
+                    }
+                }
+            }
+        }
+    }
+    private async Task NavigateToCotPage(string uid)
+    {
+        if (!string.IsNullOrEmpty(uid))
+        {
+            await JsHelper.OpenInNewTab($"/cotpage/{uid}");
+        }
+    }
+
+    private void PerformAction(MissionRow mission)
+    {
+        // Qui puoi aggiungere il codice per eseguire un'azione quando l'utente clicca il pulsante
+        Console.WriteLine($"Eseguita azione per: {mission.Callsign}");
+    }
+
+    // Funzione per ottenere il colore in formato CSS a partire dal valore ARGB
+    private string GetColorFromArgb(string colorValue)
+    {
+        if (int.TryParse(colorValue, out var argb))
+        {
+            var a = (argb >> 24) & 0xFF;
+            var r = (argb >> 16) & 0xFF;
+            var g = (argb >> 8) & 0xFF;
+            var b = argb & 0xFF;
+
+            // Restituisce il colore in formato rgba()
+            return $"rgba({r}, {g}, {b}, {a / 255.0})";
+        }
+        return "transparent"; // Se il valore ARGB non è valido, restituisce un colore trasparente
+    }
+
+    private class MissionRow
+    {
+        public string? Callsign { get; set; }
+        public string? Color { get; set; }
+        public string? Timestamp { get; set; }
+        public string? Uid { get; set; }  // Aggiunto l'UID
+    }
+}

@@ -1,0 +1,575 @@
+﻿@page "/111team/{id:guid}"
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+@using System.ComponentModel.DataAnnotations
+@using TAKSuite.Components.Pages.RegistrationCode
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@using Microsoft.AspNetCore.Authorization
+
+
+@inject TeamService _teamService;
+
+@inject IJSRuntime JS
+@inject ToastService ToastService;
+@inject NavigationManager NavigationManager
+@inject RadioChannelService _radioChannelService
+@inject TeamRadioChannelService _teamRadioChannelService
+@inject RegistrationCodeService _registrationCodeService
+
+
+
+<script>
+    function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+    console.log("Testo copiato: " + text);
+    }).catch(err => {
+    console.error("Errore nella copia:", err);
+    });
+    }
+    function openInNewTab(url) {
+        window.open(url, '_blank');
+    }
+</script>
+
+<PageTitle>Squadra: @team?.Name</PageTitle>
+
+
+<EditForm Model="Model" FormName="ChannelRadioAdd">
+    <DataAnnotationsValidator />
+    <Modal @ref="modal" Title="Aggiunta canali di comunicazione" OnHidden="OnModalHidden">
+        <BodyTemplate>
+
+            <div>
+                <p>Aggiunta di un canale di comunicazione. Il primo canale è quello principale, manetre il secondo è quello di backup. Il canale è valido solo dall'inizio alla fine del periodo di validità. Se lasciato vuoto è sempre valido</p>
+
+                <div class="form-group row mb-3">
+                    <label for="inputCode" class="col-sm-2 col-form-label">Nome</label>
+                    <div class="col-sm-10">
+                        <TextInput id="inputCode" class="form-control" @bind-Value="Model!.ChannelName" />
+                        <ValidationMessage For="() => Model!.ChannelName" class="text-danger" />
+                        <small class="form-text text-muted">Nome riconoscibile per il codice del canale</small>
+
+                    </div>
+                </div>
+
+                <div class="form-group row mb-3">
+                    <label class="col-sm-2 col-form-label" for="TeamId">Canale radio</label>
+                    <div class="col-sm-10">
+                        <InputSelect id="RadioCh" class="form-control" @bind-value="Model!.RadioChannel">
+                            <option value="">Seleziona un canale</option>
+                            @foreach (var item in radioList)
+                            {
+                                <option value="@item.Id">@item.Name</option>
+                            }
+                        </InputSelect>
+                    </div>
+                </div>
+                <div class="form-group row mb-3">
+                    <label class="col-sm-2 col-form-label" for="TeamId">Canale radio backup</label>
+                    <div class="col-sm-10">
+                        <InputSelect id="RadioChBk" class="form-control" @bind-value="Model!.BackupRadioChannel">
+                            <option value="">Seleziona un canale</option>
+                            @foreach (var item in radioList)
+                            {
+                                <option value="@item.Id">@item.Name</option>
+                            }
+                        </InputSelect>
+                    </div>
+                </div> 
+
+                <TAKSuite.Components.Pages.Components.DateTimeInput Title="Inzio validità" @bind-Value=Model.StartDate></TAKSuite.Components.Pages.Components.DateTimeInput>
+                <TAKSuite.Components.Pages.Components.DateTimeInput Title="Fine validità" @bind-Value=Model.EndDate></TAKSuite.Components.Pages.Components.DateTimeInput>
+
+
+            </div>
+
+        </BodyTemplate>
+        <FooterTemplate>
+            <Button Color="ButtonColor.Primary" @onclick="OnSaveContinue">Save & Continue</Button>
+            <Button Color="ButtonColor.Primary" @onclick="OnSave">Save changes</Button>
+
+            @* <Button Color="ButtonColor.Primary" type="ButtonType.Submit" nome="action" value="SaveContinue">Save changes</Button>
+            <Button Color="ButtonColor.Primary" type="ButtonType.Submit" nome="action" value="Save">Save changes</Button> *@
+            <Button Color="ButtonColor.Secondary" @onclick="OnHideModalClick">Close</Button>
+        </FooterTemplate>
+    </Modal>
+</EditForm>
+
+
+
+
+
+
+
+
+<Tabs EnableFadeEffect="true">
+    <Tab Active="true">
+        <TitleTemplate>
+            <Icon Name="IconName.HouseFill" /> Dettagli
+        </TitleTemplate>
+        <Content>
+            <RegistrationCodeModal @ref="modalRegCode" Model="modelRegcode" OnSuccess="OnSuccess" OnModalHidden="OnModalHidden2" Teams="teams" />
+
+
+            <div class="d-flex justify-content-between align-items-center">
+                <h3>@team?.Name</h3>
+                <Button Color="ButtonColor.Primary" @onclick="ShareOnBoarding"><Icon Name="IconName.ShareFill"></Icon> Onboarding</Button>
+            </div>
+            <h5><strong>Team leader: </strong>@team?.TeamLeader?.Name</h5>
+            <h5><strong>@team?.TeamLeader?.Nick</strong></h5>
+            <p><strong>Phone: </strong>@team?.TeamLeader?.PhoneNumber</p>
+            <p><strong>Mail: </strong>@team?.TeamLeader?.Email</p>
+        </Content>
+    </Tab>
+    <Tab>
+        <TitleTemplate>
+            <Icon Name="IconName.Headset" /> Comunicazioni
+        </TitleTemplate>
+        <Content>
+            <h3>Team</h3>
+            <p>Canale radio interno al team</p>
+            <div class="form-group row mb-3">
+                <div class="col-auto">
+                    <Button Color="ButtonColor.Primary" @onclick="()=> OnShowModalClick(ChannelType.BaseChannel)">
+                        Aggiungi canale
+                    </Button>
+                </div>
+            </div>
+            <Grid @ref="grid"
+            TItem="TeamRadioChannel"
+            Class="table table-hover"
+            HeaderRowCssClass="bg-success text-white border-bottom-0  h5"
+            FiltersRowCssClass="bg-success text-white bg-opacity-25 border-bottom-0"
+            RowClass="GetRowClass"
+            DataProvider="RequestDataProvider"
+            AllowFiltering="false"
+            AllowPaging="false"
+            PageSize="20"
+            AllowSorting="true"
+            AllowSelection="false"
+            SelectionMode="GridSelectionMode.Multiple"
+            Responsive="true">
+
+                <GridColumns>
+                    <GridColumn TItem="TeamRadioChannel" HeaderText="Nome" Class="align-middle" SortKeySelector="item => item.Name">
+                        @context.Name
+                    </GridColumn>
+                    <GridColumn TItem="TeamRadioChannel" HeaderText="Inizio" Class="align-middle" SortKeySelector="item => item.BeginValidityPeriod" IsDefaultSortColumn="true" SortDirection="SortDirection.Ascending">
+                        @context.BeginValidityPeriod
+                    </GridColumn>
+                    <GridColumn TItem="TeamRadioChannel" HeaderText="Fine" Class="align-middle" SortKeySelector="item => item.EndValidityPeriod">
+                        @context.EndValidityPeriod
+                    </GridColumn>
+                    <GridColumn TItem="TeamRadioChannel" HeaderText="Canale" Class="align-middle" SortKeySelector="item => item.RadioChannel.Name">
+                        @context.RadioChannel.Name - @context.RadioChannel.Frequency
+                    </GridColumn>
+                    <GridColumn TItem="TeamRadioChannel" HeaderText="Backup" Class="align-middle" SortKeySelector="item => item.BackupRadioChannel.Name">
+                        @if (context.BackupRadioChannel != null)
+                        {
+                            var x = context.BackupRadioChannel.Name + " - " + @context.BackupRadioChannel.Frequency ;
+                            @x
+                        }
+                    </GridColumn>
+
+                    <GridColumn TItem="TeamRadioChannel" Class="align-middle" HeaderText="Azioni">
+                        <Button Color="ButtonColor.Primary" @onclick="() => Edit(context)"><Icon Name="IconName.PencilFill"></Icon></Button>
+                        <Button Color="ButtonColor.Danger" @onclick="() => Delete(context)"><Icon Name="IconName.Trash3Fill"></Icon></Button>
+                    </GridColumn>
+                </GridColumns>
+
+            </Grid>
+
+            <h3>Team Leader</h3>
+            <p>Canale radio dedicato al Team Leader per il sottogruppo</p>
+            <div class="form-group row mb-3">
+                <div class="col-auto">
+                    <Button Color="ButtonColor.Primary" @onclick="()=> OnShowModalClick(ChannelType.TeamLeaderChannel)">
+                        Aggiungi canale
+                    </Button>
+                </div>
+            </div>
+            <Grid @ref="grid2"
+            TItem="TeamRadioChannel"
+            Class="table table-hover"
+            HeaderRowCssClass="bg-success text-white border-bottom-0  h5"
+            FiltersRowCssClass="bg-success text-white bg-opacity-25 border-bottom-0"
+            RowClass="GetRowClass"
+            DataProvider="RequestDataProvider2"
+            AllowFiltering="false"
+            AllowPaging="false"
+            PageSize="20"
+            AllowSorting="true"
+            AllowSelection="false"
+            SelectionMode="GridSelectionMode.Multiple"
+            Responsive="true">
+
+                <GridColumns>
+                    <GridColumn TItem="TeamRadioChannel" HeaderText="Nome" Class="align-middle" SortKeySelector="item => item.Name">
+                        @context.Name
+                    </GridColumn>
+                    <GridColumn TItem="TeamRadioChannel" HeaderText="Inizio" Class="align-middle" SortKeySelector="item => item.BeginValidityPeriod" IsDefaultSortColumn="true" SortDirection="SortDirection.Ascending">
+                        @context.BeginValidityPeriod
+                    </GridColumn>
+                    <GridColumn TItem="TeamRadioChannel" HeaderText="Fine" Class="align-middle" SortKeySelector="item => item.EndValidityPeriod">
+                        @context.EndValidityPeriod
+                    </GridColumn>
+                    <GridColumn TItem="TeamRadioChannel" HeaderText="Canale" Class="align-middle" SortKeySelector="item => item.RadioChannel.Name">
+                        @context.RadioChannel.Name - @context.RadioChannel.Frequency
+                    </GridColumn>
+                    <GridColumn TItem="TeamRadioChannel" HeaderText="Backup" Class="align-middle" SortKeySelector="item => item.BackupRadioChannel.Name">
+                        @if (context.BackupRadioChannel != null)
+                        {
+                            var x = context.BackupRadioChannel.Name + " - " + @context.BackupRadioChannel.Frequency;
+                            @x
+                        }
+                    </GridColumn>
+
+                    <GridColumn TItem="TeamRadioChannel" Class="align-middle" HeaderText="Azioni">
+                        <Button Color="ButtonColor.Primary" @onclick="() => Edit(context)"><Icon Name="IconName.PencilFill"></Icon></Button>
+                        <Button Color="ButtonColor.Danger" @onclick="() => Delete(context)"><Icon Name="IconName.Trash3Fill"></Icon></Button>
+                    </GridColumn>
+                </GridColumns>
+
+            </Grid>
+
+            <h3>Vice Team Leader</h3>
+            <p>Canale radio dedicato al Vice Team Leader per il sottogruppo</p>
+            <div class="form-group row mb-3">
+                <div class="col-auto">
+                    <Button Color="ButtonColor.Primary" @onclick="()=> OnShowModalClick(ChannelType.ViceTeamLeaderChannel)">
+                        Aggiungi canale
+                    </Button>
+                </div>
+            </div>
+            <Grid @ref="grid3"
+            TItem="TeamRadioChannel"
+            Class="table table-hover"
+            HeaderRowCssClass="bg-success text-white border-bottom-0  h5"
+            FiltersRowCssClass="bg-success text-white bg-opacity-25 border-bottom-0"
+            RowClass="GetRowClass"
+            DataProvider="RequestDataProvider3"
+            AllowFiltering="false"
+            AllowPaging="false"
+            PageSize="20"
+            AllowSorting="true"
+            AllowSelection="false"
+            SelectionMode="GridSelectionMode.Multiple"
+            Responsive="true">
+
+                <GridColumns>
+                    <GridColumn TItem="TeamRadioChannel" HeaderText="Nome" Class="align-middle" SortKeySelector="item => item.Name">
+                        @context.Name
+                    </GridColumn>
+                    <GridColumn TItem="TeamRadioChannel" HeaderText="Inizio" Class="align-middle" SortKeySelector="item => item.BeginValidityPeriod" IsDefaultSortColumn="true" SortDirection="SortDirection.Ascending">
+                        @context.BeginValidityPeriod
+                    </GridColumn>
+                    <GridColumn TItem="TeamRadioChannel" HeaderText="Fine" Class="align-middle" SortKeySelector="item => item.EndValidityPeriod">
+                        @context.EndValidityPeriod
+                    </GridColumn>
+                    <GridColumn TItem="TeamRadioChannel" HeaderText="Canale" Class="align-middle" SortKeySelector="item => item.RadioChannel.Name">
+                        @context.RadioChannel.Name - @context.RadioChannel.Frequency
+                    </GridColumn>
+                    <GridColumn TItem="TeamRadioChannel" HeaderText="Backup" Class="align-middle" SortKeySelector="item => item.BackupRadioChannel.Name">
+                        @if (context.BackupRadioChannel != null)
+                        {
+                            var x = context.BackupRadioChannel.Name + " - " + @context.BackupRadioChannel.Frequency;
+                            @x
+                        }
+                    </GridColumn>
+
+                    <GridColumn TItem="TeamRadioChannel" Class="align-middle" HeaderText="Azioni">
+                        <Button Color="ButtonColor.Primary" @onclick="() => Edit(context)"><Icon Name="IconName.PencilFill"></Icon></Button>
+                        <Button Color="ButtonColor.Danger" @onclick="() => Delete(context)"><Icon Name="IconName.Trash3Fill"></Icon></Button>
+                    </GridColumn>
+                </GridColumns>
+
+            </Grid>
+
+        </Content>
+    </Tab>
+    <Tab>
+        <TitleTemplate>
+            <Icon Name="IconName.PersonFill" />   Utenti
+        </TitleTemplate>
+        <Content>
+            <TeamUtentiComponent Id="@id"></TeamUtentiComponent>
+        </Content>
+    </Tab>
+</Tabs>
+
+<Toasts class="p-3" AutoHide="true" StackLength="3" Placement="ToastsPlacement.BottomRight" />
+
+@code {
+    [Parameter]
+    public Guid id { get; set; }
+
+    private RegistrationCodeModel? modelRegcode { get; set; } = new();
+    private RegistrationCodeModal modalRegCode = default!;
+
+
+    // [SupplyParameterFromForm]
+    public RadioChannelInput Model { get; set; }
+    private Modal modal = default!;
+
+    private Team team;
+    private List<Team> teams;
+    Grid<TeamRadioChannel> grid = default!;
+    Grid<TeamRadioChannel> grid2 = default!;
+    Grid<TeamRadioChannel> grid3 = default!;
+
+    // List<TeamRadioChannel> channelList = new();
+    List<RadioChannel> radioList = new();
+
+
+
+    private async Task OnShowModalClick(ChannelType chPos)
+    {
+        Model.Position = chPos;
+        await modal.ShowAsync();
+    }
+    private async Task OnModalHidden()
+    {
+        Model = new();
+        StateHasChanged();
+    }
+    private async Task OnSaveContinue()
+    {
+        var res = await SaveAsync(Model);
+
+        if (Model.StartDate.HasValue && Model.EndDate.HasValue) {
+            var span = Model.EndDate - Model.StartDate;
+            Model.StartDate = Model.EndDate;
+            Model.EndDate = Model.StartDate + span;
+        }
+
+        Model.ChannelName = "";
+        Model.RadioChannel = null;
+        Model.BackupRadioChannel = null;
+
+
+        if (res)
+        {
+            ToastService.Notify(new ToastMessage { AutoHide = true, Title = "Salvataggio", Message = "Aggiunto canale radio", Type = ToastType.Success });
+            RefreshChannelList();
+            switch (Model.Position)
+            {
+                case ChannelType.BaseChannel:
+                    await grid.RefreshDataAsync();
+                    break;
+                case ChannelType.TeamLeaderChannel:
+                    await grid2.RefreshDataAsync();
+                    break;
+                case ChannelType.ViceTeamLeaderChannel:
+                    await grid3.RefreshDataAsync();
+                    break;
+
+            }
+
+        }
+        else
+        {
+            ToastService.Notify(new ToastMessage { AutoHide = true, Title = "Salvataggio", Message = "Non è stato possibile aggiungere il canale", Type = ToastType.Danger });
+        }
+        StateHasChanged();
+
+    }
+
+    private async Task<bool> SaveAsync(RadioChannelInput input)
+    {
+        TeamRadioChannel teamRadioChannel = new TeamRadioChannel
+            {
+                Name = input.ChannelName,
+                Position = input.Position,
+                RadioChannelId = input.RadioChannel.Value,
+                BackupRadioChannelId = input.BackupRadioChannel,
+                BeginValidityPeriod = input.StartDate,
+                EndValidityPeriod = input.EndDate,
+                TeamId = id,
+            };
+        if (input.Id.HasValue)
+        {
+            teamRadioChannel.Id = input.Id.Value;
+        }
+        return await _teamRadioChannelService.AddOrUpdateAsync(teamRadioChannel);
+    }
+
+
+    private async Task OnSave()
+    {
+        var res = await SaveAsync(Model);
+
+        Model = new();
+
+
+        if (res)
+        {
+            ToastService.Notify(new ToastMessage { AutoHide = true, Title = "Salvataggio", Message = "Aggiunto canale radio", Type = ToastType.Success });
+            await RefreshChannelList();
+            await grid.RefreshDataAsync();
+            await grid2.RefreshDataAsync();
+            await grid3.RefreshDataAsync();
+        }
+        else
+        {
+            ToastService.Notify(new ToastMessage { AutoHide = true, Title = "Salvataggio", Message = "Non è stato possibile aggiungere il canale", Type = ToastType.Danger });
+        }
+        StateHasChanged();
+        await modal.HideAsync();
+    }
+    private async Task OnHideModalClick()
+    {
+        await modal.HideAsync();
+    }
+
+    private List<TeamRadioChannel>? TempChannels;
+    List<TeamRadioChannel> channelList = new();
+
+    private async Task<bool> RefreshChannelList()
+    {
+        channelList = await _teamRadioChannelService.GetAllAsync();
+        channelList = channelList.Where(x => x.TeamId == id)
+                                 .ToList();
+        TempChannels = channelList;
+
+        return true;
+    }
+
+
+
+    private async Task<GridDataProviderResult<TeamRadioChannel>> RequestDataProvider(GridDataProviderRequest<TeamRadioChannel> request)
+    {
+        var internalChannelList = channelList
+            .Where(_ => _.Position == ChannelType.BaseChannel)
+            .ToList();
+
+        return await Task.FromResult(request.ApplyTo(internalChannelList));
+    }
+    private async Task<GridDataProviderResult<TeamRadioChannel>> RequestDataProvider2(GridDataProviderRequest<TeamRadioChannel> request)
+    {
+        var internalChannelList = channelList.Where(_ => _.Position == ChannelType.TeamLeaderChannel).ToList();
+        return await Task.FromResult(request.ApplyTo(internalChannelList));
+    }
+    private async Task<GridDataProviderResult<TeamRadioChannel>> RequestDataProvider3(GridDataProviderRequest<TeamRadioChannel> request)
+    {
+        var internalChannelList = channelList.Where(_ => _.Position == ChannelType.ViceTeamLeaderChannel).ToList();
+        return await Task.FromResult(request.ApplyTo(internalChannelList));
+    }
+
+    private string GetRowClass(TeamRadioChannel trc)
+    {
+        var date = DateTime.Now;
+        if (trc.BeginValidityPeriod <= date && date < trc.EndValidityPeriod)
+            return "table-success";
+        else if (trc.BeginValidityPeriod is null && trc.EndValidityPeriod is null)
+            return "table-success";
+
+
+        return string.Empty;
+    }
+    private Task OnSelectedItemsChanged(HashSet<RegistrationCode> codes)
+    {
+        var selecteCodes = codes is not null && codes.Any() ? codes : new();
+        return Task.CompletedTask;
+    }
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        Thread.Sleep(100);
+        Model ??= new();
+        team = await _teamService.GetAsync(id);
+
+        teams = await _teamService.GetAllAsync();
+
+        radioList = await _radioChannelService.GetAllAsync();
+        radioList.Sort((x, y) => x.Name.CompareTo(y.Name));
+
+        await RefreshChannelList();
+
+        await grid.RefreshDataAsync();
+        await grid2.RefreshDataAsync();
+        await grid3.RefreshDataAsync();
+
+
+        StateHasChanged();
+
+    }
+
+    private async Task Edit(TeamRadioChannel trc)
+    {
+        Model ??= new();
+
+        Model.ChannelName = trc.Name;
+        Model.Position = trc.Position;
+        Model.RadioChannel = trc.RadioChannelId;
+        Model.BackupRadioChannel = trc.BackupRadioChannelId;
+        Model.StartDate = trc.BeginValidityPeriod;
+        Model.EndDate = trc.EndValidityPeriod;
+        Model.Id = trc.Id;
+
+        await modal.ShowAsync();
+        StateHasChanged();
+    }
+
+    private async Task Delete(TeamRadioChannel trc)
+    {
+        await _teamRadioChannelService.DeleteAsync(trc.Id);
+        await RefreshChannelList();
+
+        switch(trc.Position)
+        {
+            case ChannelType.BaseChannel:
+                await grid.RefreshDataAsync();
+                break;
+            case ChannelType.TeamLeaderChannel:
+                await grid2.RefreshDataAsync();
+                break;
+            case ChannelType.ViceTeamLeaderChannel:
+                await grid3.RefreshDataAsync();
+                break;
+
+        }
+        StateHasChanged();
+    }
+    private async Task ShareOnBoarding()
+    {
+        var reg = await _registrationCodeService.GetRegistrationByTeamID(id);
+        if (reg==null)
+        {
+            //NavigationManager.NavigateTo("/regcodes");
+            reg = await _registrationCodeService.CreateAsync();
+            reg.TeamId = id;
+            reg.ExpirationDate = DateTime.Now;
+            modelRegcode = new RegistrationCodeModel(reg);
+
+            await modalRegCode.ShowAsync();
+        }
+        else
+        {
+            ShareOnBoardingCode(reg);
+        }
+    }
+
+
+
+    private async Task OnModalHidden2()
+    {
+        modelRegcode = new();
+        modelRegcode.ExpirationDate = DateTime.Now;
+        StateHasChanged();
+    }
+    private async Task OnSuccess()
+    {
+        await grid.RefreshDataAsync();
+        StateHasChanged();
+    }
+
+
+    private async Task ShareOnBoardingCode(RegistrationCode code)
+    {
+        await JS.InvokeVoidAsync("copyToClipboard", NavigationManager.BaseUri + "RadioChannel/Details?id=" + code.Id.ToString());
+        ToastService.Notify(new(ToastType.Success, "Condividi", $"Testo copiato negli appunti"));
+    }
+}

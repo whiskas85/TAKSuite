@@ -1,0 +1,148 @@
+﻿@using TAKSuite.Data.Services
+@implements IDisposable
+
+@inject NavigationManager NavigationManager
+@inject TeamService TeamService
+
+
+<Sidebar2 Href="/"
+ImageSrc="images/tak trasp.png"
+Title="TAK Suite"
+BadgeText="v2.1.0"
+DataProvider="Sidebar2DataProvider"
+WidthUnit="Unit.Px"
+Width="300"/>
+
+@code {
+    IEnumerable<NavItem>? navItems;
+
+    private async Task<Sidebar2DataProviderResult> Sidebar2DataProvider(Sidebar2DataProviderRequest request)
+    {
+        if (navItems is null)
+            navItems = await GetNavItems();
+
+        return await Task.FromResult(request.ApplyTo(navItems));
+    }
+
+    private async Task<IEnumerable<NavItem>> GetNavItems()
+    {
+        int counter = 0;
+        navItems = new List<NavItem>
+        {
+
+            new NavItem { Id = "1", Href = "/", IconName = IconName.HouseDoorFill, Text = "Home" },
+
+
+            new NavItem { Id = $"2", Href = "", IconName = IconName.ListNested, Text = "Missions" },
+            new NavItem { Id = $"2.{counter=0}", Href = "/missions", IconName = IconName.ListNested, Text = "Lista missioni", ParentId ="2" },
+            new NavItem { Id = $"2.{counter++}", Href = "/mission", IconName = IconName.ListNested, Text = "Mission", ParentId ="2" },
+            new NavItem { Id = $"2.{counter++}", Href = "/parkings", IconName = IconName.PCircleFill, Text = "Gestione Parkings", ParentId ="2" },
+            new NavItem { Id = $"2.{counter++}", Href = "/objs", IconName = IconName.PinMapFill, Text = "Obiettivi", ParentId ="2" },
+            new NavItem { Id = $"2.{counter++}", Href = "/waypoints", IconName = IconName.PinAngleFill, Text = "Waypoints", ParentId ="2" },
+            new NavItem { Id = $"2.{counter++}", Href = "/medevac", IconName = IconName.PlusCircleFill, Text = "Medevac" , ParentId ="2"},
+            new NavItem { Id = $"2.{counter++}", Href = "/waypoints-simple", IconName = IconName.PinAngleFill, Text = "WP Simple", ParentId ="2" },
+
+
+
+            new NavItem { Id = "3", Href = "/teams", IconName = IconName.ListNested, Text = "Teams"},
+
+
+
+            // new NavItem { Id = "13", Href = "/auth", IconName = IconName.Lock, Text = "Auth Required" },
+
+
+
+            new NavItem { Id = "8", Href = "/auth", IconName = IconName.GearFill, Text = "Settings" },
+                new NavItem { Id = "8.0", Href = "/seeder", IconName = IconName.Database, Text = "Seeder",ParentId="8" },
+                new NavItem { Id = "8.1", Href = "/radiochannels", IconName = IconName.Database, Text = "Radio Channels",ParentId="8" },
+                new NavItem { Id = "8.2", Href = "/regcodes", IconName = IconName.Database, Text = "Registration Codes",ParentId="8" },
+                new NavItem { Id = "8.3", Href = "/manage-teams", IconName = IconName.PeopleFill, Text = "Manage Teams" , ParentId="8"},
+                new NavItem { Id = "8.4", Href = "/test", IconName = IconName.ListNested, Text = "Test", ParentId="8" },
+                new NavItem { Id = "8.5", Href = "/teams", IconName = IconName.ListNested, Text = "All Teams", ParentId = "8" },
+                new NavItem { Id = "8.5", Href = "/documentation", IconName = IconName.ListNested, Text = "Documentazione", ParentId = "8" },
+            // new NavItem { Id = "1", Href = "/getting-started", IconName = IconName.HouseDoorFill, Text = "Getting Started"},
+
+            // new NavItem { Id = "2", IconName = IconName.LayoutSidebarInset, Text = "Content" },
+            // new NavItem { Id = "3", Href = "/icons", IconName = IconName.PersonSquare, Text = "Icons", ParentId="2"},
+
+            // new NavItem { Id = "4", IconName = IconName.ExclamationTriangleFill, Text = "Components" },
+            // new NavItem { Id = "5", Href = "/alerts", IconName = IconName.CheckCircleFill, Text = "Alerts", ParentId="4"},
+            // new NavItem { Id = "6", Href = "/breadcrumb", IconName = IconName.SegmentedNav, Text = "Breadcrumb", ParentId="4"},
+
+            // new NavItem { Id = "7", IconName = IconName.ListNested, Text = "Sidebar 2", ParentId="4"},
+            // new NavItem { Id = "701", Href = "/sidebar2", IconName = IconName.Dash, Text = "How to use", ParentId="7"},
+            // new NavItem { Id = "702", Href = "/sidebar2-examples", IconName = IconName.Dash, Text = "Examples", ParentId="7"},
+
+            // new NavItem { Id = "8", IconName = IconName.WindowPlus, Text = "Forms" },
+            // new NavItem { Id = "9", Href = "/autocomplete", IconName = IconName.InputCursorText, Text = "Auto Complete", ParentId="8"},
+            // new NavItem { Id = "10", Href = "/currency-input", IconName = IconName.CurrencyDollar, Text = "Currency Input", ParentId="8"},
+            // new NavItem { Id = "11", Href = "/number-input", IconName = IconName.InputCursor, Text = "Number Input", ParentId="8"},
+            // new NavItem { Id = "12", Href = "/switch", IconName = IconName.ToggleOn, Text = "Switch", ParentId="8"},
+        };
+
+
+
+
+        navItems = await RetrieveAllTeams(navItems.ToList(), "Teams");
+
+
+        return navItems;
+    }
+
+
+    private async Task<IEnumerable<NavItem>> RetrieveAllTeams(IList<NavItem> navItems, string teamsTitle)
+    {
+        var id = navItems.FirstOrDefault(x => x.Text == teamsTitle)?.Id;
+        if (id != null)
+        {
+            var teams = await TeamService.GetAllAsync();
+            foreach (var team in teams)
+            {
+                var teamMenuid = $"{id}.{team.Id}";
+                var hrefBase = $"/team/{team.Id}";
+
+                navItems.Add(new NavItem { Id = teamMenuid, Href = $"/team/{team.Id}/details", IconName = IconName.PeopleFill, Text = team.Name, ParentId = id });
+
+                int counter = 0;
+                // navItems.Add(new NavItem { Href = $"{hrefBase}", Text = "Pagina old", IconName = IconName.PeopleFill, ParentId = teamMenuid, Id = $"{id}.{team.Id}.{counter++}" });
+                navItems.Add(new NavItem { Href = $"{hrefBase}/details", Text = "Dettagli", IconName = IconName.HouseFill, ParentId = teamMenuid, Id = $"{id}.{team.Id}.{counter++}" });
+                navItems.Add(new NavItem { Href = $"{hrefBase}/comms", Text = "Comunicazioni", IconName = IconName.Headset, ParentId = teamMenuid, Id = $"{id}.{team.Id}.{counter++}" });
+                navItems.Add(new NavItem { Href = $"{hrefBase}/operators", Text = "Operatori", IconName = IconName.PersonFill, ParentId = teamMenuid, Id = $"{id}.{team.Id}.{counter++}" });
+                navItems.Add(new NavItem { Href = $"{hrefBase}/documentation", Text = "Documentazione", IconName = IconName.FileTypeDoc, ParentId = teamMenuid, Id = $"{id}.{team.Id}.{counter++}" });
+                navItems.Add(new NavItem { Href = $"{hrefBase}/tasks", Text = "Tasks", IconName = IconName.FileTypeDoc, ParentId = teamMenuid, Id = $"{id}.{team.Id}.{counter++}" });
+
+            }
+        }
+        return navItems;
+    }
+
+
+
+
+
+
+
+
+
+
+
+    private string? currentUrl;
+
+    protected override void OnInitialized()
+    {
+        currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+        NavigationManager.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= OnLocationChanged;
+    }
+}
+
