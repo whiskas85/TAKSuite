@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TAKSuite.Data;
 
@@ -11,9 +12,11 @@ using TAKSuite.Data;
 namespace TAKSuite.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250325102503_TaskEnanchement")]
+    partial class TaskEnanchement
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -362,8 +365,8 @@ namespace TAKSuite.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<Guid?>("PriorityId")
-                        .HasColumnType("uniqueidentifier");
+                    b.Property<int>("Priority")
+                        .HasColumnType("int");
 
                     b.Property<int>("Status")
                         .HasColumnType("int");
@@ -377,8 +380,6 @@ namespace TAKSuite.Migrations
                     b.HasIndex("AssignedTeamId");
 
                     b.HasIndex("ExecutingTeamId");
-
-                    b.HasIndex("PriorityId");
 
                     b.ToTable("Tasks");
                 });
@@ -413,27 +414,6 @@ namespace TAKSuite.Migrations
                     b.HasIndex("TaskId");
 
                     b.ToTable("TaskLogs");
-                });
-
-            modelBuilder.Entity("TAKSuite.Data.Models.TaskPriority", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<int>("CardColor")
-                        .HasColumnType("int");
-
-                    b.Property<int>("Level")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("TaskPriorities");
                 });
 
             modelBuilder.Entity("TAKSuite.Data.Models.Team", b =>
@@ -645,15 +625,9 @@ namespace TAKSuite.Migrations
                         .WithMany()
                         .HasForeignKey("ExecutingTeamId");
 
-                    b.HasOne("TAKSuite.Data.Models.TaskPriority", "Priority")
-                        .WithMany()
-                        .HasForeignKey("PriorityId");
-
                     b.Navigation("AssignedTeam");
 
                     b.Navigation("ExecutingTeam");
-
-                    b.Navigation("Priority");
                 });
 
             modelBuilder.Entity("TAKSuite.Data.Models.TaskLog", b =>

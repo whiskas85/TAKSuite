@@ -18,6 +18,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<TaskEntity> Tasks { get; set; }
     public DbSet<TaskLog> TaskLogs { get; set; }
+    public DbSet<TaskPriority> TaskPriorities { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

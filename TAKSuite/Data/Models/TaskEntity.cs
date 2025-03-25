@@ -21,5 +21,9 @@
 
         public TaskStatusTak Status { get; set; } = TaskStatusTak.Created;
         public List<TaskLog> Logs { get; set; } = new();
+        
+        
+        public Guid? PriorityId { get; set; }
+        public TaskPriority? Priority { get; set; }
     }
 }

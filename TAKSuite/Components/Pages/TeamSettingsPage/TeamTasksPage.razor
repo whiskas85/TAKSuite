@@ -1,5 +1,112 @@
-﻿<h3>TeamTasksPage</h3>
+﻿@page "/team/{TeamId:guid}/tasks"
+
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Components.Pages.Tasks
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@inject TaskService taskService
+@attribute [Authorize]
+
+<h3>Task</h3>
+
+<InputText @bind-value="searchText" placeholder="Cerca task..." @oninput="FilterTasks" class="form-control mb-3" />
+
+<Button Color="ButtonColor.Primary" @onclick="() => ShowCreateTaskModal()">Crea Task</Button>
+<ModalTaskAddUpdate @ref="modal" OnSuccess="RefreshTaskList" Model="taskModel"/>
+
+
+@if (FilteredTaskList == null)
+{
+    <p>Caricamento in corso...</p>
+}
+else if (!FilteredTaskList.Any())
+{
+    <p>Nessun task disponibile.</p>
+}
+else
+{
+    <div class="d-flex flex-wrap gap-3">
+        @foreach (var task in FilteredTaskList)
+        {
+            CardColor cardColor = CardColor.Secondary;
+            if (task.Priority != null)
+            {
+                cardColor = task.Priority.CardColor;
+            }
+            var url = $"/task/{task.Id}";
+
+            <Card Color="cardColor" Style="width: 18rem;">
+                <CardBody>
+                    <CardTitle>@task.Name</CardTitle>
+                    <CardSubTitle>Priorità: @task.Priority?.Name</CardSubTitle>
+                    <CardText>@task.Description</CardText>
+                    <CardLink To="@url">Apri Task</CardLink>
+                </CardBody>
+            </Card>
+        }
+    </div>
+}
+
+
+
 
 @code {
+    [Parameter] public Guid TeamId { get; set; }
+    private string searchText = "";
 
+    ModalTaskAddUpdate modal = default!;
+    TaskModel taskModel = new();
+
+    private List<TaskEntity> TaskList = new List<TaskEntity>();
+    private List<TaskEntity> FilteredTaskList = new();
+
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshTaskList();
+    }
+
+
+    private async Task ShowCreateTaskModal()
+    {
+        taskModel = new();
+        taskModel.AssignedTeamId = TeamId;
+        await modal.ShowAsync();
+        StateHasChanged();
+    }
+
+    private async Task RefreshTaskList()
+    {
+        TaskList = (await taskService.GetAllTaskAssignedToTeamAsync(TeamId))
+            .OrderByDescending(_ => _.Priority?.Level)
+            .ThenBy(_ => _.Name)
+            .ToList();
+
+        FilteredTaskList = TaskList;
+
+        StateHasChanged();
+    }
+
+
+    private void FilterTasks(ChangeEventArgs e)
+    {
+        searchText = e.Value?.ToString() ?? "";
+        if (string.IsNullOrWhiteSpace(searchText))
+        {
+            FilteredTaskList = TaskList;
+        }
+        else
+        {
+            string lowerSearch = searchText.ToLower();
+            FilteredTaskList = TaskList
+                .Where(t =>
+                    (t.Name?.ToLower().Contains(lowerSearch) ?? false) ||
+                    (t.Priority?.Name?.ToLower().Contains(lowerSearch) ?? false) ||
+                    (t.Description?.ToLower().Contains(lowerSearch) ?? false)
+                )
+                .ToList();
+        }
+        StateHasChanged();
+    }
 }

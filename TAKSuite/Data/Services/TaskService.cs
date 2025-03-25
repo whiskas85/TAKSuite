@@ -1,13 +1,16 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using System.Threading.Tasks;
+using TAKSuite.Components.Pages;
 using TAKSuite.Data.Models;
 
 namespace TAKSuite.Data.Services
 {
     public class TaskService : DataServiceAbstract<TaskEntity>
     {
-        public TaskService(ApplicationDbContext context) : base(context.Tasks, context) { }
-
-
+        public TaskService(ApplicationDbContext context) : base(context.Tasks, context)
+        {
+            Includes = [_ => _.Priority];
+        }
         public async Task<TaskEntity> CreateTaskAsync(string name, string description, List<string>? atakPoints = null, List<Guid>? documentIds = null)
         {
             var newTask = new TaskEntity
@@ -38,11 +41,8 @@ namespace TAKSuite.Data.Services
             await _context.SaveChangesAsync();
             return newTask;
         }
-
-        public async Task AssignTaskAsync(Guid taskId, Guid teamId)
+        public async Task AssignTaskAsync(TaskEntity task, Guid teamId)
         {
-            var task = await _context.Tasks.FindAsync(taskId) ?? throw new InvalidOperationException("Task not found");
-
             if (task.Status != TaskStatusTak.Created)
                 throw new InvalidOperationException("Task is not in a valid state for assignment");
 
@@ -53,6 +53,11 @@ namespace TAKSuite.Data.Services
             task.LastModified = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
+        }
+        public async Task AssignTaskAsync(Guid taskId, Guid teamId)
+        {
+            var task = await _context.Tasks.FindAsync(taskId) ?? throw new InvalidOperationException("Task not found");
+            await AssignTaskAsync(task, teamId);
         }
 
         public async Task AcceptTaskAsync(Guid taskId, Guid teamId)
@@ -104,6 +109,34 @@ namespace TAKSuite.Data.Services
 
             _context.TaskLogs.Add(log);
             task.Logs.Add(log);
+        }
+
+        public async Task<List<TaskEntity>> GetAllTaskAssignedToTeamAsync(Guid teamId)
+        {
+            try
+            {
+                var query = DBSet as IQueryable<TaskEntity>;
+
+                if (Includes != null)
+                {
+                    foreach (var include in Includes)
+                    {
+                        query = query.Include(include);
+                    }
+                }
+                return await query.Where(_ => _.AssignedTeam != null && _.AssignedTeam.Id == teamId)
+                    .ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Errore nella richiesta: {ex.Message}");
+                return new();
+
+            }
+        }
+        public async Task<List<TaskEntity>> GetAllTaskAssignedToTeamAsync(Team team)
+        {
+            return await GetAllTaskAssignedToTeamAsync(team.Id);
         }
     }
 }

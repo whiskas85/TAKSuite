@@ -5,19 +5,20 @@
 @inject IJSRuntime JS
 
 <PageTitle>Gestione Task</PageTitle>
-<ModalTaskAddUpdate @ref="modal" OnSuccess="RefreshTaskList"/>
+
+<ModalTaskAddUpdate @ref="modal" OnSuccess="RefreshTaskList" Model="modelTaskUpdate"/>
 
 <Button Color="ButtonColor.Primary" @onclick="() => ShowCreateTaskModal()">Crea Task</Button>
 
 <Grid TItem="TaskEntity"
-      Class="table table-hover"
-      HeaderRowCssClass="bg-success text-white border-bottom-0 h5"
-      Data="TaskList"
-      AllowFiltering="false"
-      AllowPaging="false"
-      AllowSorting="true"
-      AllowRowClick="true"
-      Responsive="true">
+Class="table table-hover"
+HeaderRowCssClass="bg-success text-white border-bottom-0 h5"
+Data="TaskList"
+AllowFiltering="false"
+AllowPaging="false"
+AllowSorting="true"
+AllowRowClick="true"
+Responsive="true">
 
     <GridColumns>
         <GridColumn TItem="TaskEntity" HeaderText="Nome" SortKeySelector="item => item.Name">
@@ -40,6 +41,7 @@
 
 @code {
     ModalTaskAddUpdate modal = default!;
+    TaskModel modelTaskUpdate = new();
 
     private List<TaskEntity> TaskList = new List<TaskEntity>();
 
@@ -62,6 +64,7 @@
 
     private async Task ShowCreateTaskModal()
     {
+        modelTaskUpdate = new TaskModel();
         await modal.ShowAsync();
         StateHasChanged();
     }

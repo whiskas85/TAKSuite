@@ -7,7 +7,7 @@
     using Microsoft.EntityFrameworkCore;
     using TAKSuite.Data.Models;
 
-    public class RadioChannelSeeder
+    public class RadioChannelSeeder : ISeeder
     {
         private readonly ApplicationDbContext _context;
 
@@ -16,7 +16,7 @@
             _context = context;
         }
 
-        public async Task ImportRadioChannelsAsync()
+        public async Task SeedAsync()
         {
             // Crea la lista di canali LPD (banda 433.05 MHz a 434.79 MHz, 69 canali)
             List<RadioChannel> lpdChannels = CreateLpdChannels();
@@ -75,7 +75,7 @@
                     Id = Guid.NewGuid(),
                     Name = $"PMR{index.ToString("D2")}",  // Ad esempio: "PMR1 - 446.00625 MHz"
                     FrequencyType = "PMR",
-                    Frequency = freq.ToString("F5") 
+                    Frequency = freq.ToString("F5")
                 });
                 index++;
             }

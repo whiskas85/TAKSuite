@@ -72,9 +72,11 @@ builder.Services.AddTransient<TeamRadioChannelService>();
 builder.Services.AddTransient<UserServiceAtak>();
 builder.Services.AddTransient<DocumentationService>();
 builder.Services.AddTransient<TaskService>();
+builder.Services.AddTransient<TaskPrioritiesService>();
 
 
 builder.Services.AddScoped<RadioChannelSeeder>();
+builder.Services.AddScoped<TaskPrioritySeeder>();
 
 
 builder.Services.AddMediaQueryService();

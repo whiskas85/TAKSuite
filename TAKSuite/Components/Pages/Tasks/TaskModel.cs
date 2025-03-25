@@ -18,6 +18,8 @@ namespace TAKSuite.Components.Pages.Tasks
 
         [Required(ErrorMessage = "Devi selezionare una squadra.")]
         public Guid? AssignedTeamId { get; set; }
+        public Guid? Priority { get; set; }
+
 
     }
 }
