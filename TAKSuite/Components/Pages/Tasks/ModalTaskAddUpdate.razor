@@ -1,0 +1,122 @@
+﻿@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@inject TaskService taskService
+@inject TeamService teamService
+@code {
+    [Parameter] public TaskModel? Model { get; set; }
+    [Parameter] public EventCallback OnSuccess { get; set; }
+    [Parameter] public EventCallback OnModalHidden { get; set; }
+    [Parameter] public List<Team>? Teams { get; set; } = new();
+    private Modal modal = default!;
+    private string title = "Aggiungi Task";
+    private List<Team> teams = new();
+
+
+    public async Task ShowAsync()
+    {
+        if (Model == null)
+        {
+            Model = new TaskModel(); // Initialize task model if it's null
+        }
+
+        if(Teams == null)
+        {
+            teams = await teamService.GetAllAsync();
+        }
+        else
+        {
+            teams.AddRange(Teams);
+        }
+
+        if (Model.Id != null)
+        {
+            title = "Modifica Task";
+        }
+        else
+        {
+            title = "Aggiungi Task";
+        }
+
+        await modal.ShowAsync();
+    }
+
+    public async Task HideAsync() => await modal.HideAsync();
+
+
+    private async void OnHidden()
+    {
+        Model = new TaskModel();
+        await OnModalHidden.InvokeAsync();
+    }
+
+    private async void OnSubmit()
+    {
+        var newTask = new TaskEntity
+        {
+            Name = Model.Name,
+            Description = Model.Description,
+            AssignedTeamId = Model.AssignedTeamId,
+            Status = TaskStatusTak.Created, // Task starts in Created status
+            CreationDate = DateTime.UtcNow,
+            LastModified = DateTime.UtcNow
+        };
+
+        if (Model.Id.HasValue)
+        {
+            newTask.Id = Model.Id.Value;
+            await taskService.UpdateAsync(newTask);  // Update existing task
+        }
+        else
+        {
+            var val = await taskService.AddAsync(newTask);  // Add new task
+            Model.Id = val.Id;
+        }
+
+        await modal.HideAsync();
+        await OnSuccess.InvokeAsync();
+    }
+}
+
+<Modal @ref="modal" Title="@title" OnHidden="OnHidden">
+    <BodyTemplate>
+        <EditForm Model="Model" FormName="TaskForm">
+            <DataAnnotationsValidator />
+            <div>
+                <div class="form-group row mb-3">
+                    <label for="inputName" class="col-sm-2 col-form-label">Nome Task</label>
+                    <div class="col-sm-10">
+                        <TextInput id="inputName" class="form-control" @bind-Value="Model!.Name" />
+                        <ValidationMessage For="() => Model!.Name" class="text-danger" />
+                        <small class="form-text text-muted">Nome identificativo del task</small>
+                    </div>
+                </div>
+
+                <div class="form-group row mb-3">
+                    <label class="col-sm-2 col-form-label" for="AssignedTeamId">Squadra Assegnata</label>
+                    <div class="col-sm-10">
+                        <InputSelect id="AssignedTeamId" class="form-control" @bind-value="Model!.AssignedTeamId">
+                            <option value="">Seleziona una squadra</option>
+                            @foreach (var team in teams)
+                            {
+                                <option value="@team.Id" selected="@(Model.AssignedTeamId != null && Model.AssignedTeamId == team.Id ? "selected" : null)">
+                                    @team.Name
+                                </option>
+                            }
+                        </InputSelect>
+                    </div>
+                </div>
+
+                <div class="form-group row mb-3">
+                    <label class="col-sm-2 col-form-label" for="Description">Descrizione</label>
+                    <div class="col-sm-10">
+                        <InputTextArea id="Description" class="form-control" @bind-Value="Model!.Description" />
+                    </div>
+                </div>
+            </div>
+        </EditForm>
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Primary" @onclick="OnSubmit">Salva</Button>
+        <Button Color="ButtonColor.Secondary" @onclick="HideAsync">Chiudi</Button>
+    </FooterTemplate>
+</Modal>

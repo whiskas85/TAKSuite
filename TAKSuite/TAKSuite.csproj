@@ -65,10 +65,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\..\Downloads\YT-BlazorBuilds-TreeView-main\YT-BlazorBuilds-TreeView-main\BlazorBuilds.Components\BlazorBuilds.Components.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
     <Content Update="wwwroot\certs\ca.pem">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
