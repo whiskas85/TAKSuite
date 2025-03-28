@@ -1,0 +1,76 @@
+﻿@page "/task/{TaskId:guid}"
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@inject TaskService taskService
+@inject IJSRuntime JS
+@inject DocumentationService documentationService
+<PageTitle>Task</PageTitle>
+
+
+@if (taskEntity == null)
+{
+
+}
+else
+{
+    <h3>Task: @taskEntity.Name</h3>
+    @if (taskEntity.Priority != null && taskEntity.Priority.CardColor != CardColor.None)
+    {
+        AlertColor cColor = AlertColor.None;
+
+        switch (taskEntity.Priority.CardColor)
+        {
+            case CardColor.Primary:
+                cColor = AlertColor.Primary;
+                break;
+            case CardColor.Secondary:
+                cColor = AlertColor.Secondary;
+                break;
+            case CardColor.Success:
+                cColor = AlertColor.Success;
+                break;
+            case CardColor.Danger:
+                cColor = AlertColor.Danger;
+                break;
+            case CardColor.Warning:
+                cColor = AlertColor.Warning;
+                break;
+            case CardColor.Info:
+                cColor = AlertColor.Info;
+                break;
+            case CardColor.Light:
+                cColor = AlertColor.Light;
+                break;
+            case CardColor.Dark:
+                cColor = AlertColor.Dark;
+                break;
+            default:
+                // Azione per None o caso non definito
+                break;
+        }
+        <Alert Color="cColor">
+            <strong>Priorità task @taskEntity.Priority.Name</strong>
+        </Alert>
+
+        @* <Callout Color="cColor">
+            <strong>Priorità task @taskEntity.Priority.Name</strong>
+            </Callout> *@
+    }
+
+    <h5>Descrizione</h5>
+    <p>@taskEntity.Description</p>
+}
+@code {
+
+    [Parameter] public Guid TaskId { get; set; }
+    TaskEntity? taskEntity;
+    List<Documentation> AttachmentList = new();
+    protected override async Task OnInitializedAsync()
+    {
+        taskEntity = await taskService.GetAsync(TaskId);
+        if (taskEntity == null)
+            return;
+        AttachmentList = await documentationService.GetAllByOwnerIdAsync(taskEntity);
+
+    }
+}

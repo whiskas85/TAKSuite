@@ -1,0 +1,51 @@
+﻿@page "/objs" 
+@* /{missionUid:string}*@
+@inject WaypointService waypointsService;
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Data.ModelsTak
+@using TAKSuite.Data.ServicesTak
+@attribute [Authorize]
+
+
+<Grid TItem="UidEntry"
+      Class="table table-hover"
+      HeaderRowCssClass="bg-success text-white border-bottom-0 h5"
+      Data="listUids"
+      AllowFiltering="false"
+      AllowPaging="false"
+      AllowSorting="true"
+      AllowRowClick="true"
+      Responsive="true">
+
+    <GridColumns>
+        <GridColumn TItem="UidEntry" HeaderText="Nome" SortKeySelector="item => item.Details.Callsign">
+            @context.Details.Callsign
+        </GridColumn>
+        <GridColumn TItem="UidEntry" HeaderText="Tipo" SortKeySelector="item => item.Details.Type">
+            @context.Details.Type
+        </GridColumn>
+        <GridColumn TItem="UidEntry" HeaderText="Icona" SortKeySelector="item => item.Details.IconsetPath">
+            @context.Details.IconsetPath
+        </GridColumn>
+        @* <GridColumn TItem="UidEntry" HeaderText="Azioni">
+            <Button Color="ButtonColor.Danger" @onclick="() => DeleteTask(context)"><Icon Name="IconName.X" /></Button>
+        </GridColumn> *@
+    </GridColumns>
+</Grid>
+
+
+
+
+
+@code {
+    [Parameter] public String missionUid { get; set; }
+    private List<UidEntry> listUids = new();
+    protected override async Task OnInitializedAsync()
+    {
+        listUids = await waypointsService.GetAllMissionCotAsync("TEST FEED2");
+        StateHasChanged();
+
+    }
+
+
+}

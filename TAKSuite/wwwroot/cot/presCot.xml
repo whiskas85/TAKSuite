@@ -1,0 +1,7 @@
+﻿<event version="2.0" uid="{uid}" type="a-f-G-U-C" how="m-g">
+	<point lat="0.0" lon="0.0" hae="0" ce="10" le="10"/>
+	<detail>
+		<status readiness="true"/>
+		<takv device="CoTApiClient" platform="Windows" version="1.0.0" />
+	</detail>
+</event>

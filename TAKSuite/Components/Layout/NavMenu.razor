@@ -1,6 +1,5 @@
 ﻿@using TAKSuite.Data.Services
 @implements IDisposable
-
 @inject NavigationManager NavigationManager
 @inject TeamService TeamService
 
@@ -27,6 +26,7 @@ Width="300"/>
     private async Task<IEnumerable<NavItem>> GetNavItems()
     {
         int counter = 0;
+        
         navItems = new List<NavItem>
         {
 

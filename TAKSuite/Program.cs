@@ -107,6 +107,7 @@ lifetime.ApplicationStarted.Register(() =>
 {
     var cancellationToken = lifetime.ApplicationStopping;
     Task.Run(() => cotApiClient.StartListening(cancellationToken)); // Avvia il client in background
+    Task.Run(() => cotApiClient.StartKeepAliveLoop(cancellationToken));
 });
 
 // Configura il ciclo di vita dell'app

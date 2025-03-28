@@ -1,4 +1,6 @@
-﻿
+﻿@inject AuthenticationStateProvider AuthenticationStateProvider
+@using Microsoft.AspNetCore.Components.Authorization
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -32,11 +34,30 @@
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
     <ImportMap />
     <link rel="icon" type="image/png" href="favicon.png" />
-    <HeadOutlet @rendermode="InteractiveServer" />
+    
+    
+    
+    <AuthorizeView>
+        <Authorized>
+            <HeadOutlet @rendermode="InteractiveServer" />
+        </Authorized>
+        <NotAuthorized>
+            <HeadOutlet />
+        </NotAuthorized>
+    </AuthorizeView>
+    
 </head>
 
 <body>
-    <Routes @rendermode="InteractiveServer" />
+    <AuthorizeView>
+        <Authorized>
+            <Routes @rendermode="InteractiveServer" />
+        </Authorized>
+        <NotAuthorized>
+            <Routes />
+        </NotAuthorized>
+    </AuthorizeView>
+    
     <script src="_framework/blazor.web.js"></script>
 </body>
 
