@@ -1,76 +1,229 @@
 ﻿@page "/task/{TaskId:guid}"
+@using TAKSuite.Components.Pages.Documentation
 @using TAKSuite.Data.Models
 @using TAKSuite.Data.Services
 @inject TaskService taskService
 @inject IJSRuntime JS
 @inject DocumentationService documentationService
+@inject TaskPrioritiesService taskPrioritiesService;
+
+
 <PageTitle>Task</PageTitle>
 
+<ModalLinkDocument @ref="modalLinkDocument" OnModalSuccess="OnSuccessLinkDocument" />    
+
+
+<Modal @ref="modal" Title="Aggiungi allegati">
+    <BodyTemplate>
+        <TAKSuite.Components.Pages.Documentation.DocumentUploadComponent MaxAllowedFiles="3" Owner="taskEntity" />
+    </BodyTemplate>
+</Modal>
 
 @if (taskEntity == null)
 {
-
+    <p>Caricamento...</p>
 }
 else
 {
-    <h3>Task: @taskEntity.Name</h3>
+    <div class="d-flex justify-content-between">
+        @if (isEditing)
+        {
+            <input type="text" @bind="editName" class="form-control" />
+        }
+        else
+        {
+            <h3>Task: @taskEntity.Name</h3>
+        }
+        <div class="d-flex gap-2">
+            @if (isEditing)
+            {
+                <div class="d-flex gap-2">
+                    <Button Color="ButtonColor.Success" @onclick="SaveChanges"><Icon Name="IconName.Floppy2Fill"></Icon></Button>
+                    <Button Color="ButtonColor.Secondary" @onclick="CancelEdit"><Icon Name="IconName.XCircleFill"></Icon></Button>
+                </div>
+            }
+            else
+            {
+                <Button Color="ButtonColor.Primary" @onclick="EnableEdit" Outline="true"><Icon Name="IconName.PencilFill"></Icon></Button>
+            }
+        </div>
+    </div>
+
     @if (taskEntity.Priority != null && taskEntity.Priority.CardColor != CardColor.None)
     {
-        AlertColor cColor = AlertColor.None;
-
-        switch (taskEntity.Priority.CardColor)
+        AlertColor cColor = taskEntity.Priority.CardColor switch
         {
-            case CardColor.Primary:
-                cColor = AlertColor.Primary;
-                break;
-            case CardColor.Secondary:
-                cColor = AlertColor.Secondary;
-                break;
-            case CardColor.Success:
-                cColor = AlertColor.Success;
-                break;
-            case CardColor.Danger:
-                cColor = AlertColor.Danger;
-                break;
-            case CardColor.Warning:
-                cColor = AlertColor.Warning;
-                break;
-            case CardColor.Info:
-                cColor = AlertColor.Info;
-                break;
-            case CardColor.Light:
-                cColor = AlertColor.Light;
-                break;
-            case CardColor.Dark:
-                cColor = AlertColor.Dark;
-                break;
-            default:
-                // Azione per None o caso non definito
-                break;
-        }
+            CardColor.Primary => AlertColor.Primary,
+            CardColor.Secondary => AlertColor.Secondary,
+            CardColor.Success => AlertColor.Success,
+            CardColor.Danger => AlertColor.Danger,
+            CardColor.Warning => AlertColor.Warning,
+            CardColor.Info => AlertColor.Info,
+            CardColor.Light => AlertColor.Light,
+            CardColor.Dark => AlertColor.Dark,
+            _ => AlertColor.None
+        };
         <Alert Color="cColor">
-            <strong>Priorità task @taskEntity.Priority.Name</strong>
+            <div class="d-flex justify-content-between">
+                <strong>Priorità task @taskEntity.Priority.Name</strong>
+                @if(isEditing)
+                {
+                    <Dropdown Color="DropdownColor.Secondary">
+                        <DropdownToggleButton>@titleChangePrio</DropdownToggleButton>
+                        <DropdownMenu>
+                            @foreach(var item in taskPriorities)
+                            {
+                                var active = taskEntity.PriorityId == item.Id;
+                                <DropdownItem To="#" Type="DropdownItemType.Button" @onclick="() => ChangePriority(item)" Active=@active>@item.Name</DropdownItem>
+                            }
+                        </DropdownMenu>
+                    </Dropdown>
+                }
+            </div>
         </Alert>
+    }
 
-        @* <Callout Color="cColor">
-            <strong>Priorità task @taskEntity.Priority.Name</strong>
-            </Callout> *@
+    @if (AttachmentList.Any())
+    {
+        <div class="d-flex justify-content-between">
+            <h5>Allegati</h5>
+            <div class="d-flex gap-2">
+                <Tooltip Title="Upload del documento"><Button Color="ButtonColor.Primary" @onclick="AttachFile"><Icon Name="IconName.Upload" /></Button></Tooltip>
+                <Tooltip Title="Aggiungi da link"><Button Color="ButtonColor.Primary" @onclick="ShowLinkDocModal"><Icon Name="IconName.Link45Deg" /></Button></Tooltip>
+            </div>
+        </div>
+
+        <div class="d-flex flex-wrap">
+            @foreach (var attachment in AttachmentList)
+            {
+                <div class="d-flex mb-2 align-items-center me-3">
+                    <div class="d-flex align-items-center justify-content-center rounded-3 border border-primary ms-2 p-1">
+                        <Button Outline="true" Color="ButtonColor.Link" @onclick="() => DocumentationHelper.OpenAttachment(attachment, JS)">
+                            @attachment.Name
+                        </Button>
+
+                    
+                        <Button Outline="true" Color="ButtonColor.Danger" @onclick="() => UnlinkAttachment(attachment)" class="p-0">
+                            <Icon Color="IconColor.Light" Name="IconName.X"></Icon>
+                        </Button>
+                    </div>
+                </div>
+            }
+        </div>
+
+
+
+
     }
 
     <h5>Descrizione</h5>
-    <p>@taskEntity.Description</p>
-}
-@code {
 
+    @if (isEditing)
+    {
+        <MarkdownEditor @bind-Value="@editDescription"></MarkdownEditor>
+    }
+    else
+    {
+        <Markdown>@taskEntity.Description</Markdown>
+    }
+}
+
+@code {
     [Parameter] public Guid TaskId { get; set; }
     TaskEntity? taskEntity;
+    Modal modal = default!;
+    private List<TaskPriority> taskPriorities = new();
+
+
     List<Documentation> AttachmentList = new();
+    bool isEditing = false;
+    string editDescription = string.Empty;
+    string editName = string.Empty;
+    TaskPriority? editPriority = null;
+    private string titleChangePrio = "None";
+
     protected override async Task OnInitializedAsync()
     {
         taskEntity = await taskService.GetAsync(TaskId);
         if (taskEntity == null)
             return;
+        titleChangePrio = taskEntity.Priority?.Name;
+
         AttachmentList = await documentationService.GetAllByOwnerIdAsync(taskEntity);
+        taskPriorities = (await taskPrioritiesService.GetAllAsync()).OrderBy(_ => _.Level).ToList();
 
     }
+
+
+
+
+
+    ModalLinkDocument modalLinkDocument = default!;
+
+    private async Task ShowLinkDocModal()
+    {
+        if (taskEntity == null) return;
+        await modalLinkDocument.ShowAsync(taskEntity);
+    }
+
+    private async Task OnSuccessLinkDocument(Documentation item)
+    {
+        if (taskEntity == null) return;
+
+        await documentationService.LinkDocumentAsync(item, taskEntity);
+        AttachmentList = await documentationService.GetAllByOwnerIdAsync(taskEntity);
+        StateHasChanged();
+    }
+
+
+
+    void EnableEdit()
+    {
+        isEditing = true;
+        editDescription = taskEntity?.Description ?? "";
+        editName = taskEntity?.Name ?? "";
+    }
+
+    void CancelEdit()
+    {
+        isEditing = false;
+    }
+
+    async Task SaveChanges()
+    {
+        if (taskEntity != null)
+        {
+            taskEntity.Name = editName;
+            taskEntity.Description = editDescription;
+            if (editPriority != null)
+            {
+                taskEntity.PriorityId = editPriority.Id;
+            }
+            await taskService.UpdateAsync(taskEntity);
+            isEditing = false;
+        }
+    }
+
+    async Task AttachFile()
+    {
+        await modal.ShowAsync();
+    }
+    
+    async Task UnlinkAttachment(Documentation attachment)
+    {
+        if (taskEntity != null && attachment != null)
+        {
+            await documentationService.UnLinkDocumentAsync(attachment, taskEntity);
+            AttachmentList.Remove(attachment); // Rimuovi l'allegato dalla lista
+        }
+    }
+    async Task ChangePriority(TaskPriority item)
+    {
+        editPriority = item;
+        titleChangePrio = item.Name;
+        StateHasChanged();
+    }
+
+
+    
 }

@@ -28,7 +28,7 @@ Responsive="true">
             @context.Status
         </GridColumn>
         <GridColumn TItem="TaskEntity" HeaderText="Squadra Assegnata" SortKeySelector="item => item.AssignedTeamId">
-            @context.AssignedTeamId
+            @context.AssignedTeam.Name
         </GridColumn>
         <GridColumn TItem="TaskEntity" HeaderText="Ultima Modifica" SortKeySelector="item => item.LastModified">
             @context.LastModified

@@ -5,6 +5,8 @@
 @using TAKSuite.Data.Models
 @using TAKSuite.Data.Services
 @inject TaskService taskService
+@inject NavigationManager NavigationManager
+
 @attribute [Authorize]
 
 <h3>Task</h3>
@@ -25,8 +27,12 @@ else if (!FilteredTaskList.Any())
 }
 else
 {
-    <div class="d-flex flex-wrap gap-3">
-        @foreach (var task in FilteredTaskList)
+    var statusList = new List<TaskStatusTak> { TaskStatusTak.Assigned, TaskStatusTak.InProgress };
+    @foreach(var status in statusList)
+    {
+        <h3>@status.ToString()</h3>
+        <div class="d-flex flex-wrap gap-3">
+        @foreach (var task in FilteredTaskList.Where(_=>_.Status == status))
         {
             CardColor cardColor = CardColor.Secondary;
             if (task.Priority != null)
@@ -39,12 +45,17 @@ else
                 <CardBody>
                     <CardTitle>@task.Name</CardTitle>
                     <CardSubTitle>Priorità: @task.Priority?.Name</CardSubTitle>
-                    <CardText>@task.Description</CardText>
-                    <CardLink To="@url">Apri Task</CardLink>
+                    <CardText><Markdown>@task.Description</Markdown></CardText>
+                    @* <CardLink To="@url">Apri Task</CardLink> *@
                 </CardBody>
+                <CardFooter class="d-flex justify-content-end">
+                    <Button Color=ButtonColor.Light @onclick="() => NavigationManager.NavigateTo(url)">Apri</Button>
+                    <Button Color=ButtonColor.Light @onclick="() => NavigationManager.NavigateTo(url)">Apri</Button>
+                </CardFooter>
             </Card>
         }
-    </div>
+        </div>
+    }
 }
 
 

@@ -73,6 +73,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Extension\BlazorMarkdownEditor\PSC.Blazor.Components.MarkdownEditor\PSC.Blazor.Components.MarkdownEditor.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Update="wwwroot\certs\ca.pem">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

@@ -1,0 +1,86 @@
+﻿@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@inject DocumentationService documentationService
+<style>
+    #drop_zone {
+        border: 5px solid blue;
+        width: 200px;
+        height: 100px;
+    }
+</style>
+<script>
+    function dropHandler(ev) {
+      console.log("File(s) dropped");
+
+      // Prevent default behavior (Prevent file from being opened)
+      ev.preventDefault();
+
+      if (ev.dataTransfer.items) {
+        // Use DataTransferItemList interface to access the file(s)
+        [...ev.dataTransfer.items].forEach((item, i) => {
+          // If dropped items aren't files, reject them
+          if (item.kind === "file") {
+            const file = item.getAsFile();
+            console.log(`… file[${i}].name = ${file.name}`);
+          }
+        });
+      } else {
+        // Use DataTransfer interface to access the file(s)
+        [...ev.dataTransfer.files].forEach((file, i) => {
+          console.log(`… file[${i}].name = ${file.name}`);
+        });
+      }
+    }
+        function dragOverHandler(ev) {
+      console.log("File(s) in drop zone");
+
+      // Prevent default behavior (Prevent file from being opened)
+      ev.preventDefault();
+    }
+</script>
+
+
+
+
+<InputFile OnChange="LoadFiles" multiple  />
+<div id="drop_zone"
+     ondrop="dropHandler(event);"
+     ondragover="dragOverHandler(event);">
+    <p>Drag one or more files to this <i>drop zone</i>.</p>
+</div>
+
+@code {
+    [Parameter] public IGuidModel Owner { get; set; }
+    [Parameter] public EventCallback? OnUploadTerminated { get; set; }
+    [Parameter] public int MaxAllowedFiles { get; set; } = 1;
+
+    private bool isLoading = false;
+
+    private async Task LoadFiles(InputFileChangeEventArgs e)
+    {
+        isLoading = true;
+
+        foreach (var file in e.GetMultipleFiles(MaxAllowedFiles))
+        {
+            try
+            {
+
+                var document = await documentationService.AddDocumentationAsync(file);
+
+                if (Owner is not null && document is not null)
+                {
+                    await documentationService.LinkDocumentAsync(document, Owner);
+                }
+
+            }
+            catch (Exception ex)
+            {
+                // Logger.LogError("File: {Filename} Error: {Error}",
+                //     file.Name, ex.Message);
+            }
+        }
+        isLoading = false;
+        StateHasChanged();
+        OnUploadTerminated?.InvokeAsync();
+    }
+}

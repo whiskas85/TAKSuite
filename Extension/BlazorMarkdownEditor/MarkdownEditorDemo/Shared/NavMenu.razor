@@ -1,0 +1,62 @@
+﻿<div class="top-row pl-4 navbar navbar-dark">
+    <a class="navbar-brand" href="">MarkdownEditorDemo</a>
+    <button class="navbar-toggler" @onclick="ToggleNavMenu">
+        <span class="navbar-toggler-icon"></span>
+    </button>
+</div>
+
+<div class="@NavMenuCssClass" @onclick="ToggleNavMenu">
+    <ul class="nav flex-column">
+        <li class="nav-item px-3">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="oi oi-home" aria-hidden="true"></span> Home
+            </NavLink>
+        </li>
+        <li class="nav-item px-3">
+            <NavLink class="nav-link" href="/demo">
+                <span class="oi oi-cloud-upload" aria-hidden="true"></span> Demo
+            </NavLink>
+        </li>
+        <li class="nav-item px-3">
+            <NavLink class="nav-link" href="/preview">
+                <span class="oi oi-cloud-upload" aria-hidden="true"></span> Preview
+            </NavLink>
+        </li>
+        <li class="nav-item px-3">
+            <NavLink class="nav-link" href="/upload">
+                <span class="oi oi-cloud-upload" aria-hidden="true"></span> Upload
+            </NavLink>
+        </li>
+        <li class="nav-item px-3">
+            <NavLink class="nav-link" href="/customtoolbar">
+                <span class="oi oi-cloud-upload" aria-hidden="true"></span> Custom Toolbar
+            </NavLink>
+        </li>
+        <li class="nav-item px-3">
+            <NavLink class="nav-link" href="https://www.puresourcecode.com/dotnet/blazor/markdown-editor-component-for-blazor" target="_blank">
+                <span class="oi oi-link-intact" aria-hidden="true"></span> Markdown Editor
+            </NavLink>
+        </li>
+        <li class="nav-item px-3">
+            <NavLink class="nav-link" href="https://www.puresourcecode.com/" target="_blank">
+                <span class="oi oi-link-intact" aria-hidden="true"></span> PureSourceCode
+            </NavLink>
+        </li>
+        <li class="nav-item px-3">
+            <NavLink class="nav-link" href="https://github.com/erossini/BlazorMarkdownEditor" target="_blank">
+                <span class="oi oi-link-intact" aria-hidden="true"></span> GitHub
+            </NavLink>
+        </li>
+    </ul>
+</div>
+
+@code {
+    private bool collapseNavMenu = true;
+
+    private string NavMenuCssClass => collapseNavMenu ? "collapse" : null;
+
+    private void ToggleNavMenu()
+    {
+        collapseNavMenu = !collapseNavMenu;
+    }
+}

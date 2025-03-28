@@ -7,7 +7,7 @@
     [Parameter] public TaskModel? Model { get; set; }
     [Parameter] public EventCallback OnSuccess { get; set; }
     [Parameter] public EventCallback OnModalHidden { get; set; }
-    [Parameter] public List<Team>? Teams { get; set; } = new();
+    [Parameter] public List<Team>? Teams { get; set; }
     private Modal modal = default!;
     private string title = "Aggiungi Task";
     private List<Team> teams = new();
