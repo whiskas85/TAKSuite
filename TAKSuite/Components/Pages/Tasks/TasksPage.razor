@@ -18,7 +18,10 @@ AllowFiltering="false"
 AllowPaging="false"
 AllowSorting="true"
 AllowRowClick="true"
-Responsive="true">
+Responsive="true"
+
+
+>
 
     <GridColumns>
         <GridColumn TItem="TaskEntity" HeaderText="Nome" SortKeySelector="item => item.Name">
@@ -28,7 +31,7 @@ Responsive="true">
             @context.Status
         </GridColumn>
         <GridColumn TItem="TaskEntity" HeaderText="Squadra Assegnata" SortKeySelector="item => item.AssignedTeamId">
-            @context.AssignedTeam.Name
+            @context.AssignedTeam?.Name
         </GridColumn>
         <GridColumn TItem="TaskEntity" HeaderText="Ultima Modifica" SortKeySelector="item => item.LastModified">
             @context.LastModified

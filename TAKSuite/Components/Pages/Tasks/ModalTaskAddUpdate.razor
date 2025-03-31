@@ -8,6 +8,8 @@
     [Parameter] public EventCallback OnSuccess { get; set; }
     [Parameter] public EventCallback OnModalHidden { get; set; }
     [Parameter] public List<Team>? Teams { get; set; }
+    [Parameter] public UserAtak User { get; set; }
+
     private Modal modal = default!;
     private string title = "Aggiungi Task";
     private List<Team> teams = new();
@@ -23,7 +25,7 @@
 
         taskPriorities = (await taskPrioritiesService.GetAllAsync()).OrderBy(_ => _.Level).ToList();
 
-        if (!Model.AssignedTeamId.HasValue)
+        if (Model.AssignedTeam == null)
         {
             if (Teams == null)
             {
@@ -33,6 +35,10 @@
             {
                 teams.AddRange(Teams);
             }
+        }
+        else
+        {
+            Model.AssignedTeamId = Model.AssignedTeam.Id;
         }
 
         if (Model.Id != null)
@@ -62,12 +68,18 @@
         {
             Name = Model.Name,
             Description = Model.Description,
-            AssignedTeamId = Model.AssignedTeamId,
             Status = TaskStatusTak.Created, // Task starts in Created status
             CreationDate = DateTime.UtcNow,
             LastModified = DateTime.UtcNow,
-            PriorityId = Model.Priority
+            PriorityId = Model.Priority,
+            MissionUid = ""
         };
+
+
+        if (Model.AssignedTeamId.HasValue)
+        {
+            Model.AssignedTeam = teams.FirstOrDefault(_ => _.Id == Model.AssignedTeamId);
+        }
 
         TaskEntity taskEntity;
         if (Model.Id.HasValue)
@@ -77,18 +89,18 @@
         }
         else
         {
-            taskEntity = await taskService.AddAsync(newTask);  // Add new task
+            taskEntity = await taskService.InsertTaskAsync(newTask, User);
             Model.Id = taskEntity.Id;
         }
 
-        if (Model.AssignedTeamId.HasValue)
+        if (Model.AssignedTeam != null)
         {
-            await taskService.AssignTaskAsync(taskEntity, Model.AssignedTeamId.Value);
+            taskEntity = await taskService.InsertTaskByTeamAsync(newTask, Model.AssignedTeam, User);
         }
 
 
         await modal.HideAsync();
-        await OnSuccess.InvokeAsync();
+        // await OnSuccess.InvokeAsync();
     }
 }
 
@@ -106,7 +118,7 @@
                     </div>
                 </div>
 
-                @if (!Model.AssignedTeamId.HasValue)
+                @if (Model.AssignedTeam == null)
                 {
                     <div class="form-group row mb-3">
                         <label class="col-sm-2 col-form-label" for="AssignedTeamId">Squadra Assegnata</label>
@@ -115,7 +127,7 @@
                                 <option value="">Seleziona una squadra</option>
                                 @foreach (var team in teams)
                                 {
-                                    <option value="@team.Id" selected="@(Model.AssignedTeamId != null && Model.AssignedTeamId == team.Id ? "selected" : null)">
+                                    <option value="@team.Id" selected="@(Model.AssignedTeam != null && Model.AssignedTeam == team ? "selected" : null)">
                                         @team.Name
                                 </option>
                             }

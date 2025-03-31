@@ -8,7 +8,7 @@ namespace TAKSuite.Data.Services
     {
         public TaskPrioritiesService(ApplicationDbContext context) : base(context.TaskPriorities, context)
         {
-
+           
         }
     }
 }

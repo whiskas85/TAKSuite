@@ -1,0 +1,237 @@
+﻿@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+
+@switch (TaskEnt.Status)
+{
+    case TaskStatusTak.Scheduled:
+        <Tooltip Placement="TooltipPlacement.Top" Title="Accetta task">
+            <Button @onclick="() =>AcceptTask(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 d-flex align-items-center gap-2">
+                <Icon color="IconColor.Success" Name="IconName.CheckLg" />
+                @if (ShowButtonTitle)
+                {
+                    <span class="d-flex align-items-center">Accetta</span>
+                }
+            </Button>
+        </Tooltip>
+        <Tooltip Placement="TooltipPlacement.Top" Title="Rifiuta">
+            <Button @onclick="() =>RejectTask(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 d-flex align-items-center gap-2">
+                <Icon color="IconColor.Danger" Name="IconName.XLg" />
+                @if (ShowButtonTitle)
+                {
+                    <span class="d-flex align-items-center">Rifiuta</span>
+                }
+            </Button>
+        </Tooltip>
+        break;
+    case TaskStatusTak.Accepted:
+        <Dropdown Color="DropdownColor.Light" Direction="DropdownDirection.Dropdown" Split="true" Class="me-2">
+            <DropdownActionButton @onclick="() =>AssignTask(TaskEnt, Team)">@Team.Name</DropdownActionButton>
+            <DropdownToggleButton />
+            <DropdownMenu>
+                <DropdownHeader>Propria squadra</DropdownHeader>
+                <DropdownItem To="#" Type="DropdownItemType.Link">@Team.Name</DropdownItem>
+                <DropdownDivider>Dropdown header</DropdownDivider>
+                <DropdownHeader>Altre squadre</DropdownHeader>
+                @foreach (var subteam in Subteams)
+                {
+                    <DropdownItem @onclick="() =>AssignTask(TaskEnt, subteam)" Type="DropdownItemType.Link">@subteam.Name</DropdownItem>
+                }
+            </DropdownMenu>
+        </Dropdown>
+        <Tooltip Placement="TooltipPlacement.Top" Title="Rifiuta">
+            <Button @onclick="() =>RejectTask(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 d-flex align-items-center gap-2">
+                <Icon color="IconColor.Danger" Name="IconName.XLg" />
+                @if (ShowButtonTitle)
+                {
+                    <span class="d-flex align-items-center">Rifiuta</span>
+                }
+            </Button>
+        </Tooltip>
+        break;
+    case TaskStatusTak.Assigned:
+        <Tooltip Placement="TooltipPlacement.Top" Title="Esegui task">
+            <Button @onclick="() =>EseguiTask(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 d-flex align-items-center gap-2">
+                <Icon color="IconColor.Success" Name="IconName.PlayFill" />
+                @if (ShowButtonTitle)
+                {
+                    <span class="d-flex align-items-center">Esegui</span>
+                }
+            </Button>
+        </Tooltip>
+        <Tooltip Placement="TooltipPlacement.Top" Title="Reject task">
+            <Button @onclick="() =>RejectTask(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 d-flex align-items-center gap-2">
+                <Icon color="IconColor.Danger" Name="IconName.XLg" />
+                @if (ShowButtonTitle)
+                {
+                    <span class="d-flex align-items-center">Rifiuta</span>
+                }
+            </Button>
+        </Tooltip>
+        break;
+    case TaskStatusTak.InProgress:
+        <Tooltip Placement="TooltipPlacement.Top" Title="Task completato">
+            <Button @onclick="() =>CompleteTask(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 d-flex align-items-center gap-2">
+                <Icon color="IconColor.Success" Name="IconName.Check2All" />
+                @if (ShowButtonTitle)
+                {
+                    <span class="d-flex align-items-center">Completa</span>
+                }
+            </Button>
+        </Tooltip>
+        <Tooltip Placement="TooltipPlacement.Top" Title="Task Fallito">
+            <Button @onclick="() =>FailedTask(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 d-flex align-items-center gap-2">
+                <Icon color="IconColor.Danger" Name="IconName.EmojiDizzyFill" />
+                @if (ShowButtonTitle)
+                {
+                    <span class="d-flex align-items-center">Fallito</span>
+                }
+            </Button>
+        </Tooltip>
+        <Tooltip Placement="TooltipPlacement.Top" Title="Task Abortito">
+            <Button @onclick="() =>AbortedTask(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 d-flex align-items-center gap-2">
+                <Icon color="IconColor.Danger" Name="IconName.XSquareFill" />
+                @if (ShowButtonTitle)
+                {
+                    <span class="d-flex align-items-center">Abortito</span>
+                }
+            </Button>
+        </Tooltip>
+        break;
+    case TaskStatusTak.RejectedTier2:
+        <Tooltip Placement="TooltipPlacement.Top" Title="Restore task">
+            <Button @onclick="() =>RestoreTask(TaskEnt, Team)" Color="ButtonColor.Success" Class="me-2 d-flex align-items-center gap-2">
+                <Icon color="IconColor.Success" Name="IconName.FileArrowUpFill" />
+                @if (ShowButtonTitle)
+                {
+                    <span class="d-flex align-items-center">Ripristina</span>
+                }
+            </Button>
+        </Tooltip>
+        break;
+    case TaskStatusTak.Completed:
+    case TaskStatusTak.Aborted:
+    case TaskStatusTak.Failed:
+    case TaskStatusTak.Canceled:
+        break;
+    default:
+        <span class="text-secondary">Stato sconosciuto</span>
+        break;
+}
+
+
+
+@code {
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    [Parameter] public UserAtak User { get; set; }
+    [Parameter] public Team Team { get; set; }
+    [Parameter] public TaskEntity TaskEnt { get; set; }
+
+    [Parameter] public List<Team> Subteams { get; set; } = new();
+    [Parameter] public bool ShowButtonTitle { get; set; } = false;
+    [Inject] private TaskService taskService { get; set; } = default;
+    [Inject] private ToastService toastService { get; set; } = default;
+
+
+
+    private async Task AcceptTask(TaskEntity task, Team team)
+    {
+        try
+        {
+            await taskService.AcceptTaskAsync(task, team, User);
+            StateHasChanged();
+            if (OnChanged.HasDelegate) await OnChanged.InvokeAsync();
+        }catch (Exception e)
+        {
+            toastService.Notify(new ToastMessage { Title = "Attenzione", Message = e.Message, IconName = IconName.ExclamationTriangleFill, Type = ToastType.Danger, AutoHide = true });
+        }
+    }
+
+    private async Task AssignTask(TaskEntity task, Team team)
+    {
+        try
+        {
+            await taskService.AssignTaskAsync(task, team, User);
+            StateHasChanged();
+            if (OnChanged.HasDelegate) await OnChanged.InvokeAsync();
+        }catch (Exception e)
+        {
+            toastService.Notify(new ToastMessage { Title = "Attenzione", Message = e.Message, IconName = IconName.ExclamationTriangleFill, Type = ToastType.Danger, AutoHide = true });
+        }
+    }
+    private async Task RejectTask(TaskEntity task, Team team)
+    {
+        try
+        {
+            await taskService.RejectTaskAsync(task, team, User);
+            StateHasChanged();
+            if (OnChanged.HasDelegate) await OnChanged.InvokeAsync();
+        }catch (Exception e)
+        {
+            toastService.Notify(new ToastMessage { Title = "Attenzione", Message = e.Message, IconName = IconName.ExclamationTriangleFill, Type = ToastType.Danger, AutoHide = true });
+        }
+    }
+    private async Task EseguiTask(TaskEntity task, Team team)
+    {
+        try
+        {
+            await taskService.ExecutingTaskAsync(task, team, User);
+            StateHasChanged();
+            if (OnChanged.HasDelegate) await OnChanged.InvokeAsync();
+        }catch (Exception e)
+        {
+            toastService.Notify(new ToastMessage { Title = "Attenzione", Message = e.Message, IconName = IconName.ExclamationTriangleFill, Type = ToastType.Danger, AutoHide = true });
+        }
+
+    }
+    private async Task CompleteTask(TaskEntity task, Team team)
+    {
+        try
+        {
+            await taskService.CompleteTaskAsync(task, team, User);
+            StateHasChanged();
+            if (OnChanged.HasDelegate) await OnChanged.InvokeAsync();
+        }catch (Exception e)
+        {
+            toastService.Notify(new ToastMessage { Title = "Attenzione", Message = e.Message, IconName = IconName.ExclamationTriangleFill, Type = ToastType.Danger, AutoHide = true });
+        }
+    }
+    private async Task FailedTask(TaskEntity task, Team team)
+    {
+        try
+        {
+            await taskService.FailedTaskAsync(task, team, User);
+            StateHasChanged();
+            if (OnChanged.HasDelegate) await OnChanged.InvokeAsync();
+        }catch (Exception e)
+        {
+            toastService.Notify(new ToastMessage { Title = "Attenzione", Message = e.Message, IconName = IconName.ExclamationTriangleFill, Type = ToastType.Danger, AutoHide = true });
+        }
+    }
+    private async Task AbortedTask(TaskEntity task, Team team)
+    {
+        try
+        {
+            await taskService.AbortTaskAsync(task, team, User);
+            StateHasChanged();
+            if (OnChanged.HasDelegate) await OnChanged.InvokeAsync();
+        }catch (Exception e)
+        {
+            toastService.Notify(new ToastMessage { Title = "Attenzione", Message = e.Message, IconName = IconName.ExclamationTriangleFill, Type = ToastType.Danger, AutoHide = true });
+        }
+    }
+
+    private async Task RestoreTask(TaskEntity task, Team team)
+    {
+        try
+        {
+            await taskService.RejoinTaskAsync(task, team, User);
+            StateHasChanged();
+            if (OnChanged.HasDelegate) await OnChanged.InvokeAsync();
+        }
+        catch (Exception e)
+        {
+            toastService.Notify(new ToastMessage { Title = "Attenzione", Message = e.Message, IconName = IconName.ExclamationTriangleFill, Type = ToastType.Danger, AutoHide = true });
+        }
+    }
+}

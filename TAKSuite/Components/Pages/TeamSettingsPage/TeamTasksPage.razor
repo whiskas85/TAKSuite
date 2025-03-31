@@ -1,20 +1,22 @@
 ﻿@page "/team/{TeamId:guid}/tasks"
+@inherits ConnectedUserInfo
 
-@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Components.Layout
 @using TAKSuite.Components.Pages.Tasks
+@using TAKSuite.Components.Pages.Tasks.TaskComponents
 @using TAKSuite.Data.Models
 @using TAKSuite.Data.Services
 @inject TaskService taskService
+@inject TeamService teamService
 @inject NavigationManager NavigationManager
 
-@attribute [Authorize]
-
+<PageTitle>Lista task</PageTitle>
 <h3>Task</h3>
 
 <InputText @bind-value="searchText" placeholder="Cerca task..." @oninput="FilterTasks" class="form-control mb-3" />
 
 <Button Color="ButtonColor.Primary" @onclick="() => ShowCreateTaskModal()">Crea Task</Button>
-<ModalTaskAddUpdate @ref="modal" OnSuccess="RefreshTaskList" Model="taskModel"/>
+<ModalTaskAddUpdate @ref="modal" OnSuccess="RefreshTaskList" Model="taskModel" User="ConnectedAtakUser"/>
 
 
 @if (FilteredTaskList == null)
@@ -27,33 +29,44 @@ else if (!FilteredTaskList.Any())
 }
 else
 {
-    var statusList = new List<TaskStatusTak> { TaskStatusTak.Assigned, TaskStatusTak.InProgress };
+    var statusList = (TaskStatusTak[])Enum.GetValues(typeof(TaskStatusTak));
+    if (team == null) return;
     @foreach(var status in statusList)
     {
+        if (!FilteredTaskList.Any(_ => _.Status == status)) continue;
         <h3>@status.ToString()</h3>
         <div class="d-flex flex-wrap gap-3">
-        @foreach (var task in FilteredTaskList.Where(_=>_.Status == status))
-        {
-            CardColor cardColor = CardColor.Secondary;
-            if (task.Priority != null)
+            @foreach (var task in FilteredTaskList.Where(_=>_.Status == status))
             {
-                cardColor = task.Priority.CardColor;
-            }
-            var url = $"/task/{task.Id}";
+                CardColor cardColor = CardColor.Secondary;
+                if (task.Priority != null)
+                {
+                    cardColor = task.Priority.CardColor;
+                }
+                var url = $"/task/{task.Id}";
 
-            <Card Color="cardColor" Style="width: 18rem;">
-                <CardBody>
-                    <CardTitle>@task.Name</CardTitle>
-                    <CardSubTitle>Priorità: @task.Priority?.Name</CardSubTitle>
-                    <CardText><Markdown>@task.Description</Markdown></CardText>
-                    @* <CardLink To="@url">Apri Task</CardLink> *@
-                </CardBody>
-                <CardFooter class="d-flex justify-content-end">
-                    <Button Color=ButtonColor.Light @onclick="() => NavigationManager.NavigateTo(url)">Apri</Button>
-                    <Button Color=ButtonColor.Light @onclick="() => NavigationManager.NavigateTo(url)">Apri</Button>
-                </CardFooter>
-            </Card>
-        }
+                <Card Color="cardColor" Style="width: 18rem;">
+                    <CardBody>
+                        <CardTitle class="d-flex justify-content-between align-items-center">
+                            <span>@task.Name</span>
+                            <Tooltip Placement="TooltipPlacement.Top" Title="Apri task">
+                                <Button Outline=false Color=ButtonColor.None @onclick="() => NavigationManager.NavigateTo(url)">
+                                    <Icon Name="IconName.InfoCircleFill" />
+                                </Button>
+                            </Tooltip>
+                        </CardTitle>
+
+                        <CardSubTitle>Priorità: @task.Priority?.Name</CardSubTitle>
+                        @if(task.Status >= TaskStatusTak.Assigned){
+                            <CardText><Icon Name="IconName.PeopleFill"></Icon>: @task.ExecutingTeam?.Name</CardText>
+                        }
+                        <CardText><Markdown>@task.Description</Markdown></CardText>
+                    </CardBody>
+                    <CardFooter class="d-flex justify-content-end">
+                        <TaskButtons Team="team" Subteams="subteams" TaskEnt="task" ShowButtonTitle="false" OnChanged="RefreshTasks" User="ConnectedAtakUser" />
+                    </CardFooter>
+                </Card>
+            }
         </div>
     }
 }
@@ -63,6 +76,9 @@ else
 
 @code {
     [Parameter] public Guid TeamId { get; set; }
+
+    private Team? team { get; set; }
+    private List<Team> subteams { get; set; }
     private string searchText = "";
 
     ModalTaskAddUpdate modal = default!;
@@ -75,14 +91,26 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        await base.OnInitializedAsync();
+        team = await teamService.GetAsync(TeamId);
+        if(team != null) subteams = await teamService.GetSubTeamsAsync(team);
+
+        await RefreshTaskList();
+        StateHasChanged();
+
+    }
+    private async Task RefreshTasks()
+    {
         await RefreshTaskList();
     }
-
+    
+    
+    
 
     private async Task ShowCreateTaskModal()
     {
         taskModel = new();
-        taskModel.AssignedTeamId = TeamId;
+        taskModel.AssignedTeam = team;
         await modal.ShowAsync();
         StateHasChanged();
     }

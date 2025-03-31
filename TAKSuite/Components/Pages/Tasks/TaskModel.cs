@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using TAKSuite.Data.Models;
 
 namespace TAKSuite.Components.Pages.Tasks
 {
@@ -17,6 +18,7 @@ namespace TAKSuite.Components.Pages.Tasks
         public string Description { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "Devi selezionare una squadra.")]
+        public Team? AssignedTeam { get; set; }
         public Guid? AssignedTeamId { get; set; }
         public Guid? Priority { get; set; }
 
