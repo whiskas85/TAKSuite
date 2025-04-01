@@ -12,6 +12,7 @@ public abstract class DataServiceAbstract<T> : IService, IDataService<T> where T
     internal readonly ApplicationDbContext _context;
     public Expression<Func<T, object>>[]? Includes { get; set; }
 
+
     protected DataServiceAbstract(DbSet<T> dbSet, ApplicationDbContext context)
     {
         DBSet = dbSet;

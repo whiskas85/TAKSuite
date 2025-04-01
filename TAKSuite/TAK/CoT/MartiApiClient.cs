@@ -78,7 +78,7 @@
         }
 
 
-        public async Task<string?> GetAllMissionsDataAsync()
+        public async Task<List<MissionAtak>> GetAllMissionsDataAsync()
         {
             try
             {
@@ -90,7 +90,46 @@
                 if (response.IsSuccessStatusCode)
                 {
                     var res = response.Content.ReadAsStringAsync();
-                    return await res;
+                    var json = res.Result;
+                    
+                    var data = JsonSerializer.Deserialize<MissionsRoot>(json, new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    });
+                    var missionList = data.Data.ToList();
+
+                    return missionList; 
+                }
+
+                Console.WriteLine($"Errore HTTP: {response.StatusCode}");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Eccezione nella richiesta: {ex.Message}");
+                return null;
+            }
+        }
+
+        public async Task<List<UidEntry>> GetAllMissionsUidAsync(string missionName)
+        {
+            try
+            {
+                string url = $"Marti/api/missions/{missionName}";
+                HttpResponseMessage response = await client.GetAsync(url);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var res = response.Content.ReadAsStringAsync();
+                    var json = res.Result;
+
+                    var mission = JsonSerializer.Deserialize<MissionsRoot>(json, new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    });
+                    var missionList = mission.Data[0].Uids.ToList();
+
+                    return missionList;
                 }
 
                 Console.WriteLine($"Errore HTTP: {response.StatusCode}");

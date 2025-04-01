@@ -18,6 +18,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<TaskEntity> Tasks { get; set; }
     public DbSet<TaskLog> TaskLogs { get; set; }
+    public DbSet<TaskHierarchy> TaskHierarchy { get; set; }
     public DbSet<TaskPriority> TaskPriorities { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -87,5 +88,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasOne(tl => tl.Task)
             .WithMany(t => t.Logs)
             .HasForeignKey(tl => tl.TaskId);
+        
+        modelBuilder.Entity<TaskHierarchy>()
+                .HasOne(tl => tl.Task)
+                .WithMany(t => t.Hierarchy)
+                .HasForeignKey(tl => tl.TaskId);
     }
 }

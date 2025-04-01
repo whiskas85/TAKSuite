@@ -4,6 +4,20 @@
 @switch (TaskEnt.Status)
 {
     case TaskStatusTak.Scheduled:
+         <Tooltip Placement="TooltipPlacement.Top" Title="Schedula attività ad una squadra">
+            <Dropdown Color="DropdownColor.Light" Direction="DropdownDirection.Dropdown" Split="true" Class="me-2">
+                <DropdownActionButton>Riassegna</DropdownActionButton>
+                <DropdownToggleButton />
+                <DropdownMenu>
+                    <DropdownHeader>Altre squadre</DropdownHeader>
+                    @foreach (var subteam in Subteams)
+                    {
+                        <DropdownItem @onclick="() =>ScheduleTask(TaskEnt, subteam)" Type="DropdownItemType.Link">@subteam.Name</DropdownItem>
+                    }
+                </DropdownMenu>
+            </Dropdown>
+        </Tooltip>
+
         <Tooltip Placement="TooltipPlacement.Top" Title="Accetta task">
             <Button @onclick="() =>AcceptTask(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 d-flex align-items-center gap-2">
                 <Icon color="IconColor.Success" Name="IconName.CheckLg" />
@@ -24,20 +38,22 @@
         </Tooltip>
         break;
     case TaskStatusTak.Accepted:
-        <Dropdown Color="DropdownColor.Light" Direction="DropdownDirection.Dropdown" Split="true" Class="me-2">
-            <DropdownActionButton @onclick="() =>AssignTask(TaskEnt, Team)">@Team.Name</DropdownActionButton>
-            <DropdownToggleButton />
-            <DropdownMenu>
-                <DropdownHeader>Propria squadra</DropdownHeader>
-                <DropdownItem To="#" Type="DropdownItemType.Link">@Team.Name</DropdownItem>
-                <DropdownDivider>Dropdown header</DropdownDivider>
-                <DropdownHeader>Altre squadre</DropdownHeader>
-                @foreach (var subteam in Subteams)
-                {
-                    <DropdownItem @onclick="() =>AssignTask(TaskEnt, subteam)" Type="DropdownItemType.Link">@subteam.Name</DropdownItem>
-                }
-            </DropdownMenu>
-        </Dropdown>
+         <Tooltip Placement="TooltipPlacement.Top" Title="Assegna esecuzione">
+             <Dropdown Color="DropdownColor.Light" Direction="DropdownDirection.Dropdown" Split="true" Class="me-2">
+                <DropdownActionButton @onclick="() =>AssignTask(TaskEnt, Team)">@Team?.Name</DropdownActionButton>
+                <DropdownToggleButton />
+                <DropdownMenu>
+                    <DropdownHeader>Propria squadra</DropdownHeader>
+                    <DropdownItem To="#" Type="DropdownItemType.Link">@Team?.Name</DropdownItem>
+                    <DropdownDivider>Dropdown header</DropdownDivider>
+                    <DropdownHeader>Altre squadre</DropdownHeader>
+                    @foreach (var subteam in Subteams)
+                    {
+                        <DropdownItem @onclick="() =>AssignTask(TaskEnt, subteam)" Type="DropdownItemType.Link">@subteam.Name</DropdownItem>
+                    }
+                </DropdownMenu>
+            </Dropdown>
+        </Tooltip>
         <Tooltip Placement="TooltipPlacement.Top" Title="Rifiuta">
             <Button @onclick="() =>RejectTask(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 d-flex align-items-center gap-2">
                 <Icon color="IconColor.Danger" Name="IconName.XLg" />
@@ -133,6 +149,19 @@
     [Inject] private ToastService toastService { get; set; } = default;
 
 
+    private async Task ScheduleTask(TaskEntity task, Team team)
+    {
+        try
+        {
+            await taskService.ScheduleTaskAsync(task, team, User);
+            StateHasChanged();
+            if (OnChanged.HasDelegate) await OnChanged.InvokeAsync();
+        }
+        catch (Exception e)
+        {
+            toastService.Notify(new ToastMessage { Title = "Attenzione", Message = e.Message, IconName = IconName.ExclamationTriangleFill, Type = ToastType.Danger, AutoHide = true });
+        }
+    }
 
     private async Task AcceptTask(TaskEntity task, Team team)
     {
@@ -141,7 +170,8 @@
             await taskService.AcceptTaskAsync(task, team, User);
             StateHasChanged();
             if (OnChanged.HasDelegate) await OnChanged.InvokeAsync();
-        }catch (Exception e)
+        }
+        catch (Exception e)
         {
             toastService.Notify(new ToastMessage { Title = "Attenzione", Message = e.Message, IconName = IconName.ExclamationTriangleFill, Type = ToastType.Danger, AutoHide = true });
         }
@@ -154,7 +184,8 @@
             await taskService.AssignTaskAsync(task, team, User);
             StateHasChanged();
             if (OnChanged.HasDelegate) await OnChanged.InvokeAsync();
-        }catch (Exception e)
+        }
+        catch (Exception e)
         {
             toastService.Notify(new ToastMessage { Title = "Attenzione", Message = e.Message, IconName = IconName.ExclamationTriangleFill, Type = ToastType.Danger, AutoHide = true });
         }
@@ -166,7 +197,8 @@
             await taskService.RejectTaskAsync(task, team, User);
             StateHasChanged();
             if (OnChanged.HasDelegate) await OnChanged.InvokeAsync();
-        }catch (Exception e)
+        }
+        catch (Exception e)
         {
             toastService.Notify(new ToastMessage { Title = "Attenzione", Message = e.Message, IconName = IconName.ExclamationTriangleFill, Type = ToastType.Danger, AutoHide = true });
         }
@@ -178,7 +210,8 @@
             await taskService.ExecutingTaskAsync(task, team, User);
             StateHasChanged();
             if (OnChanged.HasDelegate) await OnChanged.InvokeAsync();
-        }catch (Exception e)
+        }
+        catch (Exception e)
         {
             toastService.Notify(new ToastMessage { Title = "Attenzione", Message = e.Message, IconName = IconName.ExclamationTriangleFill, Type = ToastType.Danger, AutoHide = true });
         }
@@ -191,7 +224,8 @@
             await taskService.CompleteTaskAsync(task, team, User);
             StateHasChanged();
             if (OnChanged.HasDelegate) await OnChanged.InvokeAsync();
-        }catch (Exception e)
+        }
+        catch (Exception e)
         {
             toastService.Notify(new ToastMessage { Title = "Attenzione", Message = e.Message, IconName = IconName.ExclamationTriangleFill, Type = ToastType.Danger, AutoHide = true });
         }
@@ -203,7 +237,8 @@
             await taskService.FailedTaskAsync(task, team, User);
             StateHasChanged();
             if (OnChanged.HasDelegate) await OnChanged.InvokeAsync();
-        }catch (Exception e)
+        }
+        catch (Exception e)
         {
             toastService.Notify(new ToastMessage { Title = "Attenzione", Message = e.Message, IconName = IconName.ExclamationTriangleFill, Type = ToastType.Danger, AutoHide = true });
         }
@@ -215,7 +250,8 @@
             await taskService.AbortTaskAsync(task, team, User);
             StateHasChanged();
             if (OnChanged.HasDelegate) await OnChanged.InvokeAsync();
-        }catch (Exception e)
+        }
+        catch (Exception e)
         {
             toastService.Notify(new ToastMessage { Title = "Attenzione", Message = e.Message, IconName = IconName.ExclamationTriangleFill, Type = ToastType.Danger, AutoHide = true });
         }

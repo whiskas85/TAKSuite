@@ -384,6 +384,30 @@ namespace TAKSuite.Migrations
                     b.ToTable("Tasks");
                 });
 
+            modelBuilder.Entity("TAKSuite.Data.Models.TaskHierarchy", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("TeamId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TaskId");
+
+                    b.HasIndex("TeamId");
+
+                    b.ToTable("TaskHierarchy");
+                });
+
             modelBuilder.Entity("TAKSuite.Data.Models.TaskLog", b =>
                 {
                     b.Property<Guid>("Id")
@@ -415,6 +439,8 @@ namespace TAKSuite.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("TaskId");
+
+                    b.HasIndex("TeamId");
 
                     b.HasIndex("UserId");
 
@@ -662,6 +688,23 @@ namespace TAKSuite.Migrations
                     b.Navigation("Priority");
                 });
 
+            modelBuilder.Entity("TAKSuite.Data.Models.TaskHierarchy", b =>
+                {
+                    b.HasOne("TAKSuite.Data.Models.TaskEntity", "Task")
+                        .WithMany("Hierarchy")
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TAKSuite.Data.Models.Team", "Team")
+                        .WithMany()
+                        .HasForeignKey("TeamId");
+
+                    b.Navigation("Task");
+
+                    b.Navigation("Team");
+                });
+
             modelBuilder.Entity("TAKSuite.Data.Models.TaskLog", b =>
                 {
                     b.HasOne("TAKSuite.Data.Models.TaskEntity", "Task")
@@ -670,11 +713,17 @@ namespace TAKSuite.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("TAKSuite.Data.Models.Team", "Team")
+                        .WithMany()
+                        .HasForeignKey("TeamId");
+
                     b.HasOne("TAKSuite.Data.Models.UserAtak", "User")
                         .WithMany()
                         .HasForeignKey("UserId");
 
                     b.Navigation("Task");
+
+                    b.Navigation("Team");
 
                     b.Navigation("User");
                 });
@@ -738,6 +787,8 @@ namespace TAKSuite.Migrations
             modelBuilder.Entity("TAKSuite.Data.Models.TaskEntity", b =>
                 {
                     b.Navigation("Documents");
+
+                    b.Navigation("Hierarchy");
 
                     b.Navigation("Logs");
                 });

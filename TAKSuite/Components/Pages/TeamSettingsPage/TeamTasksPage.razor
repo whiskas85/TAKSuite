@@ -11,13 +11,16 @@
 @inject NavigationManager NavigationManager
 
 <PageTitle>Lista task</PageTitle>
-<h3>Task</h3>
+<h3>Lista task</h3>
 
-<InputText @bind-value="searchText" placeholder="Cerca task..." @oninput="FilterTasks" class="form-control mb-3" />
 
-<Button Color="ButtonColor.Primary" @onclick="() => ShowCreateTaskModal()">Crea Task</Button>
+
+<div class="py-2 d-flex w-100">
+    <InputText @bind-value="searchText" placeholder="Cerca task..." @oninput="FilterTasks" class="form-control flex-grow-1" />
+    <Button Color="ButtonColor.Primary" @onclick="() => ShowCreateTaskModal()" class="ms-2 text-nowrap">Crea Task</Button>
+</div>
+
 <ModalTaskAddUpdate @ref="modal" OnSuccess="RefreshTaskList" Model="taskModel" User="ConnectedAtakUser"/>
-
 
 @if (FilteredTaskList == null)
 {

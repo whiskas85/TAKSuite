@@ -40,5 +40,7 @@
         // Log contenenti le date dei cambi di stato
         public List<TaskLog> Logs { get; set; } = new();
 
+        public List<TaskHierarchy> Hierarchy { get; set; } = new();
+
     }
 }

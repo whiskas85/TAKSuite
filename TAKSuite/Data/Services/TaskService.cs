@@ -1,5 +1,6 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
+using Org.BouncyCastle.Tsp;
 using System.Threading.Tasks;
 using TAKSuite.Components.Pages;
 using TAKSuite.Data.Models;
@@ -11,22 +12,28 @@ namespace TAKSuite.Data.Services
         public TaskService(ApplicationDbContext context) : base(context.Tasks, context)
         {
             Includes = [ _ =>_.Priority,
-                         _=> _.Logs];
+                         _=> _.Logs,
+                         _=> _.Hierarchy ];
         }
        
 
 
         public async Task<TaskEntity> InsertTaskByTeamAsync(TaskEntity newTask, Team team, UserAtak user)
         {
-            newTask.Status = TaskStatusTak.Accepted;
+            newTask.Status = TaskStatusTak.Scheduled;
 
             // Aggiungi il nuovo task al database
             _context.Tasks.Add(newTask);
 
+            // push hierarchy
+            //PushTaskScheduled(newTask, team);
+
             // Log della creazione del task
-            LogTaskStatusChange(newTask, team, user, TaskStatusTak.None, TaskStatusTak.Accepted, "Task created by TEAM");
+            LogTaskStatusChange(newTask, team, user, TaskStatusTak.None, TaskStatusTak.Created, "Il task è stato creato dal team");
+            LogTaskStatusChange(newTask, team, user, TaskStatusTak.Created, TaskStatusTak.Scheduled, "Il task è stato schedulato al team");
 
             await _context.SaveChangesAsync();
+
             return newTask;
         }
         public async Task<TaskEntity> InsertTaskAsync(TaskEntity newTask, UserAtak user)
@@ -37,7 +44,7 @@ namespace TAKSuite.Data.Services
             _context.Tasks.Add(newTask);
 
             // Log della creazione del task
-            LogTaskStatusChange(newTask, null, user, TaskStatusTak.None, TaskStatusTak.Created, "Task created");
+            LogTaskStatusChange(newTask, null, user, TaskStatusTak.None, TaskStatusTak.Created, "Il task è stato creato");
 
             await _context.SaveChangesAsync();
             return newTask;
@@ -60,17 +67,30 @@ namespace TAKSuite.Data.Services
 
         public async Task ScheduleTaskAsync(TaskEntity task, Team team, UserAtak user)
         {
-            if (task.Status != TaskStatusTak.Created)
+            if (task.Status != TaskStatusTak.Created && task.Status != TaskStatusTak.Scheduled)
                 throw new InvalidOperationException("Task is not in a valid state for assignment");
 
-            var newStatus = TaskStatusTak.Scheduled;
-            LogTaskStatusChange(task, team, user, task.Status, newStatus, "Task scheduled to team");
 
+            var newStatus = TaskStatusTak.Scheduled;
+            
+            if(task.Status== TaskStatusTak.Created) 
+                LogTaskStatusChange(task, team, user, task.Status, newStatus, $"Il task è stato schedulato al team");
+            else 
+                LogTaskStatusChange(task, team, user, task.Status, newStatus, $"Il task è stato rischedulato da {task.AssignedTeam.Name} -> {team.Name}");
+            
+            
+            if (task.AssignedTeam!= null)
+                PushTaskScheduled(task, task.AssignedTeam);          
+            
             task.AssignedTeamId = team.Id;
             task.Status = newStatus;
             task.LastModified = DateTime.UtcNow;
 
-            if(await CheckTeamAutoacceptAsync(team))
+            // push hierarchy
+            
+
+
+            if (await CheckTeamAutoacceptAsync(team))
             {
                 await AcceptTaskAsync(task, team, user);
                 return;
@@ -113,28 +133,46 @@ namespace TAKSuite.Data.Services
         }
 
 
-
         public async Task RejectTaskAsync(TaskEntity task, Team team, UserAtak user)
         {
-            var newStatus = TaskStatusTak.None;
-
             if (task.Status == TaskStatusTak.Accepted || task.Status == TaskStatusTak.Scheduled || task.Status == TaskStatusTak.RejectedTier2)
             {
-                if (task.ExecutingTeamId != team.Id)
+                if (task.AssignedTeamId != team.Id)
                     throw new UnauthorizedAccessException("Only the assigned team can complete this task");
 
-                newStatus = TaskStatusTak.RejectedTier1;
-                LogTaskStatusChange(task, team, user, task.Status, newStatus, "Task rejected from assigned team");
-                task.Status = newStatus;
-                task.LastModified = DateTime.UtcNow;
+                if (HasHierarchyHops(task))
+                {
+                    // status remain the same
+                    var newStatus = task.Status;
+                    task.Status = newStatus;
+
+
+                    // get the last scheduled team hop
+                    var teamHop = PopTaskScheduled(task);
+                    task.AssignedTeamId = teamHop.Id;
+                    
+                    task.LastModified = DateTime.UtcNow;
+                    
+                    LogTaskStatusChange(task, teamHop, user, task.Status, newStatus, "Task rejected from assigned team");
+                }
+                else
+                {
+                    var newStatus = TaskStatusTak.RejectedTier1;
+                    LogTaskStatusChange(task, team, user, task.Status, newStatus, "Task rejected from assigned team");
+                    task.Status = newStatus;
+                    task.LastModified = DateTime.UtcNow;
+                }
 
                 await _context.SaveChangesAsync();
                 return;
             }
-            else if (task.Status != TaskStatusTak.Assigned)
+            else if (task.Status == TaskStatusTak.Assigned)
             {
-                newStatus = TaskStatusTak.RejectedTier2;
-                LogTaskStatusChange(task, team, user, task.Status, newStatus, "Task rejected by the team");
+                if (task.ExecutingTeamId != team.Id)
+                    throw new UnauthorizedAccessException("Only the executing team can complete this task");
+
+                var newStatus = TaskStatusTak.RejectedTier2;
+                LogTaskStatusChange(task, team, user, task.Status, newStatus, "Il task è stato rifiutato dal team di esecuzione");
                 task.Status = newStatus;
                 task.LastModified = DateTime.UtcNow;
 
@@ -150,7 +188,7 @@ namespace TAKSuite.Data.Services
            
             if (task.Status == TaskStatusTak.RejectedTier2)
             {
-                if (task.ExecutingTeamId != team.Id)
+                if (task.AssignedTeamId != team.Id)
                     throw new UnauthorizedAccessException("Only the assigned team can complete this task");
 
                 var newStatus = TaskStatusTak.Accepted;
@@ -160,7 +198,7 @@ namespace TAKSuite.Data.Services
 
                 await _context.SaveChangesAsync();
             }
-            else if (task.Status != TaskStatusTak.RejectedTier1)
+            else if (task.Status == TaskStatusTak.RejectedTier1)
             {
                 var newStatus = TaskStatusTak.Created;
                 LogTaskStatusChange(task, team, user, task.Status, newStatus, "Task rejoined from tier0");
@@ -273,6 +311,33 @@ namespace TAKSuite.Data.Services
         }
 
 
+        private void PushTaskScheduled(TaskEntity task, Team team)
+        {
+            var hierarchy = new TaskHierarchy
+            {
+                TaskId = task.Id,
+                TeamId = team.Id,
+                Timestamp = DateTime.UtcNow
+            };
+            _context.TaskHierarchy.Add(hierarchy);
+            task.Hierarchy.Add(hierarchy);
+        }
+        private bool HasHierarchyHops(TaskEntity task)
+        {
+            // vado a recuperare tutti i cambi di assigned team
+            return _context.TaskHierarchy.Where(_ => _.Task.Id == task.Id)
+                .Count() >= 1;
+        }
+        private Team PopTaskScheduled(TaskEntity task)
+        {
+            var hierarchyLastHop = _context.TaskHierarchy.Where(_ => _.Task.Id == task.Id)
+                .OrderBy(_=> _.Timestamp)
+                .ToList()
+                .Last();
+            _context.TaskHierarchy.Remove(hierarchyLastHop);
+            return hierarchyLastHop.Team;
+        }
+
 
         private void LogTaskStatusChange(TaskEntity task, Team? team, UserAtak user, TaskStatusTak previous, TaskStatusTak next, string description)
         {
@@ -304,17 +369,20 @@ namespace TAKSuite.Data.Services
                         query = query.Include(include);
                     }
                 }
-                return await query.Where(_ => (_.AssignedTeam != null && _.AssignedTeam.Id == teamId) || 
-                                              (_.ExecutingTeam!= null && _.ExecutingTeam.Id ==teamId))
-                    .ToListAsync();
+
+                return await query.Where(task =>
+                    (task.AssignedTeamId == teamId) ||
+                    (task.ExecutingTeamId == teamId) ||
+                    task.Hierarchy.Any(h => h.TeamId == teamId) // Verifica se il teamId è presente in TaskHierarchy
+                ).ToListAsync();
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Errore nella richiesta: {ex.Message}");
                 return new();
-
             }
         }
+
         public async Task<List<TaskEntity>> GetAllTaskAssignedToTeamAsync(Team team)
         {
             return await GetAllTaskAssignedToTeamAsync(team.Id);

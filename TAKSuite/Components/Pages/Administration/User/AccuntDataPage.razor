@@ -1,0 +1,107 @@
+﻿@page "/account/personal"
+@using TAKSuite.Components.Layout
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@inherits ConnectedUserInfo
+
+@inject UserServiceAtak UserAtakService
+@inject NavigationManager Navigation
+@inject ToastService toastService
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+    private UserAtak user = new();
+    private bool isLoading = true;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        try
+        {
+            user = ConnectedAtakUser;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Errore nel caricamento dell'utente: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        try
+        {
+            await UserAtakService.UpdateAsync(user);
+            toastService.Notify(new ToastMessage 
+                { Title = "Profilo", 
+                Message = "Profilo aggiornato correttamente", 
+                Type = ToastType.Success, 
+                AutoHide = true, 
+                IconName = IconName.Check2All });
+            //Navigation.NavigateTo("/users");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Errore nel salvataggio: {ex.Message}";
+        }
+    }
+}
+
+@if (isLoading)
+{
+    <p>Caricamento in corso...</p>
+}
+else if (!string.IsNullOrEmpty(errorMessage))
+{
+    <p class="text-danger">@errorMessage</p>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3 class="mb-0">Dati personali</h3>
+        <Button Type="ButtonType.Submit" Color="ButtonColor.Primary"><Icon Name="IconName.Floppy2Fill"/> Salva</Button>
+    </div>
+    <EditForm Model="user" OnValidSubmit="SaveAsync">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        <div class="mb-3 row">
+            <label class="col-sm-2 col-form-label">Nome</label>
+            <div class="col-sm-10">
+                <InputText class="form-control" @bind-Value="user.Name" />
+            </div>
+        </div>
+
+        <div class="mb-3 row">
+            <label class="col-sm-2 col-form-label">Cognome</label>
+            <div class="col-sm-10">
+                <InputText class="form-control" @bind-Value="user.Surname" />
+            </div>
+        </div>
+
+        <div class="mb-3 row">
+            <label class="col-sm-2 col-form-label">Email</label>
+            <div class="col-sm-10">
+                <InputText class="form-control" @bind-Value="user.Email" type="email" />
+            </div>
+        </div>
+
+        <div class="mb-3 row">
+            <label class="col-sm-2 col-form-label">Numero di telefono</label>
+            <div class="col-sm-10">
+                <InputText class="form-control" @bind-Value="user.PhoneNumber" />
+            </div>
+        </div>
+
+        <div class="mb-3 row">
+            <label class="col-sm-2 col-form-label">Nickname</label>
+            <div class="col-sm-10">
+                <InputText class="form-control" @bind-Value="user.Nick" />
+            </div>
+        </div>
+    </EditForm>
+}

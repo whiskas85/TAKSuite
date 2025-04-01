@@ -38,6 +38,7 @@
         }
         else
         {
+            teams.Add(await teamService.GetAsync(Model.AssignedTeam.Id));
             Model.AssignedTeamId = Model.AssignedTeam.Id;
         }
 
@@ -79,6 +80,7 @@
         if (Model.AssignedTeamId.HasValue)
         {
             Model.AssignedTeam = teams.FirstOrDefault(_ => _.Id == Model.AssignedTeamId);
+            newTask.AssignedTeamId = Model.AssignedTeamId;
         }
 
         TaskEntity taskEntity;
@@ -87,20 +89,19 @@
             newTask.Id = Model.Id.Value;
             taskEntity =  await taskService.UpdateAsync(newTask);  // Update existing task
         }
-        else
+        else if(!Model.AssignedTeamId.HasValue)
         {
             taskEntity = await taskService.InsertTaskAsync(newTask, User);
             Model.Id = taskEntity.Id;
         }
-
-        if (Model.AssignedTeam != null)
+        else
         {
             taskEntity = await taskService.InsertTaskByTeamAsync(newTask, Model.AssignedTeam, User);
         }
 
-
+        if (OnSuccess.HasDelegate) await OnSuccess.InvokeAsync();
         await modal.HideAsync();
-        // await OnSuccess.InvokeAsync();
+        
     }
 }
 

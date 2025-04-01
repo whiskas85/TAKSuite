@@ -49,12 +49,7 @@
     protected override async Task OnInitializedAsync()
     {
         // Carica i dati della missione all'inizializzazione
-        var json = await MartiApiClient.GetAllMissionsDataAsync();
-        var data = JsonSerializer.Deserialize<MissionsRoot>(json, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
-        MissionsList = data.Data.ToList();
+        MissionsList = await MartiApiClient.GetAllMissionsDataAsync();
         StateHasChanged(); 
     }
 
