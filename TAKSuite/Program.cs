@@ -71,9 +71,12 @@ builder.Services.AddTransient<RadioChannelService>();
 builder.Services.AddTransient<TeamRadioChannelService>();
 builder.Services.AddTransient<UserServiceAtak>();
 builder.Services.AddTransient<DocumentationService>();
+builder.Services.AddTransient<TaskService>();
+builder.Services.AddTransient<TaskPrioritiesService>();
 
 
 builder.Services.AddScoped<RadioChannelSeeder>();
+builder.Services.AddScoped<TaskPrioritySeeder>();
 
 
 builder.Services.AddMediaQueryService();
@@ -84,6 +87,9 @@ builder.Services.AddScoped<RegistrationCodeService>();
 
 builder.Services.AddHttpClient();
 
+
+
+builder.Services.AddMemoryCache();
 
 
 builder.Services.AddHttpContextAccessor();
@@ -104,6 +110,7 @@ lifetime.ApplicationStarted.Register(() =>
 {
     var cancellationToken = lifetime.ApplicationStopping;
     Task.Run(() => cotApiClient.StartListening(cancellationToken)); // Avvia il client in background
+    Task.Run(() => cotApiClient.StartKeepAliveLoop(cancellationToken));
 });
 
 // Configura il ciclo di vita dell'app

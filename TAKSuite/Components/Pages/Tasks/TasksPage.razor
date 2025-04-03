@@ -1,0 +1,74 @@
+﻿@page "/tasks"
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@inject TaskService taskService
+@inject IJSRuntime JS
+
+<PageTitle>Gestione Task</PageTitle>
+
+<ModalTaskAddUpdate @ref="modal" OnSuccess="RefreshTaskList" Model="modelTaskUpdate"/>
+
+<Button Color="ButtonColor.Primary" @onclick="() => ShowCreateTaskModal()">Crea Task</Button>
+
+<Grid TItem="TaskEntity"
+Class="table table-hover"
+HeaderRowCssClass="bg-success text-white border-bottom-0 h5"
+Data="TaskList"
+AllowFiltering="false"
+AllowPaging="false"
+AllowSorting="true"
+AllowRowClick="true"
+Responsive="true"
+
+
+>
+
+    <GridColumns>
+        <GridColumn TItem="TaskEntity" HeaderText="Nome" SortKeySelector="item => item.Name">
+            @context.Name
+        </GridColumn>
+        <GridColumn TItem="TaskEntity" HeaderText="Stato" SortKeySelector="item => item.Status">
+            @context.Status
+        </GridColumn>
+        <GridColumn TItem="TaskEntity" HeaderText="Squadra Assegnata" SortKeySelector="item => item.AssignedTeamId">
+            @context.AssignedTeam?.Name
+        </GridColumn>
+        <GridColumn TItem="TaskEntity" HeaderText="Ultima Modifica" SortKeySelector="item => item.LastModified">
+            @context.LastModified
+        </GridColumn>
+        <GridColumn TItem="TaskEntity" HeaderText="Azioni">
+            <Button Color="ButtonColor.Danger" @onclick="() => DeleteTask(context)"><Icon Name="IconName.X" /></Button>
+        </GridColumn>
+    </GridColumns>
+</Grid>
+
+@code {
+    ModalTaskAddUpdate modal = default!;
+    TaskModel modelTaskUpdate = new();
+
+    private List<TaskEntity> TaskList = new List<TaskEntity>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshTaskList();
+    }
+
+    private async Task RefreshTaskList()
+    {
+        TaskList = await taskService.GetAllAsync();
+    }
+
+    private async Task DeleteTask(TaskEntity task)
+    {
+        await taskService.DeleteAsync(task.Id);
+        await RefreshTaskList();
+        StateHasChanged();
+    }
+
+    private async Task ShowCreateTaskModal()
+    {
+        modelTaskUpdate = new TaskModel();
+        await modal.ShowAsync();
+        StateHasChanged();
+    }
+}

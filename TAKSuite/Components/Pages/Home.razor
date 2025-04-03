@@ -35,6 +35,8 @@
         {
             var id = user.UserId; // Assumendo che "Nick" sia una proprietà di ApplicationUser
             var atakUser = await _userServiceAtak.GetAsync(id);
+            
+            if (atakUser == null) return;
             nick = atakUser.Nick;
         }
         else

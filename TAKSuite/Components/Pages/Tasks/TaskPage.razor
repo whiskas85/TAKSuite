@@ -1,0 +1,386 @@
+﻿@page "/task/{TaskId:guid}"
+@inherits ConnectedUserInfo
+
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Components.Layout
+@using TAKSuite.Components.Pages.Documentation
+@using TAKSuite.Components.Pages.Missions
+@using TAKSuite.Components.Pages.Tasks.TaskComponents
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.ModelsTak
+@using TAKSuite.Data.Services
+@using TAKSuite.TAK.CoT
+@inject TaskService taskService
+@inject IJSRuntime JS
+@inject DocumentationService documentationService
+@inject TaskPrioritiesService taskPrioritiesService;
+@inject TeamService teamService
+@inject MartiApiClient martiApiClient
+
+
+
+<PageTitle>@taskEntity?.Name</PageTitle>
+
+<ModalLinkDocument @ref="modalLinkDocument" OnModalSuccess="OnSuccessLinkDocument" />    
+
+
+<Modal @ref="modal" Title="Aggiungi allegati">
+    <BodyTemplate>
+        <TAKSuite.Components.Pages.Documentation.DocumentUploadComponent MaxAllowedFiles="3" Owner="taskEntity" />
+    </BodyTemplate>
+</Modal>
+
+<Modal @ref="modalMission" Title="Seleziona missione">
+    <BodyTemplate>
+        <MissionsGrid OnDoubleClick="OnMissionSelected"> </MissionsGrid>
+    </BodyTemplate>
+</Modal>
+<Modal @ref="modalCoTMission" Title="Seleziona CoT di missione" Size="ModalSize.ExtraLarge">
+    <BodyTemplate>
+        <MissionsUidList MissionName="@taskEntity.MissionUid" @bind-SelectedItems="SelectedCoT"> </MissionsUidList>
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Primary" @onclick="ConfermaCoT">Ok</Button>
+        <Button Color="ButtonColor.Secondary" @onclick="CancelCoT">Cancel</Button>
+    </FooterTemplate>
+</Modal>
+
+@if (taskEntity == null)
+{
+    <p>Caricamento...</p>
+}
+else
+{
+    <div class="d-flex justify-content-between">
+        @if (isEditing)
+        {
+            <input type="text" @bind="editName" class="form-control" />
+        }
+        else
+        {
+            <h3>@taskEntity.Name</h3>
+        }
+        <div class="d-flex gap-2">
+            @if (isEditing)
+            {
+                <div class="d-flex gap-2">
+                    <Button Color="ButtonColor.Success" @onclick="SaveChanges"><Icon Name="IconName.Floppy2Fill"></Icon></Button>
+                    <Button Color="ButtonColor.Secondary" @onclick="CancelEdit"><Icon Name="IconName.XCircleFill"></Icon></Button>
+                </div>
+            }
+            else
+            {
+                <div class="d-flex gap-2">
+                    <Dropdown Color="DropdownColor.Secondary">
+                        <DropdownToggleButton>@taskEntity.Status</DropdownToggleButton>
+                        <DropdownMenu Class="p-0 text-muted" Style="width: 320px;">
+                            @foreach(var log in taskEntity.Logs.OrderBy(_=> _.Timestamp))
+                            {
+                                <div class="border rounded px-2 py-1 d-flex flex-column">
+                                    <p class="fw-bold mb-1">@log.NewStatus.ToString()</p>
+                                    <p class="small text-secondary mb-0"><Icon Name="IconName.Person"/> @log.Team?.Name - @log.User?.Nick</p>
+                                    <p class="small text-muted mb-0"><Icon Name="IconName.ClockFill" />@log.Timestamp.ToString()</p>
+                                </div>
+                            }
+                        </DropdownMenu>
+                    </Dropdown>
+
+                    <Button Color="ButtonColor.Primary" @onclick="EnableEdit" Outline="true"><Icon Name="IconName.PencilFill"></Icon></Button>  
+                </div>
+            }
+        </div>
+    </div>
+
+    @if (taskEntity.Priority != null && taskEntity.Priority.CardColor != CardColor.None)
+    {
+        AlertColor cColor = taskEntity.Priority.CardColor switch
+        {
+            CardColor.Primary => AlertColor.Primary,
+            CardColor.Secondary => AlertColor.Secondary,
+            CardColor.Success => AlertColor.Success,
+            CardColor.Danger => AlertColor.Danger,
+            CardColor.Warning => AlertColor.Warning,
+            CardColor.Info => AlertColor.Info,
+            CardColor.Light => AlertColor.Light,
+            CardColor.Dark => AlertColor.Dark,
+            _ => AlertColor.None
+        };
+        <Alert Color="cColor">
+            <div class="d-flex justify-content-between">
+                <strong>Priorità task: @taskEntity.Priority.Name</strong>
+                @if(isEditing)
+                {
+                    <Dropdown Color="DropdownColor.Secondary">
+                        <DropdownToggleButton>@titleChangePrio</DropdownToggleButton>
+                        <DropdownMenu>
+                            @foreach(var item in taskPriorities)
+                            {
+                                var active = taskEntity.PriorityId == item.Id;
+                                <DropdownItem To="#" Type="DropdownItemType.Button" @onclick="() => ChangePriority(item)" Active=@active>@item.Name</DropdownItem>
+                            }
+                        </DropdownMenu>
+                    </Dropdown>
+                }
+            </div>
+        </Alert>
+    }
+    @if (!isEditing)
+    {
+        <div class="py-2 d-flex flex-wrap w-100">
+            <TaskButtons Team="ConnectedAtakUser.Team" TaskEnt="taskEntity" Subteams="subteams" ShowButtonTitle=true User="ConnectedAtakUser" />
+        </div>
+    } 
+
+    @if(isEditing)
+    {
+        <div class="py-2 ">
+            <span>Missione:  @taskEntity.MissionUid <Tooltip Title="Seleziona una missione"><Button Color="ButtonColor.Primary" @onclick="ShowMissionSelection" ><Icon Name="IconName.Upload"/> Seleziona una missione</Button></Tooltip></span>
+            <span>Seleziona CoT:  @taskEntity.MissionUid <Tooltip Title="Seleziona CoT"><Button Color="ButtonColor.Primary" @onclick="ShowMissionCoTSelection"><Icon Name="IconName.Upload" /> Seleziona CoT di missione</Button></Tooltip></span>
+        </div>
+    }
+
+    <div class="py2 d-flex justify-content-between">
+        <h5>Allegati</h5>
+        <div class="d-flex gap-2">
+            <Tooltip Title="Upload del documento"><Button Color="ButtonColor.Primary" @onclick="AttachFile"><Icon Name="IconName.Upload" /></Button></Tooltip>
+            <Tooltip Title="Aggiungi da link"><Button Color="ButtonColor.Primary" @onclick="ShowLinkDocModal"><Icon Name="IconName.Link45Deg" /></Button></Tooltip>
+        </div>
+    </div>
+
+    <div class="d-flex flex-wrap">
+        @if (AttachmentList.Any())
+        {
+            @foreach (var attachment in AttachmentList)
+            {
+                <div class="d-flex mb-2 align-items-center me-3">
+                    <div class="d-flex align-items-center justify-content-center rounded-3 border border-primary ms-2 p-1">
+                        <Button Outline="true" Color="ButtonColor.Link" @onclick="() => DocumentationHelper.OpenAttachment(attachment, JS)">
+                            @attachment.Name
+                        </Button>
+
+                        <Button Outline="true" Color="ButtonColor.None" @onclick="() => UnlinkAttachment(attachment)" class="p-0">
+                            <Icon Color="IconColor.Danger" Name="IconName.X"></Icon>
+                        </Button>
+                    </div>
+                </div>
+            }
+        }
+        else
+        {
+            <span>Non ci sono allegati</span>
+        }
+    </div>
+
+
+
+    @if (!isEditing)
+    {
+        <h5>Dettagli</h5>
+        <ul>
+            <li><strong>Status: </strong>@taskEntity.Status.ToString()</li>
+            <li><strong>Ultima modifica: </strong>@taskEntity.LastModified</li>
+            <li><strong>Team Assegnato: </strong>@taskEntity.AssignedTeam?.Name</li>
+            <li><strong>Team Esecutivo: </strong>@taskEntity.ExecutingTeam?.Name</li>
+        </ul>
+    }
+
+    @if (!string.IsNullOrEmpty(taskEntity.MissionUid))
+    {
+        <span><strong>Missione: </strong>@taskEntity.MissionUid</span>
+    }
+    @if (!string.IsNullOrEmpty(taskEntity.MissionUid))
+    {
+        <ul>
+            @foreach (var cot in listCot)
+            {
+                <li><strong>@cot.Detail.Contact.Callsign</strong></li>
+            }
+        </ul>
+    }
+
+
+    <h5>Descrizione</h5>
+
+    @if (isEditing)
+    {
+        <MarkdownEditor SpellChecker="false" @bind-Value="@editDescription"></MarkdownEditor>
+    }
+    else
+    {
+        <Markdown>@taskEntity.Description</Markdown>
+    }
+}
+
+@code {
+    [Parameter] public Guid TaskId { get; set; }
+    TaskEntity? taskEntity;
+    Modal modal = default!;
+    Modal modalMission = default!;
+    Modal modalCoTMission = default!;
+
+    private List<TaskPriority> taskPriorities = new();
+    private List<Team> subteams = new();
+
+    private HashSet<UidEntry> SelectedCoT = new();
+
+    List<Documentation> AttachmentList = new();
+    bool isEditing = false;
+    bool needToBeSaved = false;
+    string editDescription = string.Empty;
+    string editName = string.Empty;
+    string editMission = string.Empty;
+    TaskPriority? editPriority = null;
+    private string titleChangePrio = "None";
+
+
+    private List<EventData> listCot = new();
+
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+
+        taskEntity = await taskService.GetAsync(TaskId);
+        if (taskEntity == null)
+            return;
+        titleChangePrio = taskEntity.Priority?.Name;
+
+        AttachmentList = await documentationService.GetAllByOwnerIdAsync(taskEntity);
+        taskPriorities = (await taskPrioritiesService.GetAllAsync()).OrderBy(_ => _.Level).ToList();
+
+        subteams = await teamService.GetSubTeamsAsync(ConnectedAtakUser.Team);
+
+
+        listCot.Clear();
+        foreach (var uid in taskEntity.Uids)
+        {
+            var elem = await martiApiClient.GetInfoOblectAsync(uid);
+            listCot.Add(elem);
+        }
+    }
+
+
+
+
+
+    ModalLinkDocument modalLinkDocument = default!;
+
+    private async Task ShowLinkDocModal()
+    {
+        if (taskEntity == null) return;
+        await modalLinkDocument.ShowAsync(taskEntity);
+    }
+
+    private async Task OnSuccessLinkDocument(Documentation item)
+    {
+        if (taskEntity == null) return;
+
+        await documentationService.LinkDocumentAsync(item, taskEntity);
+        AttachmentList = await documentationService.GetAllByOwnerIdAsync(taskEntity);
+        StateHasChanged();
+    }
+
+    private async Task ShowMissionSelection()
+    {
+        await modalMission.ShowAsync();
+        StateHasChanged();
+    }
+
+    private async Task ShowMissionCoTSelection()
+    {
+        await modalCoTMission.ShowAsync();
+        StateHasChanged();
+    }
+    private async Task OnMissionSelected(MissionAtak item)
+    {
+        await modalMission.HideAsync();
+        editMission = item.Name;
+        taskEntity.MissionUid = item.Name;
+
+        needToBeSaved = true;
+        StateHasChanged();
+    }
+
+
+    private async Task ConfermaCoT()
+    {
+        taskEntity.Uids.AddRange(SelectedCoT.ToList().Select(_=>_.Data).ToList());
+        await taskService.UpdateAsync(taskEntity);
+
+        await modalCoTMission.HideAsync();
+        StateHasChanged();
+    }
+    private async Task CancelCoT()
+    {
+        SelectedCoT.Clear();
+        await modalCoTMission.HideAsync();
+        StateHasChanged();
+    }
+
+
+    private async Task OnMissionCotSelected(List<MissionAtak> itemList)
+    {
+        await modalMission.HideAsync();
+        // editMission = item.Name;
+        // taskEntity.MissionUid = item.Name;
+
+        needToBeSaved = true;
+        StateHasChanged();
+    }
+
+
+    void EnableEdit()
+    {
+        isEditing = true;
+        editDescription = taskEntity?.Description ?? "";
+        editName = taskEntity?.Name ?? "";
+        editMission = taskEntity?.MissionUid ?? "";
+    }
+
+    void CancelEdit()
+    {
+        isEditing = false;
+    }
+
+    async Task SaveChanges()
+    {
+        if (taskEntity != null)
+        {
+            taskEntity.Name = editName;
+            taskEntity.Description = editDescription;
+            if (editPriority != null)
+            {
+                taskEntity.PriorityId = editPriority.Id;
+            }
+            taskEntity.MissionUid = editMission;
+
+            await taskService.UpdateAsync(taskEntity);
+            isEditing = false;
+            needToBeSaved = false;
+        }
+    }
+
+    async Task AttachFile()
+    {
+        await modal.ShowAsync();
+    }
+    
+    async Task UnlinkAttachment(Documentation attachment)
+    {
+        if (taskEntity != null && attachment != null)
+        {
+            await documentationService.UnLinkDocumentAsync(attachment, taskEntity);
+            AttachmentList.Remove(attachment); // Rimuovi l'allegato dalla lista
+        }
+    }
+    async Task ChangePriority(TaskPriority item)
+    {
+        editPriority = item;
+        titleChangePrio = item.Name;
+        StateHasChanged();
+    }
+
+
+    
+}

@@ -13,6 +13,7 @@
     using System.Buffers.Text;
     using TAKSuite.Data.ModelsTak;
     using TAKSuite.Data.ServicesTak;
+    using System.Security.Cryptography;
 
     public class MartiApiClient
     {
@@ -77,7 +78,7 @@
         }
 
 
-        public async Task<string?> GetAllMissionsDataAsync()
+        public async Task<List<MissionAtak>> GetAllMissionsDataAsync()
         {
             try
             {
@@ -89,7 +90,46 @@
                 if (response.IsSuccessStatusCode)
                 {
                     var res = response.Content.ReadAsStringAsync();
-                    return await res;
+                    var json = res.Result;
+                    
+                    var data = JsonSerializer.Deserialize<MissionsRoot>(json, new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    });
+                    var missionList = data.Data.ToList();
+
+                    return missionList; 
+                }
+
+                Console.WriteLine($"Errore HTTP: {response.StatusCode}");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Eccezione nella richiesta: {ex.Message}");
+                return null;
+            }
+        }
+
+        public async Task<List<UidEntry>> GetAllMissionsUidAsync(string missionName)
+        {
+            try
+            {
+                string url = $"Marti/api/missions/{missionName}";
+                HttpResponseMessage response = await client.GetAsync(url);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var res = response.Content.ReadAsStringAsync();
+                    var json = res.Result;
+
+                    var mission = JsonSerializer.Deserialize<MissionsRoot>(json, new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    });
+                    var missionList = mission.Data[0].Uids.ToList();
+
+                    return missionList;
                 }
 
                 Console.WriteLine($"Errore HTTP: {response.StatusCode}");
@@ -179,6 +219,31 @@
                 if (response.IsSuccessStatusCode)
                 {
                     return await response.Content.ReadAsStringAsync();
+                }
+
+                Console.WriteLine($"Errore HTTP: {response.StatusCode}");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Eccezione nella richiesta: {ex.Message}");
+                return null;
+            }
+        }
+        public async Task<EventData> GetInfoOblectAsync(string uid)
+        {
+            try
+            {
+                string url = $"Marti/api/cot/xml/{uid}";
+                HttpResponseMessage response = await client.GetAsync(url);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var message = await response.Content.ReadAsStringAsync();
+                    EventData eventData = EventData.LoadFromString(message);
+
+
+                    return eventData;
                 }
 
                 Console.WriteLine($"Errore HTTP: {response.StatusCode}");
@@ -312,6 +377,68 @@
                 }
 
                 Console.WriteLine($"Errore HTTP: {response.StatusCode}");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Eccezione nella richiesta: {ex.Message}");
+                return false;
+            }
+        }
+
+        internal async Task<bool> SubscribeMissionAsync(string missionUid)
+        {
+            try
+            {
+                string url = $"Marti/api/missions/subscriptions/add";
+
+                var requestBody = new
+                {
+                    uid = "tls:372",               // Identificativo del client
+                    protocol = "tls",     // Protocollo usato (es. "tls")
+                    subaddr = "10.147.19.211",       // Indirizzo a cui inviare i dati
+                    subport = 1234,       // Porta di destinazione
+                    //to = "",                 // Valore non specificato, puoi definirlo
+                    //xpath = "",              // Valore non specificato, puoi definirlo
+                    //filterGroups = "",       // Valore non specificato, puoi definirlo
+                    //iface = ""               // Valore non specificato, puoi definirlo
+                };
+
+                string json = JsonSerializer.Serialize(requestBody);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                HttpResponseMessage response = await client.PostAsync(url, content);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    Console.WriteLine("✅ Sottoscrizione alla missione avvenuta con successo!");
+                    return true;
+                }
+
+                Console.WriteLine($"❌ Errore HTTP: {response.StatusCode}, {await response.Content.ReadAsStringAsync()}");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Eccezione nella richiesta: {ex.Message}");
+                return false;
+            }
+        }
+
+        internal async Task<bool> UnsubscribeMissionAsync(string missionUid)
+        {
+            try
+            {
+                string url = $"Marti/api/subscriptions/delete/TAKSuitePortalServer";
+                HttpResponseMessage response = await client.DeleteAsync(url);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    return true;
+                    //return await response.Content.ReadAsStringAsync();
+                }
+
+                Console.WriteLine($"Errore HTTP: {response.StatusCode}, {response.Content}");
                 return false;
             }
             catch (Exception ex)

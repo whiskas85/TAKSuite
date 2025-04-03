@@ -247,7 +247,7 @@ Responsive="true">
 
     private async Task<GridDataProviderResult<Waypoint>> RequestDataProvider(GridDataProviderRequest<Waypoint> request)
     {
-        list = await WaypointService.GetAllAsync(missionUid);
+        list = await WaypointService.GetAllWaypointsAsync(missionUid);
         list = list.OrderBy(o => o.Callsign).ToList();
 
 

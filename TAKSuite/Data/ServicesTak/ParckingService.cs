@@ -16,10 +16,10 @@ namespace TAKSuite.Data.ServicesTak
             _client = client;
             _context = context;
         }
-        public async Task<List<Parking>> GetAllAsync()
+        public async Task<List<Parking>> GetAllAsync(String missionUid)
         {
             // le missioni devono essere tutte quelle che sono assegnate al team
-            var mission = await _client.GetMissionDataAsync("TEST FEED2"); 
+            var mission = await _client.GetMissionDataAsync(missionUid); 
             return await Task.Run(() => GetParkings(mission));
         }
 

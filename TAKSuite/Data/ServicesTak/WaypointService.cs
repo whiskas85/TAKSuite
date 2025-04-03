@@ -6,30 +6,61 @@ using Microsoft.EntityFrameworkCore;
 using TAKSuite.TAK.Helper;
 using System.Xml;
 using System.Text.Json.Nodes;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace TAKSuite.Data.ServicesTak
 {
     public class WaypointService
     {
         private readonly MartiApiClient _client;
-        private readonly ApplicationDbContext _context;
         private readonly CoTManager _cotManager;
-        public WaypointService(ApplicationDbContext context, MartiApiClient client, CoTManager manager)
+        public WaypointService(MartiApiClient client, CoTManager manager)
         {
-
             _client = client;
-            _context = context;
             _cotManager = manager;
         }
-        public async Task<List<Waypoint>> GetAllAsync(string missionUid)
+        public async Task<List<Waypoint>> GetAllWaypointsAsync(string missionUid)
         {
             // le missioni devono essere tutte quelle che sono assegnate al team
             var mission = await _client.GetMissionDataAsync(missionUid);
             return await Task.Run(() => GetWaypoints(mission));
         }
+        public async Task<List<UidEntry>> GetAllMissionCotAsync(string missionUid)
+        {
+            // le missioni devono essere tutte quelle che sono assegnate al team
+            var mission = await _client.GetMissionDataAsync(missionUid);
+            return await Task.Run(() => GetMissionCot(mission));
+        }
+
+        public async Task SubscribeMissionAsync(string mission)
+        {
+            await _client.SubscribeMissionAsync(mission);
+        }
+        public async Task UnSubscribeMissionAsync(string mission)
+        {
+            await _client.UnsubscribeMissionAsync(mission);
+        }
 
 
-        protected async Task<List<Waypoint>> GetWaypoints(string data)
+
+
+
+        private async Task<List<UidEntry>> GetMissionCot(string data)
+        {
+            var missionData = JsonSerializer.Deserialize<MissionsRoot>(data, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+            var uids = missionData.Data[0].Uids.Where(_ => _.Details.Type == "a-u-G").ToList();
+            return uids;
+            return new();
+        }
+
+
+
+
+
+        private async Task<List<Waypoint>> GetWaypoints(string data)
         {
             List<Waypoint> uidMission = new();
 

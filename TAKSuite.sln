@@ -5,7 +5,7 @@ VisualStudioVersion = 17.13.35825.156
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TAKSuite", "TAKSuite\TAKSuite.csproj", "{5F55D590-7A2C-42C7-9C8E-52F2A3A14426}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BlazorBuilds.Components", "..\..\..\Downloads\YT-BlazorBuilds-TreeView-main\YT-BlazorBuilds-TreeView-main\BlazorBuilds.Components\BlazorBuilds.Components.csproj", "{78A69E04-443C-AE3B-A0D3-FBF8DAC040E7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PSC.Blazor.Components.MarkdownEditor", "Extension\BlazorMarkdownEditor\PSC.Blazor.Components.MarkdownEditor\PSC.Blazor.Components.MarkdownEditor.csproj", "{C762E95B-32E6-4458-C25D-5DDA8E7D27A1}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -17,10 +17,10 @@ Global
 		{5F55D590-7A2C-42C7-9C8E-52F2A3A14426}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5F55D590-7A2C-42C7-9C8E-52F2A3A14426}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5F55D590-7A2C-42C7-9C8E-52F2A3A14426}.Release|Any CPU.Build.0 = Release|Any CPU
-		{78A69E04-443C-AE3B-A0D3-FBF8DAC040E7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{78A69E04-443C-AE3B-A0D3-FBF8DAC040E7}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{78A69E04-443C-AE3B-A0D3-FBF8DAC040E7}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{78A69E04-443C-AE3B-A0D3-FBF8DAC040E7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C762E95B-32E6-4458-C25D-5DDA8E7D27A1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C762E95B-32E6-4458-C25D-5DDA8E7D27A1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C762E95B-32E6-4458-C25D-5DDA8E7D27A1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C762E95B-32E6-4458-C25D-5DDA8E7D27A1}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

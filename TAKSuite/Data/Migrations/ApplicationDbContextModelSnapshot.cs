@@ -248,11 +248,16 @@ namespace TAKSuite.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<Guid?>("TaskEntityId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("TaskEntityId");
 
                     b.ToTable("Documents");
                 });
@@ -325,6 +330,144 @@ namespace TAKSuite.Migrations
                     b.ToTable("RegistrationCodes");
                 });
 
+            modelBuilder.Entity("TAKSuite.Data.Models.TaskEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("AssignedTeamId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreationDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid?>("ExecutingTeamId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("LastModified")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("MissionUid")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Points")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("PriorityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.PrimitiveCollection<string>("Uids")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssignedTeamId");
+
+                    b.HasIndex("ExecutingTeamId");
+
+                    b.HasIndex("PriorityId");
+
+                    b.ToTable("Tasks");
+                });
+
+            modelBuilder.Entity("TAKSuite.Data.Models.TaskHierarchy", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("TeamId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TaskId");
+
+                    b.HasIndex("TeamId");
+
+                    b.ToTable("TaskHierarchy");
+                });
+
+            modelBuilder.Entity("TAKSuite.Data.Models.TaskLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ActionDescription")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("NewStatus")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PreviousStatus")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("TeamId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TaskId");
+
+                    b.HasIndex("TeamId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("TaskLogs");
+                });
+
+            modelBuilder.Entity("TAKSuite.Data.Models.TaskPriority", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("CardColor")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Level")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("TaskPriorities");
+                });
+
             modelBuilder.Entity("TAKSuite.Data.Models.Team", b =>
                 {
                     b.Property<Guid>("Id")
@@ -333,6 +476,10 @@ namespace TAKSuite.Migrations
 
                     b.Property<int>("Color")
                         .HasColumnType("int");
+
+                    b.Property<string>("MissionUid")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -495,6 +642,13 @@ namespace TAKSuite.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("TAKSuite.Data.Models.Documentation", b =>
+                {
+                    b.HasOne("TAKSuite.Data.Models.TaskEntity", null)
+                        .WithMany("Documents")
+                        .HasForeignKey("TaskEntityId");
+                });
+
             modelBuilder.Entity("TAKSuite.Data.Models.DocumentationOwner", b =>
                 {
                     b.HasOne("TAKSuite.Data.Models.Documentation", "Documentation")
@@ -515,6 +669,67 @@ namespace TAKSuite.Migrations
                         .IsRequired();
 
                     b.Navigation("Team");
+                });
+
+            modelBuilder.Entity("TAKSuite.Data.Models.TaskEntity", b =>
+                {
+                    b.HasOne("TAKSuite.Data.Models.Team", "AssignedTeam")
+                        .WithMany()
+                        .HasForeignKey("AssignedTeamId");
+
+                    b.HasOne("TAKSuite.Data.Models.Team", "ExecutingTeam")
+                        .WithMany()
+                        .HasForeignKey("ExecutingTeamId");
+
+                    b.HasOne("TAKSuite.Data.Models.TaskPriority", "Priority")
+                        .WithMany()
+                        .HasForeignKey("PriorityId");
+
+                    b.Navigation("AssignedTeam");
+
+                    b.Navigation("ExecutingTeam");
+
+                    b.Navigation("Priority");
+                });
+
+            modelBuilder.Entity("TAKSuite.Data.Models.TaskHierarchy", b =>
+                {
+                    b.HasOne("TAKSuite.Data.Models.TaskEntity", "Task")
+                        .WithMany("Hierarchy")
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TAKSuite.Data.Models.Team", "Team")
+                        .WithMany()
+                        .HasForeignKey("TeamId");
+
+                    b.Navigation("Task");
+
+                    b.Navigation("Team");
+                });
+
+            modelBuilder.Entity("TAKSuite.Data.Models.TaskLog", b =>
+                {
+                    b.HasOne("TAKSuite.Data.Models.TaskEntity", "Task")
+                        .WithMany("Logs")
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("TAKSuite.Data.Models.Team", "Team")
+                        .WithMany()
+                        .HasForeignKey("TeamId");
+
+                    b.HasOne("TAKSuite.Data.Models.UserAtak", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId");
+
+                    b.Navigation("Task");
+
+                    b.Navigation("Team");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("TAKSuite.Data.Models.Team", b =>
@@ -571,6 +786,15 @@ namespace TAKSuite.Migrations
             modelBuilder.Entity("TAKSuite.Data.Models.Documentation", b =>
                 {
                     b.Navigation("DocumentationOwners");
+                });
+
+            modelBuilder.Entity("TAKSuite.Data.Models.TaskEntity", b =>
+                {
+                    b.Navigation("Documents");
+
+                    b.Navigation("Hierarchy");
+
+                    b.Navigation("Logs");
                 });
 
             modelBuilder.Entity("TAKSuite.Data.Models.Team", b =>

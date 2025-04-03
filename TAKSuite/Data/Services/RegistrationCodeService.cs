@@ -10,6 +10,7 @@ using TAKSuite.Data.Services.BaseDataManagement;
 using System.Linq.Expressions;
 using Microsoft.AspNetCore.Components;
 using BlazorBootstrap;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace TAKSuite.Data.Services
 {
@@ -17,7 +18,7 @@ namespace TAKSuite.Data.Services
     {
         
 
-        public RegistrationCodeService(ApplicationDbContext context) : base(context.RegistrationCodes, context)
+        public RegistrationCodeService(ApplicationDbContext context, IMemoryCache cache) : base(context.RegistrationCodes, context, cache)
         {
            Includes = [c => c.Team];
         }
