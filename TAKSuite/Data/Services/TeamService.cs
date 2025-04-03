@@ -1,11 +1,12 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using TAKSuite.Data.Models;
 
 namespace TAKSuite.Data.Services
 {
     public class TeamService : DataServiceAbstract<Team>
     {
-        public TeamService(ApplicationDbContext context) : base(context.Teams, context)
+        public TeamService(ApplicationDbContext context, IMemoryCache cache) : base(context.Teams, context, cache)
         {
             Includes = [_ => _.TeamLeader];
         }

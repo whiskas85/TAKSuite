@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.Build.Framework;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using TAKSuite.Data.Models;
 
 namespace TAKSuite.Data.Services
@@ -11,7 +12,7 @@ namespace TAKSuite.Data.Services
 
 
         private readonly ApplicationDbContext _context;
-        public DocumentationService(ApplicationDbContext contex) : base(contex.Documents, contex)
+        public DocumentationService(ApplicationDbContext contex, IMemoryCache cache) : base(contex.Documents, contex, cache)
         {
             _context = contex;
             Includes = [_ => _.DocumentationOwners];

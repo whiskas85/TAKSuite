@@ -1,5 +1,6 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Org.BouncyCastle.Tsp;
 using System.Threading.Tasks;
 using TAKSuite.Components.Pages;
@@ -9,7 +10,7 @@ namespace TAKSuite.Data.Services
 {
     public class TaskService : DataServiceAbstract<TaskEntity>
     {
-        public TaskService(ApplicationDbContext context) : base(context.Tasks, context)
+        public TaskService(ApplicationDbContext context, IMemoryCache cache) : base(context.Tasks, context, cache)
         {
             Includes = [ _ =>_.Priority,
                          _=> _.Logs,

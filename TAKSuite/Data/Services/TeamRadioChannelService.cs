@@ -2,12 +2,13 @@
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace TAKSuite.Data.Services
 {
     public class TeamRadioChannelService : DataServiceAbstract<TeamRadioChannel>
     {
-        public TeamRadioChannelService(ApplicationDbContext context) : base(context.TeamRadioChannels, context)
+        public TeamRadioChannelService(ApplicationDbContext context, IMemoryCache cache) : base(context.TeamRadioChannels, context, cache)
         {
             Includes = [_ => _.RadioChannel, _ => _.BackupRadioChannel];
         }

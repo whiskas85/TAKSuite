@@ -44,7 +44,7 @@
                 <DropdownToggleButton />
                 <DropdownMenu>
                     <DropdownHeader>Propria squadra</DropdownHeader>
-                    <DropdownItem To="#" Type="DropdownItemType.Link">@Team?.Name</DropdownItem>
+                    <DropdownItem @onclick="() =>AssignTask(TaskEnt, Team)" Type="DropdownItemType.Link">@Team?.Name</DropdownItem>
                     <DropdownDivider>Dropdown header</DropdownDivider>
                     <DropdownHeader>Altre squadre</DropdownHeader>
                     @foreach (var subteam in Subteams)

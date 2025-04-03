@@ -9,12 +9,13 @@
 @using TAKSuite.Data.Models
 @using TAKSuite.Data.ModelsTak
 @using TAKSuite.Data.Services
+@using TAKSuite.TAK.CoT
 @inject TaskService taskService
 @inject IJSRuntime JS
 @inject DocumentationService documentationService
 @inject TaskPrioritiesService taskPrioritiesService;
-
 @inject TeamService teamService
+@inject MartiApiClient martiApiClient
 
 
 
@@ -157,7 +158,6 @@ else
                             @attachment.Name
                         </Button>
 
-
                         <Button Outline="true" Color="ButtonColor.None" @onclick="() => UnlinkAttachment(attachment)" class="p-0">
                             <Icon Color="IconColor.Danger" Name="IconName.X"></Icon>
                         </Button>
@@ -179,14 +179,25 @@ else
         <ul>
             <li><strong>Status: </strong>@taskEntity.Status.ToString()</li>
             <li><strong>Ultima modifica: </strong>@taskEntity.LastModified</li>
-            <li><strong>Team Assegnato: </strong>@taskEntity.ExecutingTeam?.Name</li>
+            <li><strong>Team Assegnato: </strong>@taskEntity.AssignedTeam?.Name</li>
+            <li><strong>Team Esecutivo: </strong>@taskEntity.ExecutingTeam?.Name</li>
+        </ul>
+    }
 
-            @if(!string.IsNullOrEmpty(taskEntity.MissionUid))
+    @if (!string.IsNullOrEmpty(taskEntity.MissionUid))
+    {
+        <span><strong>Missione: </strong>@taskEntity.MissionUid</span>
+    }
+    @if (!string.IsNullOrEmpty(taskEntity.MissionUid))
+    {
+        <ul>
+            @foreach (var cot in listCot)
             {
-                <li><strong>Missione: </strong>@taskEntity.MissionUid</li>
+                <li><strong>@cot.Detail.Contact.Callsign</strong></li>
             }
         </ul>
     }
+
 
     <h5>Descrizione</h5>
 
@@ -212,8 +223,6 @@ else
 
     private HashSet<UidEntry> SelectedCoT = new();
 
-
-
     List<Documentation> AttachmentList = new();
     bool isEditing = false;
     bool needToBeSaved = false;
@@ -222,6 +231,11 @@ else
     string editMission = string.Empty;
     TaskPriority? editPriority = null;
     private string titleChangePrio = "None";
+
+
+    private List<EventData> listCot = new();
+
+
 
     protected override async Task OnInitializedAsync()
     {
@@ -236,6 +250,14 @@ else
         taskPriorities = (await taskPrioritiesService.GetAllAsync()).OrderBy(_ => _.Level).ToList();
 
         subteams = await teamService.GetSubTeamsAsync(ConnectedAtakUser.Team);
+
+
+        listCot.Clear();
+        foreach (var uid in taskEntity.Uids)
+        {
+            var elem = await martiApiClient.GetInfoOblectAsync(uid);
+            listCot.Add(elem);
+        }
     }
 
 

@@ -230,6 +230,31 @@
                 return null;
             }
         }
+        public async Task<EventData> GetInfoOblectAsync(string uid)
+        {
+            try
+            {
+                string url = $"Marti/api/cot/xml/{uid}";
+                HttpResponseMessage response = await client.GetAsync(url);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var message = await response.Content.ReadAsStringAsync();
+                    EventData eventData = EventData.LoadFromString(message);
+
+
+                    return eventData;
+                }
+
+                Console.WriteLine($"Errore HTTP: {response.StatusCode}");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Eccezione nella richiesta: {ex.Message}");
+                return null;
+            }
+        }
 
         public async Task<bool> ChangeCotColor(string uid, int newColor)
         {

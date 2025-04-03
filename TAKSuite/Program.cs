@@ -89,6 +89,9 @@ builder.Services.AddHttpClient();
 
 
 
+builder.Services.AddMemoryCache();
+
+
 builder.Services.AddHttpContextAccessor();
 
 
