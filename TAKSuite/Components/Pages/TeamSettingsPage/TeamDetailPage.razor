@@ -1,5 +1,6 @@
 ﻿@page "/team/{TeamId:guid}/details"
 @using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Components.Pages.Missions
 @using TAKSuite.Components.Pages.Operatori
 @using TAKSuite.Components.Pages.RegistrationCode
 @using TAKSuite.Data.Models
@@ -49,13 +50,51 @@
 <p><strong>Mail: </strong>@team?.TeamLeader?.Email</p>
 
 
+<h5><strong>Mission: </strong>@team?.MissionUid <Button Color="ButtonColor.Primary" @onclick="SelectMission"><Icon Name="IconName.Search"></Icon></Button><Button Color="ButtonColor.Primary" @onclick="DeleteMission"><Icon Name="IconName.X"></Icon></Button> </h5>
+
+
+
+<Modal @ref="modalMission" Title="Seleziona missione">
+    <BodyTemplate>
+        <MissionsGrid OnDoubleClick="OnMissionSelected"> </MissionsGrid>
+    </BodyTemplate>
+</Modal>
 
 <TAKSuite.Components.Pages.Operatori.ModalSelectOperator @ref="modalSelect" TeamId="@TeamId" OnModalSuccess="Success" />
 @code {
     [Parameter]
     public Guid TeamId { get; set; }
 
+    private Modal modalMission = default!;
+
     private ModalSelectOperator modalSelect = default!;
+
+
+    
+    
+    
+    private async Task OnMissionSelected(MissionAtak item)
+    {
+        await modalMission.HideAsync();
+        team.MissionUid = item.Name;
+        await _teamService.UpdateAsync(team);
+        StateHasChanged();
+    }
+
+    private async Task SelectMission()
+    {
+        await modalMission.ShowAsync();
+    }
+    private async Task DeleteMission()
+    {
+        team.MissionUid = "";
+        await _teamService.UpdateAsync(team);
+        StateHasChanged();
+    }
+
+
+
+
 
 
     private async Task Clicca()

@@ -1,13 +1,14 @@
 ﻿using TAKSuite.Data.Models;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace TAKSuite.Data.Services
 {
     public class RadioChannelService : DataServiceAbstract<RadioChannel>
     {
 
-        public RadioChannelService(ApplicationDbContext context) : base(context.RadioChannels, context)
+        public RadioChannelService(ApplicationDbContext context, IMemoryCache cache) : base(context.RadioChannels, context, cache)
         {
 
         }

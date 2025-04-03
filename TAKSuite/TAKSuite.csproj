@@ -23,6 +23,8 @@
     <Content Remove="Components\Pages\RegistrationCode\RegCode2.razor" />
     <Content Remove="Components\Pages\TeamSettingsPage\TeamPage - Copia.razor" />
     <Content Remove="Components\Pages\Weather.razor" />
+    <Content Remove="wwwroot\cot\presCot - Copia.xml" />
+    <Content Remove="wwwroot\cot\presCot.xml" />
   </ItemGroup>
 
   <ItemGroup>
@@ -62,10 +64,16 @@
     <None Include="wwwroot\certs\webadmin.pem">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="wwwroot\cot\presCot - Copia.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="wwwroot\cot\presCot.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\..\Downloads\YT-BlazorBuilds-TreeView-main\YT-BlazorBuilds-TreeView-main\BlazorBuilds.Components\BlazorBuilds.Components.csproj" />
+    <ProjectReference Include="..\Extension\BlazorMarkdownEditor\PSC.Blazor.Components.MarkdownEditor\PSC.Blazor.Components.MarkdownEditor.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -75,6 +83,12 @@
     <Content Update="wwwroot\images\tak trasp.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="TAK\CoT\file\presCot.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

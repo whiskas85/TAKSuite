@@ -3,7 +3,8 @@
 @using TAKSuite.Components.Pages.RegistrationCode
 @using TAKSuite.Data.Seeder
 
-@inject RadioChannelSeeder _seeder;
+@inject RadioChannelSeeder _seederRadio;
+@inject TaskPrioritySeeder _seederTaskPriority;
 
 <PageTitle>Home</PageTitle>
 
@@ -12,12 +13,17 @@
 Welcome to your new app.
 
 
-<Button Color="ButtonColor.Primary" @onclick="RadioChannelSeeder">Seed</Button>
+<Button Color="ButtonColor.Primary" @onclick="RadioChannelSeeder">Seed Radio</Button>
+<Button Color="ButtonColor.Primary" @onclick="TaskPrioritySeeder">Seed Task Priority</Button>
 
 
 @code {
     private async Task RadioChannelSeeder()
     {
-        await _seeder.ImportRadioChannelsAsync();
+        await _seederRadio.SeedAsync();
+    }
+    private async Task TaskPrioritySeeder()
+    {
+        await _seederTaskPriority.SeedAsync();
     }
 }

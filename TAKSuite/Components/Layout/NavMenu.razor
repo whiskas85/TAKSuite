@@ -1,6 +1,5 @@
 ﻿@using TAKSuite.Data.Services
 @implements IDisposable
-
 @inject NavigationManager NavigationManager
 @inject TeamService TeamService
 
@@ -27,6 +26,7 @@ Width="300"/>
     private async Task<IEnumerable<NavItem>> GetNavItems()
     {
         int counter = 0;
+        
         navItems = new List<NavItem>
         {
 
@@ -51,15 +51,16 @@ Width="300"/>
             // new NavItem { Id = "13", Href = "/auth", IconName = IconName.Lock, Text = "Auth Required" },
 
 
-
+            
             new NavItem { Id = "8", Href = "/auth", IconName = IconName.GearFill, Text = "Settings" },
-                new NavItem { Id = "8.0", Href = "/seeder", IconName = IconName.Database, Text = "Seeder",ParentId="8" },
-                new NavItem { Id = "8.1", Href = "/radiochannels", IconName = IconName.Database, Text = "Radio Channels",ParentId="8" },
-                new NavItem { Id = "8.2", Href = "/regcodes", IconName = IconName.Database, Text = "Registration Codes",ParentId="8" },
-                new NavItem { Id = "8.3", Href = "/manage-teams", IconName = IconName.PeopleFill, Text = "Manage Teams" , ParentId="8"},
-                new NavItem { Id = "8.4", Href = "/test", IconName = IconName.ListNested, Text = "Test", ParentId="8" },
-                new NavItem { Id = "8.5", Href = "/teams", IconName = IconName.ListNested, Text = "All Teams", ParentId = "8" },
-                new NavItem { Id = "8.5", Href = "/documentation", IconName = IconName.ListNested, Text = "Documentazione", ParentId = "8" },
+                new NavItem { Id = $"8.{counter=0}", Href = "/seeder", IconName = IconName.Database, Text = "Seeder",ParentId="8" },
+                new NavItem { Id = $"8.{counter++}", Href = "/radiochannels", IconName = IconName.Database, Text = "Radio Channels",ParentId="8" },
+                new NavItem { Id = $"8.{counter++}", Href = "/regcodes", IconName = IconName.Database, Text = "Registration Codes",ParentId="8" },
+                new NavItem { Id = $"8.{counter++}", Href = "/manage-teams", IconName = IconName.PeopleFill, Text = "Manage Teams" , ParentId="8"},
+                new NavItem { Id = $"8.{counter++}", Href = "/test", IconName = IconName.ListNested, Text = "Test", ParentId="8" },
+                new NavItem { Id = $"8.{counter++}", Href = "/teams", IconName = IconName.ListNested, Text = "All Teams", ParentId = "8" },
+                new NavItem { Id = $"8.{counter++}", Href = "/documentation", IconName = IconName.ListNested, Text = "Documentazione", ParentId = "8" },
+                new NavItem { Id = $"8.{counter++}", Href = "/tasks", IconName = IconName.ListNested, Text = "Lista Task", ParentId = "8" },
             // new NavItem { Id = "1", Href = "/getting-started", IconName = IconName.HouseDoorFill, Text = "Getting Started"},
 
             // new NavItem { Id = "2", IconName = IconName.LayoutSidebarInset, Text = "Content" },
@@ -110,6 +111,8 @@ Width="300"/>
                 navItems.Add(new NavItem { Href = $"{hrefBase}/operators", Text = "Operatori", IconName = IconName.PersonFill, ParentId = teamMenuid, Id = $"{id}.{team.Id}.{counter++}" });
                 navItems.Add(new NavItem { Href = $"{hrefBase}/documentation", Text = "Documentazione", IconName = IconName.FileTypeDoc, ParentId = teamMenuid, Id = $"{id}.{team.Id}.{counter++}" });
                 navItems.Add(new NavItem { Href = $"{hrefBase}/tasks", Text = "Tasks", IconName = IconName.FileTypeDoc, ParentId = teamMenuid, Id = $"{id}.{team.Id}.{counter++}" });
+                navItems.Add(new NavItem { Href = $"{hrefBase}/tasks/inprogress", Text = "Task in progress", IconName = IconName.FileTypeDoc, ParentId = teamMenuid, Id = $"{id}.{team.Id}.{counter++}" });
+                navItems.Add(new NavItem { Href = $"{hrefBase}/parkings", Text = "Parking", IconName = IconName.PCircleFill, ParentId = teamMenuid, Id = $"{id}.{team.Id}.{counter++}" });
 
             }
         }

@@ -124,7 +124,7 @@
 
     private async Task<GridDataProviderResult<Parking>> RequestDataProvider(GridDataProviderRequest<Parking> request)
     {
-        list = await ParckingService.GetAllAsync();
+        list = await ParckingService.GetAllAsync("TEST FEED2");
         return await Task.FromResult(request.ApplyTo(list));
     }
 

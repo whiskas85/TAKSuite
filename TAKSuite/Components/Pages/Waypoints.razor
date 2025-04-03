@@ -64,7 +64,8 @@
 
 <h3>Waypoint</h3>
 <p>In questa schermata vengono rappresentati tutti i waypoint</p>
-
+<Button Color="ButtonColor.Primary" @onclick="Subscribe">Subscribe</Button>
+<Button Color="ButtonColor.Primary" @onclick="UnSubscribe">Unsubscribe</Button>
 
 <Modal @ref="modal" Title="Lista allegati" OnHidden="OnModalHidden" Size="ModalSize.Large">
     <BodyTemplate>
@@ -219,6 +220,15 @@ Responsive="true">
             }
         }
     }
+    private async Task Subscribe()
+    {
+        await WaypointService.SubscribeMissionAsync("TEST FEED2");
+    }
+    private async Task UnSubscribe()
+    {
+        await WaypointService.UnSubscribeMissionAsync("TEST FEED2");
+    }
+    
     private async Task DeleteAttachment(AtakAttachment attach)
     {
         bool res = await AttachmentService.DeleteAsync(attach);
@@ -260,7 +270,7 @@ Responsive="true">
 
     private async Task<GridDataProviderResult<Waypoint>> RequestDataProvider(GridDataProviderRequest<Waypoint> request)
     {
-        list = await WaypointService.GetAllAsync(missionUid);
+        list = await WaypointService.GetAllWaypointsAsync(missionUid);
         list = list.OrderBy(o => o.Callsign).ToList();
         StateHasChanged();
         return await Task.FromResult(request.ApplyTo(list));

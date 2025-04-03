@@ -1,0 +1,150 @@
+﻿@page "/team/{TeamId:guid}/parkings"
+@inherits ConnectedUserInfo
+
+@rendermode InteractiveServer
+
+@using System.ComponentModel.DataAnnotations
+@using TAKSuite.Components.Layout
+@using TAKSuite.Data
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.ModelsTak
+@using TAKSuite.Data.Services
+@using TAKSuite.Data.ServicesTak
+@using TAKSuite.Helper
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+
+
+@inject TeamService TeamService;
+@inject ParckingService ParckingService
+
+@inject IJSRuntime JS
+@inject TAKSuite.Helpers.JsInteropHelper JsHelper
+@inject ToastService ToastService;
+@inject NavigationManager NavigationManager
+
+
+@inject UserManager<ApplicationUser> UserManager
+
+<style>
+    .icon-header {
+    width: 50px;
+    }
+</style>
+<script>
+    function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+    console.log("Testo copiato: " + text);
+    }).catch(err => {
+    console.error("Errore nella copia:", err);
+    });
+    }
+</script>
+
+<PageTitle>Gestione Parking</PageTitle>
+
+
+
+<h3>Gestione parcheggi</h3>
+<p>In questa schermata vengono rappresentati tutti i parcheggi su TAK inseriti come OSM Parcking</p>
+
+<Grid @ref="grid"
+TItem="Parking"
+
+Class="table table-hover"
+HeaderRowCssClass="bg-success text-white border-bottom-0 h5"
+FiltersRowCssClass="bg-success text-white bg-opacity-25 border-bottom-0"
+
+Data="list"
+AllowFiltering="false"
+AllowPaging="false"
+PageSize="20"
+AllowSorting="true"
+AllowSelection="false"
+SelectionMode="GridSelectionMode.Multiple"
+SelectedItemsChanged="OnSelectedItemsChanged"
+Unit="Unit.Px"
+
+
+
+
+Responsive="true">
+
+    <GridColumns>
+        <GridColumn TItem="Parking" HeaderText="" class="align-middle icon-header" >
+
+            <TAKSuite.Components.Pages.Components.IconComponent Component="context" IconName="local_parking" />
+            @* <i class="material-icons" style="color: @GetColor(context);">local_parking</i> *@
+            @* <Icon Name="IconName.PCircleFill" Size="IconSize.x2" style="color: @color;" /> *@
+        </GridColumn>
+        <GridColumn TItem="Parking" HeaderText="Callsign" Class="align-middle one" SortKeySelector="item => item.Callsign">
+            @context.Callsign
+        </GridColumn>
+
+        <GridColumn TItem="Parking" HeaderText="Lat" Class="align-middle">
+            @context.Lat
+        </GridColumn>
+        <GridColumn TItem="Parking" HeaderText="Lon" Class="align-middle" >
+            @context.Lon
+        </GridColumn>
+        <GridColumn TItem="Parking" HeaderText="Maps" Class="align-middle">
+            <Button @onclick="()=> NavigateToCounterComponent(context)" Color="ButtonColor.Primary">Naviga</Button>
+        </GridColumn>
+
+
+
+    </GridColumns>
+
+</Grid>
+
+
+@* <button @onclick="@LogUsername">Log username</button> *@
+@code {
+
+    [CascadingParameter]
+    private Task<AuthenticationState> authenticationStateTask { get; set; }
+
+    [Parameter]public Guid TeamId { get; set; }
+
+
+    private List<Parking> list = null;
+    Grid<Parking> grid = default!;
+
+
+    private string GetColor(IColoredCoT item)
+    {
+        var color = Helper.ColorConverterHelper.ArgbToHex(item.Color.Value);
+        if (color.ToLower() == "#ffffff")
+            color = "#000000";
+        return color;
+    }
+
+
+    private async Task NavigateToCounterComponent(Parking item)
+    {
+        var url = $"https://www.google.com/maps?q={item.Lat.ToString().Replace(",", ".")},{item.Lon.ToString().Replace(",", ".")}";
+        await JsHelper.OpenInNewTab(url);
+    }
+
+
+    private Task OnSelectedItemsChanged(HashSet<Parking> codes)
+    {
+        var selecteCodes = codes is not null && codes.Any() ? codes : new();
+        return Task.CompletedTask;
+    }
+
+    private Team team;
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        team = await TeamService.GetAsync(TeamId);
+        
+        if (team == null || string.IsNullOrEmpty(team.MissionUid)) return;
+        list = await ParckingService.GetAllAsync(team.MissionUid);
+        StateHasChanged();
+
+
+    }
+    
+
+}

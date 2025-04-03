@@ -1,32 +1,41 @@
-﻿using TAKSuite.Data.Models;
+﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+using TAKSuite.Data.Models;
 
 namespace TAKSuite.Data.Services
 {
     public class TeamService : DataServiceAbstract<Team>
     {
-        public TeamService(ApplicationDbContext context) : base(context.Teams, context)
+        public TeamService(ApplicationDbContext context, IMemoryCache cache) : base(context.Teams, context, cache)
         {
             Includes = [_ => _.TeamLeader];
         }
 
-        //// Ottieni tutti i team
-        //public async Task<List<Team>> GetTeamsAsync()
-        //{
-        //    try
-        //    {
-        //        var teams = await _context.Teams.ToListAsync();
+        public async Task<List<Team>> GetSubTeamsAsync(Team team)
+        {
+            try
+            {
+                var subTeams = await _context.Teams
+                    .Where(t => t.ParentTeamId == team.Id)
+                    .ToListAsync();
 
+                // Lista totale di tutti i sotto-team (inclusi quelli annidati)
+                List<Team> allSubTeams = new(subTeams);
 
+                // Per ogni sotto-team, recupera ricorsivamente i suoi sotto-team
+                foreach (var subTeam in subTeams)
+                {
+                    allSubTeams.AddRange(await GetSubTeamsAsync(subTeam));
+                }
 
-        //        var teams = await _httpClient.GetFromJsonAsync<List<Team>>("api/team");
-        //        return teams ?? new List<Team>();
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        Console.WriteLine($"Errore nella richiesta: {ex.Message}");
-        //        return new List<Team>();
-        //    }
-        //}
+                return allSubTeams;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Errore nella richiesta: {ex.Message}");
+                return new List<Team>();
+            }
+        }
 
         //// Ottieni un singolo team per ID
         //public async Task<Team?> GetTeamByIdAsync(Guid id)

@@ -1,0 +1,12 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<event version="2.0" uid="TAKSuiteServer" type="a-f-G-U-C" how="h-g-i-g-o" time="{time}" start="{start}" stale="{stale}" access="Undefined">
+	<point lat="0.0" lon="0.0" hae="9999999.0" ce="9999999.0" le="9999999.0"/>
+	<detail>
+		<contact callsign="TAKSuite" endpoint="*:-1:stcp"/>
+		<__group name="Red" role="HQ"/>
+		<status battery="71"/>
+		<takv device="OUKITEL G1" platform="Windows" os="11" version="TAKSuite"/>
+		<track speed="0.0" course="0.0"/>
+		<uid Droid="TAKSuite"/>
+	</detail>
+</event>
