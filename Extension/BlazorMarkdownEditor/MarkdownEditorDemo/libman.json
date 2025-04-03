@@ -1,0 +1,18 @@
+{
+  "version": "1.0",
+  "defaultProvider": "cdnjs",
+  "libraries": [
+    {
+      "library": "font-awesome@5.15.4",
+      "destination": "wwwroot/lib/font-awesome/"
+    },
+    {
+      "library": "jquery@3.6.0",
+      "destination": "wwwroot/lib/query/"
+    },
+    {
+      "library": "highlight.js@11.8.0",
+      "destination": "wwwroot/lib/highlight.js/"
+    }
+  ]
+}
