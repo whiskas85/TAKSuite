@@ -11,7 +11,7 @@ namespace TAKSuite.Data.Services
             Includes = [_ => _.TeamLeader];
         }
 
-        public async Task<List<Team>> GetSubTeamsAsync(Team team)
+        public async Task<List<Team>> GetSubTeamsAsync(Team team, bool includeMyTeam = false)
         {
             try
             {
@@ -28,6 +28,12 @@ namespace TAKSuite.Data.Services
                     allSubTeams.AddRange(await GetSubTeamsAsync(subTeam));
                 }
 
+                if (includeMyTeam)
+                {
+                    // Aggiungi il team corrente alla lista se includeMyTeam è true
+                    allSubTeams.Insert(0,team);
+                }
+
                 return allSubTeams;
             }
             catch (Exception ex)
@@ -36,64 +42,5 @@ namespace TAKSuite.Data.Services
                 return new List<Team>();
             }
         }
-
-        //// Ottieni un singolo team per ID
-        //public async Task<Team?> GetTeamByIdAsync(Guid id)
-        //{
-        //    try
-        //    {
-        //        return await _httpClient.GetFromJsonAsync<Team>($"api/team/{id}");
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        Console.WriteLine($"Errore nella richiesta: {ex.Message}");
-        //        return null;
-        //    }
-        //}
-
-        //// Crea un nuovo team
-        //public async Task<bool> CreateTeamAsync(Team team)
-        //{
-        //    try
-        //    {
-        //        var response = await _httpClient.PostAsJsonAsync("api/team", team);
-        //        return response.IsSuccessStatusCode;
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        Console.WriteLine($"Errore nella richiesta: {ex.Message}");
-        //        return false;
-        //    }
-        //}
-
-        //// Aggiorna un team esistente
-        //public async Task<bool> UpdateTeamAsync(Team team)
-        //{
-        //    try
-        //    {
-        //        var response = await _httpClient.PutAsJsonAsync($"api/team/{team.Id}", team);
-        //        return response.IsSuccessStatusCode;
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        Console.WriteLine($"Errore nella richiesta: {ex.Message}");
-        //        return false;
-        //    }
-        //}
-
-        //// Elimina un team
-        //public async Task<bool> DeleteTeamAsync(Guid id)
-        //{
-        //    try
-        //    {
-        //        var response = await _httpClient.DeleteAsync($"api/team/{id}");
-        //        return response.IsSuccessStatusCode;
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        Console.WriteLine($"Errore nella richiesta: {ex.Message}");
-        //        return false;
-        //    }
-        //}
     }
 }

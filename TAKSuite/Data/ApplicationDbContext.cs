@@ -20,6 +20,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<TaskLog> TaskLogs { get; set; }
     public DbSet<TaskHierarchy> TaskHierarchy { get; set; }
     public DbSet<TaskPriority> TaskPriorities { get; set; }
+    public DbSet<EventEntity> EventEntities { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

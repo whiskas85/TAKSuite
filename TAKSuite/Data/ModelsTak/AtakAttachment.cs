@@ -4,8 +4,8 @@ namespace TAKSuite.Data.ModelsTak
 {
     public class AtakAttachment
     {
-        internal string? MediaType;
-        internal byte[] FileBytes;
+        internal string? MediaType { get; set; }
+        internal byte[] FileBytes { get; set; }
 
         public string Uid { get; set; }
         public string Name { get; set; }

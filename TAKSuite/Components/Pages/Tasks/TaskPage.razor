@@ -135,16 +135,19 @@ else
     {
         <div class="py-2 ">
             <span>Missione:  @taskEntity.MissionUid <Tooltip Title="Seleziona una missione"><Button Color="ButtonColor.Primary" @onclick="ShowMissionSelection" ><Icon Name="IconName.Upload"/> Seleziona una missione</Button></Tooltip></span>
-            <span>Seleziona CoT:  @taskEntity.MissionUid <Tooltip Title="Seleziona CoT"><Button Color="ButtonColor.Primary" @onclick="ShowMissionCoTSelection"><Icon Name="IconName.Upload" /> Seleziona CoT di missione</Button></Tooltip></span>
+            <span>CoT:  @String.Join(", ", taskEntity.Uids) <Tooltip Title="Seleziona CoT"><Button Color="ButtonColor.Primary" @onclick="ShowMissionCoTSelection"><Icon Name="IconName.Upload" /> Seleziona CoT di missione</Button></Tooltip></span>
         </div>
     }
 
     <div class="py2 d-flex justify-content-between">
         <h5>Allegati</h5>
-        <div class="d-flex gap-2">
-            <Tooltip Title="Upload del documento"><Button Color="ButtonColor.Primary" @onclick="AttachFile"><Icon Name="IconName.Upload" /></Button></Tooltip>
+        @if (isEditing)
+        {
+            <div class="d-flex gap-2">
+                <Tooltip Title="Upload del documento"><Button Color="ButtonColor.Primary" @onclick="AttachFile"><Icon Name="IconName.Upload" /></Button></Tooltip>
             <Tooltip Title="Aggiungi da link"><Button Color="ButtonColor.Primary" @onclick="ShowLinkDocModal"><Icon Name="IconName.Link45Deg" /></Button></Tooltip>
         </div>
+        }
     </div>
 
     <div class="d-flex flex-wrap">
@@ -158,9 +161,12 @@ else
                             @attachment.Name
                         </Button>
 
-                        <Button Outline="true" Color="ButtonColor.None" @onclick="() => UnlinkAttachment(attachment)" class="p-0">
-                            <Icon Color="IconColor.Danger" Name="IconName.X"></Icon>
-                        </Button>
+                        @if (isEditing)
+                        {
+                            <Button Outline="true" Color="ButtonColor.None" @onclick="() => UnlinkAttachment(attachment)" class="p-0">
+                                <Icon Color="IconColor.Danger" Name="IconName.X"></Icon>
+                            </Button>
+                        }
                     </div>
                 </div>
             }

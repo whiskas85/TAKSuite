@@ -17,13 +17,18 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await base.OnInitializedAsync();
+
+        
+    }
+    protected override async Task OnParametersSetAsync()
+    {
+        await base.OnParametersSetAsync();
         team = await teamService.GetAsync(TeamId);
         StateHasChanged();
 
         await listModel.RefreshList();
         StateHasChanged();
-
-        
     }
 
 }

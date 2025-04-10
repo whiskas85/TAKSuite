@@ -90,9 +90,21 @@ namespace TAKSuite.TAK.CoT
             Thread.Sleep(100);
 
             // ✅ Aggiornamento della missione con il nuovo colore
-            await _martiApiClient.UpdateMissionUidAsync(uid, missionUid);
+            await _martiApiClient.UpdateMissionUidAsync(missionUid, uid);
             return true;
         }
+        public async Task<bool> TryUpdateCoTMission(string missionUid, string uid)
+        {
+            
+
+            // ✅ Aggiornamento della missione con il nuovo colore
+            await _martiApiClient.UpdateMissionUidAsync(missionUid, uid);
+            return true;
+        }
+
+
+
+
         public async Task<bool> ChangeCotColor(string uid, int newColor)
         {
             try

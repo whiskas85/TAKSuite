@@ -36,10 +36,13 @@ public class CoTApiClient
     }
 
     /// <summary>
-    /// Avvia il listener per ricevere messaggi dal server
+    /// Avvia il listener per ricevere messaggi XML dal server
     /// </summary>
     public async Task StartListening(CancellationToken cancellationToken)
     {
+        List<string> buffer = new();
+        string? rootTagName = null;
+
         while (!cancellationToken.IsCancellationRequested)
         {
             try
@@ -62,11 +65,39 @@ public class CoTApiClient
                 using var reader = new StreamReader(sslStream, Encoding.UTF8);
                 while (!cancellationToken.IsCancellationRequested)
                 {
-                    string message = await reader.ReadLineAsync();
-                    if (message != null)
+                    string? line = await reader.ReadLineAsync();
+                    if (line == null) continue;
+
+                    Console.WriteLine($"Messaggio ricevuto: {line}");
+
+                    // Ignora la dichiarazione XML
+                    if (line.StartsWith("<?xml")) continue;
+
+                    // Se non abbiamo ancora trovato il root tag
+                    if (rootTagName == null)
                     {
-                        Console.WriteLine($"Messaggio ricevuto: {message}");
-                        await ProcessMessage(message);
+                        // Cerca il nome del tag root
+                        var match = Regex.Match(line, @"<([a-zA-Z0-9:_\-]+)[\s>]");
+                        if (match.Success)
+                        {
+                            rootTagName = match.Groups[1].Value;
+                            Console.WriteLine($"Root tag rilevato: <{rootTagName}>");
+                        }
+                    }
+
+                    buffer.Add(line);
+
+                    // Se il tag di chiusura del root è presente nella linea, processiamo
+                    if (rootTagName != null && line.Contains($"</{rootTagName}>"))
+                    {
+                        string completeMessage = string.Join(Environment.NewLine, buffer);
+                        Console.WriteLine($"Messaggio XML completo:\n{completeMessage}");
+
+                        await ProcessMessage(completeMessage);
+
+                        // Reset
+                        buffer.Clear();
+                        rootTagName = null;
                     }
                 }
             }
@@ -74,10 +105,11 @@ public class CoTApiClient
             {
                 Console.WriteLine($"Errore nella connessione o nel ricevere i messaggi: {ex.Message}");
                 Console.WriteLine("Riprovo in 5 secondi...");
-                await Task.Delay(5000, cancellationToken); // Attendi 5 secondi prima di riprovare a connetterti
+                await Task.Delay(5000, cancellationToken);
             }
         }
     }
+
 
     /// <summary>
     /// Avvia un loop che invia un messaggio di keep-alive ogni 5 minuti

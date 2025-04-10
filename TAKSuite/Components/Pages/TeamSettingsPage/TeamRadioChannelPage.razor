@@ -93,19 +93,26 @@
 
     List<RadioChannelGroup> radioChannelList = new();
 
-    protected override async void OnInitialized()
+    protected override async Task OnParametersSetAsync()
     {
-        Thread.Sleep(100);
+        await base.OnParametersSetAsync();
+
+        // Thread.Sleep(100);
         team = await _teamService.GetAsync(TeamId);
-        Thread.Sleep(100);
+        // Thread.Sleep(100);
         teams = await _teamService.GetAllAsync();
 
-        Thread.Sleep(100);
+        // Thread.Sleep(100);
         radioList = await _radioChannelService.GetAllAsync();
         radioList.Sort((x, y) => x.Name.CompareTo(y.Name));
 
         await RefreshChannelList();
         StateHasChanged();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
     }
     private string GetRowClass(TeamRadioChannel trc)
     {

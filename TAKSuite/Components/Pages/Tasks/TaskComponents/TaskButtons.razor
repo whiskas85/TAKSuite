@@ -1,11 +1,13 @@
 ﻿@using TAKSuite.Data.Models
 @using TAKSuite.Data.Services
+@using TAKSuite.TAK.CoT
+@inject MartiApiClient martiApiClient
 
 @switch (TaskEnt.Status)
 {
     case TaskStatusTak.Scheduled:
-         <Tooltip Placement="TooltipPlacement.Top" Title="Schedula attività ad una squadra">
-            <Dropdown Color="DropdownColor.Light" Direction="DropdownDirection.Dropdown" Split="true" Class="me-2">
+        <Tooltip Placement="TooltipPlacement.Top" Title="Schedula attività ad una squadra">
+            <Dropdown Color="DropdownColor.Light" Direction="DropdownDirection.Dropdown" Split="true" Class="me-2 my-2">
                 <DropdownActionButton>Riassegna</DropdownActionButton>
                 <DropdownToggleButton />
                 <DropdownMenu>
@@ -19,7 +21,7 @@
         </Tooltip>
 
         <Tooltip Placement="TooltipPlacement.Top" Title="Accetta task">
-            <Button @onclick="() =>AcceptTask(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 d-flex align-items-center gap-2">
+            <Button @onclick="() =>AcceptTask(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 my-2 d-flex align-items-center gap-2">
                 <Icon color="IconColor.Success" Name="IconName.CheckLg" />
                 @if (ShowButtonTitle)
                 {
@@ -28,7 +30,7 @@
             </Button>
         </Tooltip>
         <Tooltip Placement="TooltipPlacement.Top" Title="Rifiuta">
-            <Button @onclick="() =>RejectTask(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 d-flex align-items-center gap-2">
+            <Button @onclick="() =>RejectTask(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 my-2 d-flex align-items-center gap-2">
                 <Icon color="IconColor.Danger" Name="IconName.XLg" />
                 @if (ShowButtonTitle)
                 {
@@ -38,8 +40,8 @@
         </Tooltip>
         break;
     case TaskStatusTak.Accepted:
-         <Tooltip Placement="TooltipPlacement.Top" Title="Assegna esecuzione">
-             <Dropdown Color="DropdownColor.Light" Direction="DropdownDirection.Dropdown" Split="true" Class="me-2">
+        <Tooltip Placement="TooltipPlacement.Top" Title="Assegna esecuzione">
+            <Dropdown Color="DropdownColor.Light" Direction="DropdownDirection.Dropdown" Split="true" Class="me-2 my-2">
                 <DropdownActionButton @onclick="() =>AssignTask(TaskEnt, Team)">@Team?.Name</DropdownActionButton>
                 <DropdownToggleButton />
                 <DropdownMenu>
@@ -55,7 +57,7 @@
             </Dropdown>
         </Tooltip>
         <Tooltip Placement="TooltipPlacement.Top" Title="Rifiuta">
-            <Button @onclick="() =>RejectTask(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 d-flex align-items-center gap-2">
+            <Button @onclick="() =>RejectTask(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 my-2 d-flex align-items-center gap-2">
                 <Icon color="IconColor.Danger" Name="IconName.XLg" />
                 @if (ShowButtonTitle)
                 {
@@ -66,7 +68,7 @@
         break;
     case TaskStatusTak.Assigned:
         <Tooltip Placement="TooltipPlacement.Top" Title="Esegui task">
-            <Button @onclick="() =>EseguiTask(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 d-flex align-items-center gap-2">
+            <Button @onclick="() =>EseguiTask(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 my-2 d-flex align-items-center gap-2">
                 <Icon color="IconColor.Success" Name="IconName.PlayFill" />
                 @if (ShowButtonTitle)
                 {
@@ -74,8 +76,26 @@
                 }
             </Button>
         </Tooltip>
+        <Tooltip Placement="TooltipPlacement.Top" Title="Import CoT">
+            <Button @onclick="() => ImportCoTs(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 my-2 d-flex align-items-center gap-2">
+                <Icon color="IconColor.Success" Name="IconName.Upload" />
+                @if (ShowButtonTitle)
+                {
+                    <span class="d-flex align-items-center">Import CoT</span>
+                }
+            </Button>
+        </Tooltip>
+        <Tooltip Placement="TooltipPlacement.Top" Title="Import CoT">
+            <Button @onclick="() => RemoveCoTs(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 my-2 d-flex align-items-center gap-2">
+                <Icon color="IconColor.Danger" Name="IconName.Upload" />
+                @if (ShowButtonTitle)
+                {
+                    <span class="d-flex align-items-center">Remove CoT</span>
+                }
+            </Button>
+        </Tooltip>
         <Tooltip Placement="TooltipPlacement.Top" Title="Reject task">
-            <Button @onclick="() =>RejectTask(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 d-flex align-items-center gap-2">
+            <Button @onclick="() =>RejectTask(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 my-2 d-flex align-items-center gap-2">
                 <Icon color="IconColor.Danger" Name="IconName.XLg" />
                 @if (ShowButtonTitle)
                 {
@@ -85,8 +105,26 @@
         </Tooltip>
         break;
     case TaskStatusTak.InProgress:
+        <Tooltip Placement="TooltipPlacement.Top" Title="Import CoT">
+            <Button @onclick="() => ImportCoTs(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 my-2 d-flex align-items-center gap-2">
+                <Icon color="IconColor.Success" Name="IconName.Upload" />
+                @if (ShowButtonTitle)
+                {
+                    <span class="d-flex align-items-center">Import CoT</span>
+                }
+            </Button>
+        </Tooltip>
+        <Tooltip Placement="TooltipPlacement.Top" Title="Import CoT">
+            <Button @onclick="() => RemoveCoTs(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 my-2 d-flex align-items-center gap-2">
+                <Icon color="IconColor.Danger" Name="IconName.Upload" />
+                @if (ShowButtonTitle)
+                {
+                    <span class="d-flex align-items-center">Remove CoT</span>
+                }
+            </Button>
+        </Tooltip>
         <Tooltip Placement="TooltipPlacement.Top" Title="Task completato">
-            <Button @onclick="() =>CompleteTask(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 d-flex align-items-center gap-2">
+            <Button @onclick="() =>CompleteTask(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 my-2 d-flex align-items-center gap-2">
                 <Icon color="IconColor.Success" Name="IconName.Check2All" />
                 @if (ShowButtonTitle)
                 {
@@ -95,7 +133,7 @@
             </Button>
         </Tooltip>
         <Tooltip Placement="TooltipPlacement.Top" Title="Task Fallito">
-            <Button @onclick="() =>FailedTask(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 d-flex align-items-center gap-2">
+            <Button @onclick="() =>FailedTask(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 my-2 d-flex align-items-center gap-2">
                 <Icon color="IconColor.Danger" Name="IconName.EmojiDizzyFill" />
                 @if (ShowButtonTitle)
                 {
@@ -104,7 +142,7 @@
             </Button>
         </Tooltip>
         <Tooltip Placement="TooltipPlacement.Top" Title="Task Abortito">
-            <Button @onclick="() =>AbortedTask(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 d-flex align-items-center gap-2">
+            <Button @onclick="() =>AbortedTask(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 my-2 d-flex align-items-center gap-2">
                 <Icon color="IconColor.Danger" Name="IconName.XSquareFill" />
                 @if (ShowButtonTitle)
                 {
@@ -115,7 +153,7 @@
         break;
     case TaskStatusTak.RejectedTier2:
         <Tooltip Placement="TooltipPlacement.Top" Title="Restore task">
-            <Button @onclick="() =>RestoreTask(TaskEnt, Team)" Color="ButtonColor.Success" Class="me-2 d-flex align-items-center gap-2">
+            <Button @onclick="() =>RestoreTask(TaskEnt, Team)" Color="ButtonColor.Success" Class="me-2 my-2 d-flex align-items-center gap-2">
                 <Icon color="IconColor.Success" Name="IconName.FileArrowUpFill" />
                 @if (ShowButtonTitle)
                 {
@@ -217,6 +255,42 @@
         }
 
     }
+
+    private async Task ImportCoTs(TaskEntity task, Team team)
+    {
+        try
+        {
+            await martiApiClient.UpdateMissionUidAsync(team.MissionUid, task.Uids);
+            toastService.Notify(new ToastMessage { Title = "Importazione CoT", Message = "Importazione completata con successo", IconName = IconName.Upload, Type = ToastType.Success, AutoHide = true });
+            StateHasChanged();
+        }
+        catch (Exception e)
+        {
+            toastService.Notify(new ToastMessage { Title = "Attenzione", Message = e.Message, IconName = IconName.ExclamationTriangleFill, Type = ToastType.Danger, AutoHide = true });
+        }
+
+    }
+
+    private async Task RemoveCoTs(TaskEntity task, Team team)
+    {
+        try
+        {
+            foreach (var uid in task.Uids)
+            {
+                await martiApiClient.DeleteMissionUidAsync(team.MissionUid, uid);
+            }
+
+            toastService.Notify(new ToastMessage { Title = "Importazione CoT", Message = "Importazione completata con successo", IconName = IconName.Upload, Type = ToastType.Success, AutoHide = true });
+            StateHasChanged();
+        }
+        catch (Exception e)
+        {
+            toastService.Notify(new ToastMessage { Title = "Attenzione", Message = e.Message, IconName = IconName.ExclamationTriangleFill, Type = ToastType.Danger, AutoHide = true });
+        }
+
+    }
+
+
     private async Task CompleteTask(TaskEntity task, Team team)
     {
         try

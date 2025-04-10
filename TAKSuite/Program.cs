@@ -13,6 +13,7 @@ using TAKSuite.Data.ServicesTak;
 using BlazorPro.BlazorSize;
 using TAKSuite.Data.Seeder;
 using TAKSuite.Data.Services.BaseDataManagement;
+using TAKSuite.Data.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -58,6 +59,9 @@ builder.Services.AddSingleton<CoTManager>();      // CoTManager
 builder.Services.AddTransient<WebSocketManagerCustom>();
 
 
+
+builder.Services.AddSingleton<UserSession>();      // CoTManager
+
 // Add services
 //ServicesRegistration.ConfigureServices(builder.Services);
 
@@ -73,10 +77,13 @@ builder.Services.AddTransient<UserServiceAtak>();
 builder.Services.AddTransient<DocumentationService>();
 builder.Services.AddTransient<TaskService>();
 builder.Services.AddTransient<TaskPrioritiesService>();
+builder.Services.AddTransient<EventEntityService>();
+
 
 
 builder.Services.AddScoped<RadioChannelSeeder>();
 builder.Services.AddScoped<TaskPrioritySeeder>();
+builder.Services.AddScoped<EPSGSeeder>();
 
 
 builder.Services.AddMediaQueryService();

@@ -89,16 +89,20 @@ else
     private List<TaskEntity> TaskList = new List<TaskEntity>();
     private List<TaskEntity> FilteredTaskList = new();
 
+    protected override async Task OnParametersSetAsync()
+    {
+        await base.OnParametersSetAsync();
+        team = await teamService.GetAsync(TeamId);
+        if (team != null) subteams = await teamService.GetSubTeamsAsync(team);
 
+        await RefreshTaskList();
+        StateHasChanged();
+    }
 
     protected override async Task OnInitializedAsync()
     {
         await base.OnInitializedAsync();
-        team = await teamService.GetAsync(TeamId);
-        if(team != null) subteams = await teamService.GetSubTeamsAsync(team);
-
-        await RefreshTaskList();
-        StateHasChanged();
+        
 
     }
     private async Task RefreshTasks()

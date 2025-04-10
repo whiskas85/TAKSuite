@@ -4,12 +4,19 @@
 @using Microsoft.AspNetCore.Authentication
 @using Microsoft.AspNetCore.Identity
 @using TAKSuite.Data
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
 
 @inject SignInManager<ApplicationUser> SignInManager
 @inject ILogger<Login> Logger
 @inject NavigationManager NavigationManager
 @inject IdentityRedirectManager RedirectManager
 
+@inject UserSession UserSession
+@inject IUserStore<ApplicationUser> UserStore
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserServiceAtak _userServiceAtak;
 
 <PageTitle>Login</PageTitle>
 <div class="d-flex justify-content-center align-items-start vh-100 pt-5">
@@ -72,6 +79,9 @@
         if (result.Succeeded)
         {
             Logger.LogInformation("User logged in.");
+
+            UserSession.Team = await User();
+
             RedirectManager.RedirectTo(ReturnUrl);
         }
         else if (result.RequiresTwoFactor)
@@ -88,6 +98,26 @@
             errorMessage = "Error: Invalid login attempt.";
         }
     }
+
+    
+    private async Task<UserAtak> User()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = await UserManager.GetUserAsync(authState.User);
+
+        if (user != null)
+        {
+            var id = user.UserId; // Assumendo che "Nick" sia una proprietà di ApplicationUser
+            var atakUser = await _userServiceAtak.GetAsync(id);
+            return atakUser;
+        }
+        else
+        {
+            Console.WriteLine("Utente non trovato.");
+        }
+        return null;
+    }
+
 
     private sealed class InputModel
     {

@@ -5,16 +5,18 @@
 
 @inject RadioChannelSeeder _seederRadio;
 @inject TaskPrioritySeeder _seederTaskPriority;
+@inject EPSGSeeder _seederEPSG;
 
 <PageTitle>Home</PageTitle>
 
-<h1>Hello, world!</h1>
+<h1>Gestione seeder</h1>
 
 Welcome to your new app.
 
 
 <Button Color="ButtonColor.Primary" @onclick="RadioChannelSeeder">Seed Radio</Button>
 <Button Color="ButtonColor.Primary" @onclick="TaskPrioritySeeder">Seed Task Priority</Button>
+<Button Color="ButtonColor.Primary" @onclick="EPSGSeeder">EPSG</Button>
 
 
 @code {
@@ -25,5 +27,9 @@ Welcome to your new app.
     private async Task TaskPrioritySeeder()
     {
         await _seederTaskPriority.SeedAsync();
+    }
+    private async Task EPSGSeeder()
+    {
+        await _seederEPSG.SeedAsync();
     }
 }

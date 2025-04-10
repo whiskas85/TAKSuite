@@ -281,6 +281,32 @@ namespace TAKSuite.Migrations
                     b.ToTable("DocumentationOwners");
                 });
 
+            modelBuilder.Entity("TAKSuite.Data.Models.EventEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("LastEditTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("Timestamp")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Title")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("EventEntities");
+                });
+
             modelBuilder.Entity("TAKSuite.Data.Models.RadioChannel", b =>
                 {
                     b.Property<Guid>("Id")

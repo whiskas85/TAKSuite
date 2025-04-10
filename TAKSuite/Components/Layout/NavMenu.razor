@@ -1,4 +1,5 @@
 ﻿@using TAKSuite.Data.Services
+@* @inherits ConnectedUserInfo *@
 @implements IDisposable
 @inject NavigationManager NavigationManager
 @inject TeamService TeamService
@@ -26,7 +27,7 @@ Width="300"/>
     private async Task<IEnumerable<NavItem>> GetNavItems()
     {
         int counter = 0;
-        
+
         navItems = new List<NavItem>
         {
 
@@ -51,7 +52,7 @@ Width="300"/>
             // new NavItem { Id = "13", Href = "/auth", IconName = IconName.Lock, Text = "Auth Required" },
 
 
-            
+
             new NavItem { Id = "8", Href = "/auth", IconName = IconName.GearFill, Text = "Settings" },
                 new NavItem { Id = $"8.{counter=0}", Href = "/seeder", IconName = IconName.Database, Text = "Seeder",ParentId="8" },
                 new NavItem { Id = $"8.{counter++}", Href = "/radiochannels", IconName = IconName.Database, Text = "Radio Channels",ParentId="8" },
@@ -96,7 +97,14 @@ Width="300"/>
         var id = navItems.FirstOrDefault(x => x.Text == teamsTitle)?.Id;
         if (id != null)
         {
+            // if (ConnectedAtakUser == null) 
+            //     return new List<NavItem>();
+            // if (ConnectedAtakUser.Team == null)
+            //     return new List<NavItem>();
+
+            // var teams = await TeamService.GetSubTeamsAsync(ConnectedAtakUser.Team, true);
             var teams = await TeamService.GetAllAsync();
+
             foreach (var team in teams)
             {
                 var teamMenuid = $"{id}.{team.Id}";
@@ -113,6 +121,7 @@ Width="300"/>
                 navItems.Add(new NavItem { Href = $"{hrefBase}/tasks", Text = "Tasks", IconName = IconName.FileTypeDoc, ParentId = teamMenuid, Id = $"{id}.{team.Id}.{counter++}" });
                 navItems.Add(new NavItem { Href = $"{hrefBase}/tasks/inprogress", Text = "Task in progress", IconName = IconName.FileTypeDoc, ParentId = teamMenuid, Id = $"{id}.{team.Id}.{counter++}" });
                 navItems.Add(new NavItem { Href = $"{hrefBase}/parkings", Text = "Parking", IconName = IconName.PCircleFill, ParentId = teamMenuid, Id = $"{id}.{team.Id}.{counter++}" });
+                navItems.Add(new NavItem { Href = $"{hrefBase}/waypoints", Text = "Waypoint", IconName = IconName.PinAngleFill, ParentId = teamMenuid, Id = $"{id}.{team.Id}.{counter++}" });
 
             }
         }
@@ -131,6 +140,10 @@ Width="300"/>
 
     private string? currentUrl;
 
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+    }
     protected override void OnInitialized()
     {
         currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);

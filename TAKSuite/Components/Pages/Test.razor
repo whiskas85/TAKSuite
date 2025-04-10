@@ -1,9 +1,32 @@
-﻿@page "/test/{TeamId:guid}"
-@rendermode InteractiveServer
+﻿@page "/test"
+@using TAKSuite.Components.Layout
+@using TAKSuite.Components.Pages.EventEntityComponents
+@inherits ConnectedUserInfo
+
 <PageTitle>Home</PageTitle>
 
 <h1>Pagina test</h1>
+<Button Color="ButtonColor.Primary" @onclick="() => OnClick()">Test</Button>
+<EventEntities @ref=grid> </EventEntities>
 
+
+<Modal @ref=modal Size="ModalSize.Large" Title="Aggiungi Evento">
+    <BodyTemplate>
+        <EventAdd OnSubmitted="OnSubmitted"></EventAdd>   
+    </BodyTemplate>
+</Modal>
 @code {
-    
+    private Modal modal = default!;
+    private EventEntities grid = default!;
+
+    private async Task OnClick()
+    {
+        await modal.ShowAsync();
+    }
+    private async Task OnSubmitted()
+    {
+        await modal.HideAsync();
+        await grid.RefreshList();
+
+    }
 }

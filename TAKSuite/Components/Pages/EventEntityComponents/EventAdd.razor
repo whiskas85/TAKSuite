@@ -1,0 +1,86 @@
+﻿@using System.ComponentModel.DataAnnotations
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@inject EventEntityService eventEntityService;
+
+<style>
+    .valid.modified:not([type=checkbox]) {
+    outline: 1px solid #26b050;
+    }
+
+    .invalid {
+    outline: 1px solid red;
+    }
+
+    .validation-message {
+    color: red;
+    }
+</style>
+
+<EditForm EditContext="@editContext" OnValidSubmit="HandleOnValidSubmit">
+    <DataAnnotationsValidator />
+    <TAKSuite.Components.Pages.Components.DateTimeInput Title="Ora inizio:" @bind-Value=modelView.Timestamp></TAKSuite.Components.Pages.Components.DateTimeInput>
+
+    <div class="form-group row mb-3">
+        <label class="col-md-2 col-form-label">Name: <span class="text-danger">*</span></label>
+        <div class="col-md-10">
+            <TextInput @bind-Value="@modelView.Title" Rows="3" Placeholder="Enter title" />
+            <ValidationMessage For="@(() => modelView.Title)" />
+        </div>
+    </div>
+
+    <div class="form-group row mb-3">
+        <label class="col-md-2 col-form-label">Description: <span class="text-danger">*</span></label>
+        <div class="col-md-10">
+            <TextAreaInput @bind-Value="@modelView.Note" Rows="3" Placeholder="Enter note" />
+            <ValidationMessage For="@(() => modelView.Note)" />
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-12 text-right">
+            <Button Type="ButtonType.Button" Color="ButtonColor.Secondary" Class="float-end" @onclick="ResetForm">Chiudi</Button>
+            <Button Type="ButtonType.Submit" Color="ButtonColor.Success" Class="float-end me-2">@(Item == null? "Aggiungi":"Modifica")</Button>
+            </div>
+    </div>
+
+</EditForm>
+
+@code {
+    [Parameter] public EventEntity? Item { get; set; }
+    [Parameter] public EventCallback OnSubmitted { get; set; }
+
+
+    private EditContext? editContext;
+    private EventEntityModel modelView = null;
+
+
+    protected override void OnInitialized()
+    {
+        if (Item != null) modelView = new(eventEntityService, Item);
+        else modelView = new(eventEntityService);
+
+        editContext = new EditContext(modelView);
+        base.OnInitialized();
+    }
+
+    public async Task HandleOnValidSubmit()
+    {
+        if (editContext == null) return;
+
+        if (editContext.Validate())
+        {
+            await modelView.Save();
+            Console.WriteLine("Form submitted successfully");
+            if (OnSubmitted.HasDelegate) await OnSubmitted.InvokeAsync();
+        }
+    }
+
+    private void ResetForm()
+    {
+        if (Item != null) modelView = new(eventEntityService, Item);
+        else modelView = new(eventEntityService);
+
+        editContext = new EditContext(modelView);
+    }
+}

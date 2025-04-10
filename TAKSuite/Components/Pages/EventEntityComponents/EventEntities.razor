@@ -1,0 +1,62 @@
+﻿@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+
+@inject EventEntityService eventEntityService
+
+<Grid @ref="grid"
+TItem="EventEntity"
+Class="table table-hover border-top"
+Data="ItemList"
+HeaderRowCssClass="bg-success text-white border-bottom-0  h5"
+FiltersRowCssClass="bg-success text-white bg-opacity-25 border-bottom-0"
+AllowFiltering="false"
+AllowPaging="false"
+AllowSorting="true"
+AllowSelection="false"
+AllowRowClick="true"
+OnRowDoubleClick="OnDoubleClickHandeler"
+SelectionMode="GridSelectionMode.Single"
+Responsive="true">
+
+    <GridColumns>
+        <GridColumn TItem="EventEntity" HeaderText="Ora" Class="align-middle" SortKeySelector="item => item.Timestamp">
+            @context.Timestamp?.ToString("dd/MM HH:mm")
+        </GridColumn>
+        <GridColumn TItem="EventEntity" HeaderText="Evento" Class="align-middle" SortKeySelector="item => item.Title">
+            @context.Title
+        </GridColumn>
+        <GridColumn TItem="EventEntity" HeaderText="Note" Class="align-middle" SortKeySelector="item => item.Note">
+            @context.Note
+        </GridColumn>
+
+
+        @* <GridColumn TItem="MissionAtak" Class="align-middle" HeaderText="Azioni">
+            <Button Color="ButtonColor.Primary" @onclick="() => View(context)"><Icon Name="IconName.PencilFill"></Icon></Button>
+        </GridColumn> *@
+    </GridColumns>
+
+</Grid>
+@code {
+    [Parameter] public EventCallback<EventEntity> OnDoubleClick { get; set; }
+    private List<EventEntity> ItemList = new List<EventEntity>();
+
+    private Grid<EventEntity> grid = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Thread.Sleep(100);
+        // Carica i dati della missione all'inizializzazione
+        ItemList = (await eventEntityService.GetAllAsync()).OrderByDescending(_ => _.Timestamp).ToList();
+        StateHasChanged();
+    }
+    private async Task OnDoubleClickHandeler(GridRowEventArgs<EventEntity> args)
+    {
+        if (OnDoubleClick.HasDelegate) await OnDoubleClick.InvokeAsync(args.Item);
+    }
+
+    public async Task RefreshList()
+    {
+        ItemList = (await eventEntityService.GetAllAsync()).OrderByDescending(_ => _.Timestamp).ToList();
+        await grid.RefreshDataAsync();
+    }
+}

@@ -277,7 +277,40 @@
             }
         }
 
-        internal async Task<bool> UpdateMissionUidAsync(string uid, string missionUid)
+        internal async Task<bool> UpdateMissionUidAsync(string missionUid, IEnumerable<string> uidsList)
+        {
+
+            try
+            {
+                string url = $"Marti/api/missions/{missionUid}/contents";
+
+                string[] uids = uidsList.ToArray(); 
+                var requestBody = new
+                {
+                    uids
+                };
+
+                string json = JsonSerializer.Serialize(requestBody);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                HttpResponseMessage response = await client.PutAsync(url, content);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    return true;
+                    //return await response.Content.ReadAsStringAsync();
+                }
+
+                Console.WriteLine($"Errore HTTP: {response.StatusCode}, {response.Content}");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Eccezione nella richiesta: {ex.Message}");
+                return false;
+            }
+        }
+        internal async Task<bool> UpdateMissionUidAsync(string missionUid,string uid)
         {
 
             try

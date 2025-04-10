@@ -5,9 +5,9 @@ using TAKSuite.Data.Models;
 
 namespace TAKSuite.Data.Services
 {
-    public class TaskPrioritiesService : DataServiceAbstract<TaskPriority>
+    public class EventEntityService : DataServiceAbstract<EventEntity>
     {
-        public TaskPrioritiesService(ApplicationDbContext context, IMemoryCache cache) : base(context.TaskPriorities, context, cache)
+        public EventEntityService(ApplicationDbContext context, IMemoryCache cache) : base(context.EventEntities, context, cache)
         {
            
         }

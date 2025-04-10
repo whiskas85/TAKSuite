@@ -70,9 +70,9 @@
     private ModalSelectOperator modalSelect = default!;
 
 
-    
-    
-    
+
+
+
     private async Task OnMissionSelected(MissionAtak item)
     {
         await modalMission.HideAsync();
@@ -123,12 +123,21 @@
     private RegistrationCodeModel? modelRegcode { get; set; } = new();
     private RegistrationCodeModal modalRegCode = default!;
 
-    protected override async void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
-        Thread.Sleep(100);
-        team = await _teamService.GetAsync(TeamId);
+        await base.OnInitializedAsync();
+        //Thread.Sleep(100);
+        // team = await _teamService.GetAsync(TeamId);
 
+        // StateHasChanged();
+    }
+    protected override async Task OnParametersSetAsync()
+    {
+        await base.OnParametersSetAsync();
+
+        team = await _teamService.GetAsync(TeamId);
         StateHasChanged();
+
     }
 
     private async Task ShareOnBoarding()
