@@ -138,11 +138,10 @@ public class CoTApiClient
                 return;
             }
 
-            string xmlTemplate = await File.ReadAllTextAsync(_keepAliveFilePath);
-            string xmlContent = ReplacePlaceholders(xmlTemplate);
+            //string xmlTemplate = await File.ReadAllTextAsync(_keepAliveFilePath);
+            //string xmlContent = ReplacePlaceholders(xmlTemplate);
 
-            SendMessage(xmlContent);
-            SendMessage(xmlContent);
+            //SendMessage(xmlContent);
         }
         catch (Exception ex)
         {

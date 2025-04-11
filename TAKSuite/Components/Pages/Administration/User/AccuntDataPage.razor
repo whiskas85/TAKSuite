@@ -41,12 +41,20 @@
                 Message = "Profilo aggiornato correttamente", 
                 Type = ToastType.Success, 
                 AutoHide = true, 
-                IconName = IconName.Check2All });
-            //Navigation.NavigateTo("/users");
+                    IconName = IconName.Floppy2Fill
+                });
         }
         catch (Exception ex)
         {
             errorMessage = $"Errore nel salvataggio: {ex.Message}";
+            toastService.Notify(new()
+            {
+                Title = "Salvataggio",
+                Message = $"{ex.Message}",
+                IconName = IconName.Floppy2Fill,
+                Type = ToastType.Danger,
+                AutoHide = true
+            });
         }
     }
 }
@@ -61,11 +69,12 @@ else if (!string.IsNullOrEmpty(errorMessage))
 }
 else
 {
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3 class="mb-0">Dati personali</h3>
-        <Button Type="ButtonType.Submit" Color="ButtonColor.Primary"><Icon Name="IconName.Floppy2Fill"/> Salva</Button>
-    </div>
     <EditForm Model="user" OnValidSubmit="SaveAsync">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3 class="mb-0">Dati personali</h3>
+            <Button Type="ButtonType.Submit" Color="ButtonColor.Primary"><Icon Name="IconName.Floppy2Fill"/> Salva</Button>
+        </div>
+    
         <DataAnnotationsValidator />
         <ValidationSummary />
 

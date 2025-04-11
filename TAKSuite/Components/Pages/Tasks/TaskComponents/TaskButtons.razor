@@ -76,24 +76,21 @@
                 }
             </Button>
         </Tooltip>
-        <Tooltip Placement="TooltipPlacement.Top" Title="Import CoT">
-            <Button @onclick="() => ImportCoTs(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 my-2 d-flex align-items-center gap-2">
-                <Icon color="IconColor.Success" Name="IconName.Upload" />
-                @if (ShowButtonTitle)
-                {
-                    <span class="d-flex align-items-center">Import CoT</span>
-                }
-            </Button>
+        <Tooltip Placement="TooltipPlacement.Top" Title="Importa o cancella i CoT nella missione">
+            <Dropdown Color="DropdownColor.Light" Direction="DropdownDirection.Dropdown" Split="true" Class="me-2 my-2">
+                <DropdownActionButton><Icon Name="IconName.PinAngleFill"></Icon></DropdownActionButton>
+                <DropdownToggleButton />
+                <DropdownMenu>
+                    <DropdownItem @onclick="() =>ImportCoTs(TaskEnt, Team)" Type="DropdownItemType.Link">
+                        <Icon color="IconColor.Success" Name="IconName.Upload" />   Importa
+                    </DropdownItem>
+                    <DropdownItem @onclick="() =>RemoveCoTs(TaskEnt, Team)" Type="DropdownItemType.Link">
+                        <Icon color="IconColor.Danger" Name="IconName.Trash2Fill" />   Cancella
+                    </DropdownItem>
+                </DropdownMenu>
+            </Dropdown>
         </Tooltip>
-        <Tooltip Placement="TooltipPlacement.Top" Title="Import CoT">
-            <Button @onclick="() => RemoveCoTs(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 my-2 d-flex align-items-center gap-2">
-                <Icon color="IconColor.Danger" Name="IconName.Upload" />
-                @if (ShowButtonTitle)
-                {
-                    <span class="d-flex align-items-center">Remove CoT</span>
-                }
-            </Button>
-        </Tooltip>
+
         <Tooltip Placement="TooltipPlacement.Top" Title="Reject task">
             <Button @onclick="() =>RejectTask(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 my-2 d-flex align-items-center gap-2">
                 <Icon color="IconColor.Danger" Name="IconName.XLg" />
@@ -105,24 +102,26 @@
         </Tooltip>
         break;
     case TaskStatusTak.InProgress:
-        <Tooltip Placement="TooltipPlacement.Top" Title="Import CoT">
-            <Button @onclick="() => ImportCoTs(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 my-2 d-flex align-items-center gap-2">
-                <Icon color="IconColor.Success" Name="IconName.Upload" />
-                @if (ShowButtonTitle)
-                {
-                    <span class="d-flex align-items-center">Import CoT</span>
-                }
-            </Button>
+        <Tooltip Placement="TooltipPlacement.Top" Title="Importa o cancella i CoT nella missione">
+            <Dropdown Color="DropdownColor.Light" Direction="DropdownDirection.Dropdown" Split="true" Class="me-2 my-2">
+                <DropdownActionButton><Icon Name="IconName.PinAngleFill"></Icon>
+                    @if (ShowButtonTitle)
+                    {
+                        <span class="d-flex align-items-center">Import/Delete CoT</span>
+                    }
+                </DropdownActionButton>
+                <DropdownToggleButton />
+                <DropdownMenu>
+                    <DropdownItem @onclick="() =>ImportCoTs(TaskEnt, Team)" Type="DropdownItemType.Link">
+                        <Icon color="IconColor.Success" Name="IconName.Upload" />   Importa
+                    </DropdownItem>
+                    <DropdownItem @onclick="() =>RemoveCoTs(TaskEnt, Team)" Type="DropdownItemType.Link">
+                        <Icon color="IconColor.Danger" Name="IconName.Trash3Fill"  />   Cancella
+                    </DropdownItem>
+                </DropdownMenu>
+            </Dropdown>
         </Tooltip>
-        <Tooltip Placement="TooltipPlacement.Top" Title="Import CoT">
-            <Button @onclick="() => RemoveCoTs(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 my-2 d-flex align-items-center gap-2">
-                <Icon color="IconColor.Danger" Name="IconName.Upload" />
-                @if (ShowButtonTitle)
-                {
-                    <span class="d-flex align-items-center">Remove CoT</span>
-                }
-            </Button>
-        </Tooltip>
+
         <Tooltip Placement="TooltipPlacement.Top" Title="Task completato">
             <Button @onclick="() =>CompleteTask(TaskEnt, Team)" Color="ButtonColor.Light" Class="me-2 my-2 d-flex align-items-center gap-2">
                 <Icon color="IconColor.Success" Name="IconName.Check2All" />
