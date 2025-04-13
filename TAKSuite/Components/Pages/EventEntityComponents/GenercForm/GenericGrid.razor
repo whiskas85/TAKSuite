@@ -1,0 +1,41 @@
+﻿@typeparam TItem
+
+<Grid TItem="TItem"
+      Class="table table-hover border-top"
+      Data="Items"
+      HeaderRowCssClass="bg-success text-white border-bottom-0 h5"
+      FiltersRowCssClass="bg-success text-white bg-opacity-25 border-bottom-0"
+      AllowFiltering="false"
+      AllowPaging="false"
+      AllowSorting="true"
+      AllowSelection="false"
+      AllowRowClick="true"
+      OnRowDoubleClick="OnRowDoubleClickHandler"
+      SelectionMode="GridSelectionMode.Single"
+      Responsive="true">
+
+    <GridColumns>
+        @ColumnDefinitions
+    </GridColumns>
+</Grid>
+
+@code {
+    [Parameter] public List<TItem> Items { get; set; } = new List<TItem>();
+    [Parameter] public RenderFragment ColumnDefinitions { get; set; }
+    [Parameter] public EventCallback<TItem> OnRowDoubleClick { get; set; }
+
+    private Grid<TItem> grid = default!;
+
+    private async Task OnRowDoubleClickHandler(GridRowEventArgs<TItem> args)
+    {
+        if (OnRowDoubleClick.HasDelegate)
+        {
+            await OnRowDoubleClick.InvokeAsync(args.Item);
+        }
+    }
+
+    public async Task RefreshData()
+    {
+        await grid.RefreshDataAsync();
+    }
+}

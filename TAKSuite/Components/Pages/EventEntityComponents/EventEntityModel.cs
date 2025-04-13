@@ -2,11 +2,12 @@
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Org.BouncyCastle.Security;
 using System.ComponentModel.DataAnnotations;
+using TAKSuite.Components.Pages.EventEntityComponents.GenercForm;
 using TAKSuite.Data.Models;
 
 namespace TAKSuite.Components.Pages.EventEntityComponents
 {
-    public class EventEntityModel: BaseEntityViewModel<EventEntity>
+    public class EventEntityModel: BaseEntityViewModel<EventEntity>, IFormModel
     {
         public EventEntityModel(DataServiceAbstract<EventEntity> service) : base(service)
         {
@@ -53,9 +54,16 @@ namespace TAKSuite.Components.Pages.EventEntityComponents
             }
         }
 
+        public override async Task Reset()
+        {
+            await base.Reset();
+            Note = "";
+            Title = "";
+            Timestamp = DateTime.Now;
+        }
 
 
-        
+
 
     }
 }

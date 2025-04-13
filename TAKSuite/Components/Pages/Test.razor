@@ -1,32 +1,52 @@
-﻿@page "/test"
-@using TAKSuite.Components.Layout
+﻿@page "/eventi"
 @using TAKSuite.Components.Pages.EventEntityComponents
-@inherits ConnectedUserInfo
+@using TAKSuite.Components.Pages.EventEntityComponents.GenercForm
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@inject EventEntityService eventEntityService
 
-<PageTitle>Home</PageTitle>
+<GenericDataTable TItem="EventEntity"
+                  TGridItem="EventEntity"
+                  LoadItems="LoadEventi">
 
-<h1>Pagina test</h1>
-<Button Color="ButtonColor.Primary" @onclick="() => OnClick()">Test</Button>
-<EventEntities @ref=grid> </EventEntities>
+    <Columns>
+        <GridColumn TItem="EventEntity" HeaderText="Ora" SortKeySelector="x => x.Timestamp">
+            @context.Timestamp?.ToString("dd/MM HH:mm")
+        </GridColumn>
+        <GridColumn TItem="EventEntity" HeaderText="Titolo">
+            @context.Title
+        </GridColumn>
+        <GridColumn TItem="EventEntity" HeaderText="Note">
+            @context.Note
+        </GridColumn>
+    </Columns>
 
+    <FormFields>
+        <DateTimeInput Title="Ora inizio:" @bind-Value="formModel.Timestamp" />
+        <div class="form-group row mb-3">
+            <label class="col-md-2 col-form-label">Titolo:</label>
+            <div class="col-md-10">
+                <TextInput @bind-Value="formModel.Title" />
+                <ValidationMessage For="@(() => formModel.Title)" />
+            </div>
+        </div>
+        <div class="form-group row mb-3">
+            <label class="col-md-2 col-form-label">Note:</label>
+            <div class="col-md-10">
+                <TextAreaInput @bind-Value="formModel.Note" />
+                <ValidationMessage For="@(() => formModel.Note)" />
+            </div>
+        </div>
+    </FormFields>
 
-<Modal @ref=modal Size="ModalSize.Large" Title="Aggiungi Evento">
-    <BodyTemplate>
-        <EventAdd OnSubmitted="OnSubmitted"></EventAdd>   
-    </BodyTemplate>
-</Modal>
+</GenericDataTable>
+
 @code {
-    private Modal modal = default!;
-    private EventEntities grid = default!;
+    private EventEntityModel formModel = new();
 
-    private async Task OnClick()
+    private async Task<List<EventEntity>> LoadEventi()
     {
-        await modal.ShowAsync();
-    }
-    private async Task OnSubmitted()
-    {
-        await modal.HideAsync();
-        await grid.RefreshList();
-
+        var items = await eventEntityService.GetAllAsync();
+        return items.OrderByDescending(x => x.Timestamp).ToList();
     }
 }

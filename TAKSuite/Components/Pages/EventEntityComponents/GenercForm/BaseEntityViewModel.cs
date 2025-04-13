@@ -1,7 +1,7 @@
 ﻿using BlazorBootstrap;
 using TAKSuite.Data.Models;
 
-namespace TAKSuite.Components.Pages.EventEntityComponents
+namespace TAKSuite.Components.Pages.EventEntityComponents.GenercForm
 {
     public abstract class BaseEntityViewModel<T> where T : class, IGuidModel, new()
     {
@@ -24,6 +24,10 @@ namespace TAKSuite.Components.Pages.EventEntityComponents
         {
             await _service.AddOrUpdateAsync(_model);
 
+        }
+        public async virtual Task Reset()
+        {
+            
         }
     }
 }

@@ -1,0 +1,113 @@
+﻿@using System.ComponentModel.DataAnnotations
+@using System.Reflection
+@using Microsoft.AspNetCore.Components.Forms
+@using System.Linq.Expressions
+@using TAKSuite.Data.Models
+@typeparam TModel where TModel : class, IGuidModel, new()
+
+<EditForm EditContext="@editContext" OnValidSubmit="HandleOnValidSubmit">
+    <DataAnnotationsValidator />
+
+    @if (FormFields != null)
+    {
+        @FormFields
+    }
+    else
+    {
+        @foreach (PropertyInfo property in Model.GetType().GetProperties())
+        {
+            var propType = Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;
+            var value = property.GetValue(Model);
+            var name = property.Name;
+            var displayAttr = property.GetCustomAttribute<DisplayAttribute>();
+            var label = displayAttr?.Name ?? name;
+
+            <div class="form-group row mb-3">
+                <label class="col-md-2 col-form-label">@label</label>
+                <div class="col-md-10">
+                    @if (propType == typeof(string))
+                    {
+                        <TextInput @bind-Value="@(BindProperty(property) as string)" />
+                    }
+                    else if (propType == typeof(DateTime))
+                    {
+                        <TAKSuite.Components.Pages.Components.DateTimeInput @bind-Value="@BindProperty(property)" />
+                    }
+                    else if (propType == typeof(bool))
+                    {
+                        <InputCheckbox @bind-Value="@(BindProperty(property) as Boolean)" class="form-check-input" />
+                    }
+                    else if (propType.IsEnum)
+                    {
+                        <InputSelect @bind-Value="@BindProperty(property)" class="form-select">
+                            @foreach (var option in Enum.GetValues(propType))
+                            {
+                                <option value="@option">@option</option>
+                            }
+                        </InputSelect>
+                    }
+                    else if (propType.Name.EndsWith("Id") || propType.Name.EndsWith("Guid"))
+                    {
+                        // Placeholder for dropdown. Customize this with your service/lookup logic
+                        <InputSelect @bind-Value="@BindProperty(property)" class="form-select">
+                            <option value="">Seleziona...</option>
+                            @* Add your dynamic FK dropdown logic here *@
+                        </InputSelect>
+                    }
+                    else
+                    {
+                        <TextInput @bind-Value="@BindProperty(property)" />
+                    }
+                    <ValidationMessage For="@GetValidationExpression(property)" />
+                </div>
+            </div>
+        }
+    }
+
+    <div class="row">
+        <div class="col-md-12 text-right">
+            <Button Type="ButtonType.Button" Color="ButtonColor.Secondary" Class="float-end" @onclick="ResetForm">Chiudi</Button>
+            <Button Type="ButtonType.Submit" Color="ButtonColor.Success" Class="float-end me-2">@(IsEditMode ? "Modifica" : "Aggiungi")</Button>
+        </div>
+    </div>
+</EditForm>
+
+@code {
+    [Parameter] public BaseEntityViewModel<TModel> Model { get; set; }
+    [Parameter] public EventCallback OnSubmitted { get; set; }
+    [Parameter] public bool IsEditMode { get; set; } = false;
+    [Parameter] public RenderFragment FormFields { get; set; }
+
+    private EditContext editContext;
+
+    protected override void OnInitialized()
+    {
+        editContext = new EditContext(Model);
+    }
+
+    private async Task HandleOnValidSubmit()
+    {
+        if (editContext.Validate())
+        {
+            await Model.Save();
+            if (OnSubmitted.HasDelegate) await OnSubmitted.InvokeAsync();
+        }
+    }
+
+    private async Task ResetForm()
+    {
+        await Model.Reset();
+    }
+
+    private object BindProperty(PropertyInfo property)
+    {
+        return property.GetValue(Model);
+    }
+
+    private Expression<Func<object>> GetValidationExpression(PropertyInfo property)
+    {
+        var param = Expression.Parameter(typeof(object), "model");
+        var cast = Expression.Convert(Expression.Property(Expression.Constant(Model), property), typeof(object));
+        return Expression.Lambda<Func<object>>(cast);
+    }
+}
