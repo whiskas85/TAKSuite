@@ -19,6 +19,8 @@
     <Content Remove="Components\Layout\MainLayout2.razor" />
     <Content Remove="Components\Layout\NavMenu - Copia.razor" />
     <Content Remove="Components\Pages\Counter.razor" />
+    <Content Remove="Components\Pages\EventEntityComponents\EventAdd.razor" />
+    <Content Remove="Components\Pages\EventEntityComponents\EventEntities.razor" />
     <Content Remove="Components\Pages\MedevacPage - Copia.razor" />
     <Content Remove="Components\Pages\RegistrationCode\RegCode2.razor" />
     <Content Remove="Components\Pages\TeamSettingsPage\TeamPage - Copia.razor" />

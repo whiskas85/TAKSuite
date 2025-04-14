@@ -1,0 +1,33 @@
+﻿@typeparam TEntity
+
+@using System.Reflection 
+@using BlazorReflection
+
+<div class="form-group">
+    <label>@title</label>
+    <GenericField Property="Property" Entity="Entity"/>
+</div>
+
+@code {
+    [Parameter]
+    public TEntity? Entity { get; set; }
+
+    [Parameter]
+    public PropertyInfo? Property { get; set; }
+
+    private string title = "";
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        title = "";
+        if (Property == null)
+            return;
+
+        title = Property.Name;
+        if (!string.IsNullOrEmpty(Property.GetDisplayName()))
+        {
+            title = Property.GetDisplayName();
+        }
+    }
+}

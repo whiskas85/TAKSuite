@@ -1,0 +1,45 @@
+﻿@typeparam TEntity
+
+@using System.Reflection
+@using System.ComponentModel
+@using BlazorReflection.Attributes
+
+<EditForm Model="Entity" OnSubmit="OnSubmitInternal">
+    <DataAnnotationsValidator />
+    @foreach (var property in Properties)
+    {
+        <FormField Property="property" Entity="Entity" />
+    }
+    @* <div class="row">
+        <div class="col-sm-12 d-flex justify-content-end">
+            <Button Color="ButtonColor.Primary" Type="ButtonType.Submit">Salva</Button>
+            <Button Color="ButtonColor.Secondary" @onclick="CloseModal">Chiudi</Button>
+        </div>
+    </div> *@
+</EditForm>
+
+@code {
+    [Parameter] public TEntity? Entity { get; set; }
+
+    [Parameter] public EventCallback<TEntity> OnSubmit { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private List<PropertyInfo> Properties { get; set; } = new();
+
+    protected override void OnInitialized()
+    {
+        Properties = typeof(TEntity).GetProperties()
+            //.Where(p => Attribute.IsDefined(p, typeof(DisplayNameAttribute)))
+            .Where(p => !Attribute.IsDefined(p, typeof(ShowAttribute)))
+            .ToList();
+    }
+    private async Task CloseModal()
+    {
+        if (OnClose.HasDelegate) await OnClose.InvokeAsync();
+
+    }
+    private async Task OnSubmitInternal()
+    {
+        if (OnSubmit.HasDelegate) await OnSubmit.InvokeAsync(Entity);
+    }
+}

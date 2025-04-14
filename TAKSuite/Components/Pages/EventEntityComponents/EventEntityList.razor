@@ -1,4 +1,4 @@
-﻿@page "/test"
+﻿@page "/evententitylist"
 @using TAKSuite.Components.Pages.Components
 @using TAKSuite.Components.Pages.EventEntityComponents
 @using TAKSuite.Data.Models
@@ -9,8 +9,7 @@
                   TModel="EventEntityModel"
                   Service="eventEntityService"
                   LoadItems="LoadEventi"
-                  Rights="BlazorReflection.Data.GridRightsType.Delete"
->
+                  Rights="BlazorReflection.Data.GridRightsType.Delete">
 
     <Columns>
         <GridColumn TItem="EventEntity" HeaderText="Ora" SortKeySelector="x => x.Timestamp">

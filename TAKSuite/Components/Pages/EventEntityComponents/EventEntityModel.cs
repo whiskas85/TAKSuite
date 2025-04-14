@@ -1,69 +1,42 @@
-﻿using Microsoft.AspNetCore.Components;
-using Microsoft.EntityFrameworkCore.ChangeTracking;
-using Org.BouncyCastle.Security;
-using System.ComponentModel.DataAnnotations;
-using TAKSuite.Components.Pages.EventEntityComponents.GenercForm;
+﻿using BlazorReflection.Attributes;
 using TAKSuite.Data.Models;
+using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
+using BlazorReflection.Data;
+using TAKSuite.Components.Pages.Components.Data;
+using TAKSuite.Components.Pages.Components;
 
-namespace TAKSuite.Components.Pages.EventEntityComponents
+namespace TAKSuite.Components.Pages.EventEntityComponents;
+
+public class EventEntityModel : BaseEntityViewModel<EventEntity>, IFormModel<EventEntity>
 {
-    public class EventEntityModel: BaseEntityViewModel<EventEntity>, IFormModel
+    public EventEntityModel(EventEntity model) : base(model) { }
+
+    public static IFormModel<EventEntity> Create(EventEntity item) => new EventEntityModel(item);
+
+
+
+    [Required(ErrorMessage = "Timestamp is required.")]
+    public DateTime? Timestamp
     {
-        public EventEntityModel(DataServiceAbstract<EventEntity> service) : base(service)
-        {
-        }
-        public EventEntityModel(DataServiceAbstract<EventEntity> service, EventEntity model) : base(service, model)
-        {
-        }
-
-        [Required(ErrorMessage = "Timestamp is required.")]
-        public DateTime? Timestamp
-        {
-            get
-            {
-                return _model.Timestamp;
-            }
-            set
-            {
-                _model.Timestamp = value;
-            }
-        }
-
-        [Required(ErrorMessage = "Title is required.")]
-        public string? Title
-        {
-            get
-            {
-                return _model.Title;
-            }
-            set
-            {
-                _model.Title = value;
-            }
-        }
-
-        public string? Note
-        {
-            get
-            {
-                return _model.Note;
-            }
-            set
-            {
-                _model.Note = value;
-            }
-        }
-
-        public override async Task Reset()
-        {
-            await base.Reset();
-            Note = "";
-            Title = "";
-            Timestamp = DateTime.Now;
-        }
-
-
-
-
+        get => Model.Timestamp;
+        set => Model.Timestamp = value;
     }
+
+    [Required(ErrorMessage = "Title is required.")]
+    [FormControl(FormControlType.Text)]
+    public string? Title
+    {
+        get => Model.Title;
+        set => Model.Title = value;
+    }
+
+    [FormControl(FormControlType.Textarea)]
+    [DisplayName("Note")]
+    public string? Note
+    {
+        get => Model.Note;
+        set => Model.Note = value;
+    }
+
 }

@@ -1,0 +1,139 @@
+﻿@using BlazorReflection.Data
+@using TAKSuite.Components.Pages.Components
+@using TAKSuite.Data.Models
+@typeparam TItem where TItem : class, IGuidModel, new()
+@typeparam TModel where TModel : IFormModel<TItem>
+
+<Modal @ref="_modal" Title="Aggiungi" Size="ModalSize.Large">
+    <BodyTemplate>
+        @* <AutoFormField TModel="TModel"
+            TItem="TItem"
+            Model="_model"
+            IsEditMode="@(Item != null)"
+            OnSubmitted="HandleSubmitted">
+        </AutoFormField> *@
+        <GenericForm 
+            Entity="_model" 
+            TEntity="TModel" 
+            OnSubmit="AddOrUpdate"
+            OnClose="CloseModal"/>
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Primary" @onclick="() =>AddOrUpdate(_model)">Salva</Button>
+        <Button Color="ButtonColor.Secondary" @onclick="CloseModal">Chiudi</Button>
+    </FooterTemplate>
+</Modal>
+
+@if(Rights >= GridRightsType.Create)
+{
+    <Button Color="ButtonColor.Primary" @onclick="AddButtonClick">Aggiungi</Button>
+}
+
+<GenericGrid @ref="grid"
+TItem="TItem"
+Items="ItemList"
+OnRowDoubleClick="HandleDoubleClick">
+    <ColumnDefinitions>
+        @Columns
+
+        @if (Rights >= GridRightsType.Update)
+        {
+            <GridColumn TItem="TItem">
+                <Tooltip Placement="TooltipPlacement.Top" Title="Modifica">
+                    <Button @onclick="() => EditItem(context)" Color="ButtonColor.Primary" Class="me-2 my-2 d-flex align-items-center gap-2">
+                        <Icon Name="IconName.PencilFill" />
+                    </Button>
+                </Tooltip>
+            </GridColumn>
+        }
+        @if (Rights >= GridRightsType.Delete)
+        {
+            <GridColumn TItem="TItem">
+                <Tooltip Placement="TooltipPlacement.Top" Title="Cancella">
+                    <Button @onclick="() => DeleteItem(context)" Color="ButtonColor.Danger" Class="me-2 my-2 d-flex align-items-center gap-2">
+                        <Icon  Name="IconName.Trash3Fill" />
+                    </Button>
+                </Tooltip>
+            </GridColumn>
+        }
+
+    </ColumnDefinitions>
+</GenericGrid>
+
+@code {
+    [Parameter] public TItem? Item { get; set; }
+    [Parameter, EditorRequired] public DataServiceAbstract<TItem> Service { get; set; }
+    [Parameter, EditorRequired] public RenderFragment? Columns { get; set; }
+    
+    // 👇 Metodo esterno per caricare i dati
+    [Parameter, EditorRequired] public Func<Task<List<TItem>>> LoadItems { get; set; } = default!;  
+
+    [Parameter] public GridRightsType Rights { get; set; } = GridRightsType.Read;
+
+
+    private TModel? _model { get; set; } = default!;
+    private Modal _modal = default!;
+    private GenericGrid<TItem> grid = default!;
+
+
+    private List<TItem> ItemList = new();
+    protected async Task CloseModal()
+    {
+        await _modal.HideAsync();
+    }
+    protected async Task AddOrUpdate(TModel item)
+    {
+        await Service.AddOrUpdateAsync(item.Model);
+        await _modal.HideAsync();
+
+        // refresh grid
+        await RefreshListAsync();
+        await grid.RefreshData();
+
+    }
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshListAsync();
+
+    }
+
+
+
+    // CRUD
+    private async Task RefreshListAsync()
+    {
+        if (LoadItems != null)
+        {
+            ItemList = await LoadItems.Invoke();
+        }
+    }
+    private async Task AddButtonClick()
+    {
+        TItem addElement = new();
+        _model = (TModel)TModel.Create(addElement);
+        await _modal.ShowAsync();
+    }
+    private async Task EditItem(TItem item)
+    {
+        await Service.UpdateAsync(item);
+        // refresh grid
+        await RefreshListAsync();
+        await grid.RefreshData();
+    }
+    private async Task DeleteItem(TItem item)
+    {
+        await Service.DeleteAsync(item.Id);
+        // refresh grid
+        await RefreshListAsync();
+        await grid.RefreshData();
+
+    }
+    private async Task HandleDoubleClick(TItem item)
+    {
+        if (Rights >= GridRightsType.Update)
+        {
+            _model = (TModel)TModel.Create(item);
+            await _modal.ShowAsync();
+        }
+    }
+}

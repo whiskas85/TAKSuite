@@ -1,6 +1,7 @@
 ﻿@typeparam TItem
 
-<Grid TItem="TItem"
+<Grid @ref="grid"
+    TItem="TItem"
       Class="table table-hover border-top"
       Data="Items"
       HeaderRowCssClass="bg-success text-white border-bottom-0 h5"
