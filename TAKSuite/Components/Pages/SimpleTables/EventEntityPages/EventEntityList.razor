@@ -1,14 +1,20 @@
 ﻿@page "/evententitylist"
+@attribute [Authorize]
+
+@using Microsoft.AspNetCore.Authorization
 @using TAKSuite.Components.Pages.Components
 @using TAKSuite.Components.Pages.EventEntityComponents
 @using TAKSuite.Data.Models
 @using TAKSuite.Data.Services
-@inject EventEntityService eventEntityService
+@inject EventEntityService service
+
+<PageTitle>Eventi</PageTitle>
+<h3>Eventi</h3>
 
 <GenericDataTable TItem="EventEntity"
                   TModel="EventEntityModel"
-                  Service="eventEntityService"
-                  LoadItems="LoadEventi"
+                  Service="service"
+                  LoadItems="LoadData"
                   Rights="BlazorReflection.Data.GridRightsType.Delete">
 
     <Columns>
@@ -26,9 +32,9 @@
 
 @code {
 
-    private async Task<List<EventEntity>> LoadEventi()
+    private async Task<List<EventEntity>> LoadData()
     {
-        var items = await eventEntityService.GetAllAsync();
+        var items = await service.GetAllAsync();
         return items.OrderByDescending(x => x.Timestamp).ToList();
     }
 }

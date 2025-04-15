@@ -24,10 +24,12 @@
     </FooterTemplate>
 </Modal>
 
-@if(Rights >= GridRightsType.Create)
-{
-    <Button Color="ButtonColor.Primary" @onclick="AddButtonClick">Aggiungi</Button>
-}
+<div class="d-flex flex-wrap gap-2 my-3">
+    @if(Rights >= GridRightsType.Create)
+    {
+        <Button Color="ButtonColor.Primary" @onclick="AddButtonClick">Aggiungi</Button>
+    }
+</div>
 
 <GenericGrid @ref="grid"
 TItem="TItem"

@@ -19,10 +19,11 @@
     <Content Remove="Components\Layout\MainLayout2.razor" />
     <Content Remove="Components\Layout\NavMenu - Copia.razor" />
     <Content Remove="Components\Pages\Counter.razor" />
-    <Content Remove="Components\Pages\EventEntityComponents\EventAdd.razor" />
-    <Content Remove="Components\Pages\EventEntityComponents\EventEntities.razor" />
+    <Content Remove="Components\Pages\SimpleTables\EventEntityPages\EventAdd.razor" />
+    <Content Remove="Components\Pages\SimpleTables\EventEntityPages\EventEntities.razor" />
     <Content Remove="Components\Pages\MedevacPage - Copia.razor" />
-    <Content Remove="Components\Pages\RegistrationCode\RegCode2.razor" />
+    <Content Remove="Components\Pages\SimpleTables\RegistrationCode\RegCode2.razor" />
+    <Content Remove="Components\Pages\SimpleTables\RadioChannel\RadioChannelPage - Copia.razor" />
     <Content Remove="Components\Pages\TeamSettingsPage\TeamPage - Copia.razor" />
     <Content Remove="Components\Pages\Weather.razor" />
     <Content Remove="wwwroot\cot\presCot - Copia.xml" />

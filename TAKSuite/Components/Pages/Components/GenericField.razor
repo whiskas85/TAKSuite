@@ -19,6 +19,12 @@
                            ValueExpression="ValueExpression<string>()"
                            ValueChanged="(string val) => Property.SetValue(Entity, val)" />
         }
+        else if (formType == FormControlType.MarkDown)
+        {
+            <MarkdownEditor value="@((string)PropertyValue!)"
+                            ValueChanged="(string val) => Property.SetValue(Entity, val)" />
+            <span class="text-danger"><ValidationMessage For="ValueExpression<string>()" /></span>
+        }
         else
         {
             <InputText class="form-control"
@@ -27,6 +33,7 @@
                        ValueChanged="(string val) => Property.SetValue(Entity, val)" />
             <span class="text-danger"><ValidationMessage For="ValueExpression<string>()" /></span>
         }
+        
     }
     else if (PropertyType == typeof(int))
     {

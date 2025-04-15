@@ -1,6 +1,7 @@
 ﻿@page "/task/{TaskId:guid}"
 @inherits ConnectedUserInfo
 
+@using BlazorReflection
 @using Microsoft.AspNetCore.Authorization
 @using TAKSuite.Components.Layout
 @using TAKSuite.Components.Pages.Documentation
@@ -60,6 +61,7 @@ else
         {
             <h3>@taskEntity.Name</h3>
         }
+
         <div class="d-flex gap-2">
             @if (isEditing)
             {
@@ -70,14 +72,21 @@ else
             }
             else
             {
+                var currentStatus = taskEntity.Status.GetDisplayName();
                 <div class="d-flex gap-2">
                     <Dropdown Color="DropdownColor.Secondary">
-                        <DropdownToggleButton>@taskEntity.Status</DropdownToggleButton>
+
+                        <DropdownToggleButton>@currentStatus</DropdownToggleButton>
                         <DropdownMenu Class="p-0 text-muted" Style="width: 320px;">
+                            <div class="px-2 py-1 d-flex flex-column">
+                                <TAKSuite.Components.Pages.Components.TaskProgress TaskEntity="taskEntity" />
+                            </div>
+                            
                             @foreach(var log in taskEntity.Logs.OrderBy(_=> _.Timestamp))
                             {
+                                var statusName = log.NewStatus.GetDisplayName();
                                 <div class="border rounded px-2 py-1 d-flex flex-column">
-                                    <p class="fw-bold mb-1">@log.NewStatus.ToString()</p>
+                                    <p class="fw-bold mb-1">@statusName</p>
                                     <p class="small text-secondary mb-0"><Icon Name="IconName.Person"/> @log.Team?.Name - @log.User?.Nick</p>
                                     <p class="small text-muted mb-0"><Icon Name="IconName.ClockFill" />@log.Timestamp.ToString()</p>
                                 </div>
@@ -124,6 +133,9 @@ else
             </div>
         </Alert>
     }
+
+    
+
     @if (!isEditing)
     {
         <div class="py-2 d-flex flex-wrap w-100">
@@ -145,8 +157,8 @@ else
         {
             <div class="d-flex gap-2">
                 <Tooltip Title="Upload del documento"><Button Color="ButtonColor.Primary" @onclick="AttachFile"><Icon Name="IconName.Upload" /></Button></Tooltip>
-            <Tooltip Title="Aggiungi da link"><Button Color="ButtonColor.Primary" @onclick="ShowLinkDocModal"><Icon Name="IconName.Link45Deg" /></Button></Tooltip>
-        </div>
+                <Tooltip Title="Aggiungi da link"><Button Color="ButtonColor.Primary" @onclick="ShowLinkDocModal"><Icon Name="IconName.Link45Deg" /></Button></Tooltip>
+            </div>
         }
     </div>
 
@@ -243,6 +255,9 @@ else
 
 
 
+    float temperature1 = 10;
+
+
     protected override async Task OnInitializedAsync()
     {
         await base.OnInitializedAsync();
@@ -264,6 +279,9 @@ else
             var elem = await martiApiClient.GetInfoOblectAsync(uid);
             listCot.Add(elem);
         }
+
+        
+
     }
 
 

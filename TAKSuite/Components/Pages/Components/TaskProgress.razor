@@ -1,0 +1,69 @@
+﻿@using BlazorReflection
+@using TAKSuite.Data.Models
+
+<div class="d-flex mb-3">
+    <div class="flex-fill">
+        <RangeInput TValue="int"
+                    @bind-Value="taskProgress"
+                    Min="@taskProgressMin"
+                    Max="@taskProgressMax"
+                    TickMarks="listTaskStatus"
+                    Disabled="true"
+                    Step="1" />
+    </div>
+</div>
+
+@code {
+    [Parameter] public TaskEntity TaskEntity { get; set; }
+
+    private int taskProgressMin = 0;
+    private int taskProgressMax = VisualStates.Length - 1;
+    private int taskProgress;
+    private List<TickMark> listTaskStatus = new();
+
+    private static readonly TaskStatusTak[] VisualStates = new[]
+    {
+        TaskStatusTak.Created,
+        TaskStatusTak.Scheduled,
+        TaskStatusTak.Accepted,
+        TaskStatusTak.Assigned,
+        TaskStatusTak.InProgress,
+        TaskStatusTak.Completed
+    };
+
+    private static readonly HashSet<TaskStatusTak> CompletedEquivalents = new()
+    {
+        TaskStatusTak.Aborted,
+        TaskStatusTak.Canceled,
+        TaskStatusTak.Failed,
+        TaskStatusTak.RejectedTier1,
+        TaskStatusTak.RejectedTier2
+    };
+
+    private static TaskStatusTak NormalizeStatus(TaskStatusTak status)
+    {
+        return CompletedEquivalents.Contains(status) ? TaskStatusTak.Completed : status;
+    }
+
+    private static List<TickMark> GetTickMarks()
+    {
+        return VisualStates.Select((status, index) => new TickMark
+        {
+            Label = status.GetDisplayName(),
+            Value = index.ToString()
+        }).ToList();
+    }
+
+    private static int GetNormalizedProgress(TaskStatusTak status)
+    {
+        var normalized = NormalizeStatus(status);
+        var index = Array.IndexOf(VisualStates, normalized);
+        return index >= 0 ? index : 0;
+    }
+
+    protected override void OnInitialized()
+    {
+        listTaskStatus = GetTickMarks();
+        taskProgress = GetNormalizedProgress(TaskEntity.Status);
+    }
+}

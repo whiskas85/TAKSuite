@@ -1,0 +1,41 @@
+﻿@page "/radiochannels"
+@attribute [Authorize]
+
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Components.Pages.Components
+@using TAKSuite.Components.Pages.EventEntityComponents
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@inject RadioChannelService service
+
+<PageTitle>Canali radio</PageTitle>
+<h3>Lista canali radio</h3>
+
+<GenericDataTable TItem="RadioChannel"
+                  TModel="RadioChannelModel"
+                  Service="service"
+                  LoadItems="LoadData"
+                  Rights="BlazorReflection.Data.GridRightsType.Delete">
+
+    <Columns>
+        <GridColumn TItem="RadioChannel" HeaderText="Nome Canale" Class="align-middle" IsDefaultSortColumn="true" SortDirection="SortDirection.Ascending" SortKeySelector="item => item.Name">
+            @context.Name
+        </GridColumn>
+        <GridColumn TItem="RadioChannel" HeaderText="Tipo" Class="align-middle" SortKeySelector="item => item.FrequencyType">
+            @context.FrequencyType
+        </GridColumn>
+        <GridColumn TItem="RadioChannel" HeaderText="Frequenza MHz" Class="align-middle" SortKeySelector="item => item.Frequency">
+            @context.Frequency
+        </GridColumn>
+    </Columns>
+</GenericDataTable>
+
+@code {
+
+    private async Task<List<RadioChannel>> LoadData()
+    {
+        var items = await service.GetAllAsync();
+        return items.OrderBy(x => x.Name).ToList();
+    }
+}
+

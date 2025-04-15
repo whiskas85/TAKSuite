@@ -1,7 +1,7 @@
 ﻿
 using System.ComponentModel.DataAnnotations;
 
-namespace TAKSuite.Components.Pages.RegistrationCode
+namespace TAKSuite.Components.Pages.SimpleTables.RegistrationCode
 {
     public class RegistrationCodeModel
     {
@@ -9,7 +9,7 @@ namespace TAKSuite.Components.Pages.RegistrationCode
         {
                 
         }
-        public RegistrationCodeModel(TAKSuite.Data.Models.RegistrationCode code)
+        public RegistrationCodeModel(Data.Models.RegistrationCode code)
         {
             Code = code.Code;
             Id = code.Id;
@@ -22,7 +22,7 @@ namespace TAKSuite.Components.Pages.RegistrationCode
         
         [Required]
         [StringLength(10, ErrorMessage = "Id is too long.")]
-        public String Code { get; set; }
+        public string Code { get; set; }
 
         public Guid TeamId { get; set; }
         public DateTime ExpirationDate { get; set; }

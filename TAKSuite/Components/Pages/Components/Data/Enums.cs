@@ -3,7 +3,8 @@
     public enum FormControlType
     {
         Text,
-        Textarea
+        Textarea,
+        MarkDown
     }
 
     public enum GridRightsType

@@ -6,7 +6,7 @@ using BlazorReflection.Data;
 using TAKSuite.Components.Pages.Components.Data;
 using TAKSuite.Components.Pages.Components;
 
-namespace TAKSuite.Components.Pages.EventEntityComponents;
+namespace TAKSuite.Components.Pages.SimpleTables.EventEntityPages;
 
 public class EventEntityModel : BaseEntityViewModel<EventEntity>, IFormModel<EventEntity>
 {
