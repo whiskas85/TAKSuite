@@ -5,72 +5,100 @@
 @using BlazorReflection
 @using BlazorReflection.Attributes
 @using BlazorReflection.Data
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+
+
+@inject IEnumerable<IDataProvider> services
 
 @if (Property != null)
 {
+    var formType = Property.GetAttribute<FormControlAttribute>()?.Type;
     if (PropertyType == typeof(string))
     {
-        var formType = Property.GetAttribute<FormControlAttribute>()?.Type;
         if (formType == FormControlType.Textarea)
         {
             <InputTextArea class="form-control"
-                           rows="15"
-                           Value="@((string)PropertyValue!)"
-                           ValueExpression="ValueExpression<string>()"
-                           ValueChanged="(string val) => Property.SetValue(Entity, val)" />
+            rows="15"
+            Value="@((string)PropertyValue!)"
+            ValueExpression="ValueExpression<string>()"
+            ValueChanged="(string val) => Property.SetValue(Entity, val)" />
         }
         else if (formType == FormControlType.MarkDown)
         {
             <MarkdownEditor value="@((string)PropertyValue!)"
-                            ValueChanged="(string val) => Property.SetValue(Entity, val)" />
-            <span class="text-danger"><ValidationMessage For="ValueExpression<string>()" /></span>
+            ValueChanged="(string val) => Property.SetValue(Entity, val)" />
         }
         else
         {
             <InputText class="form-control"
-                       value="@((string)PropertyValue!)"
-                       ValueExpression="ValueExpression<string>()"
-                       ValueChanged="(string val) => Property.SetValue(Entity, val)" />
-            <span class="text-danger"><ValidationMessage For="ValueExpression<string>()" /></span>
+            value="@((string)PropertyValue!)"
+            ValueExpression="ValueExpression<string>()"
+            ValueChanged="(string val) => Property.SetValue(Entity, val)" />  
         }
-        
+        <span class="text-danger"><ValidationMessage For="ValueExpression<string>()" /></span>
+
     }
     else if (PropertyType == typeof(int))
     {
-        <InputNumber class="form-control"
-                     step="1"
-                     Value="(int)PropertyValue!"
-                     ValueExpression="ValueExpression<int>()"
-                     TValue="int"
-                     ValueChanged="(int val) => Property.SetValue(Entity, val)" />
+        if (formType == FormControlType.Color)
+        {
+            <FormTeamColorComponent class="form-control"
+            Value="(int?)PropertyValue"
+            TValue="int?"
+            ValueExpression="ValueExpression<int?>()"
+            ValueChanged="(int? val) => Property.SetValue(Entity, val)"
+            Rights="GridRightsType.Update"/>
+        }
+        else
+        {
+            <InputNumber class="form-control"
+            step="1"
+            Value="(int)PropertyValue!"
+            ValueExpression="ValueExpression<int>()"
+            TValue="int"
+            ValueChanged="(int val) => Property.SetValue(Entity, val)" />
+        }
         <span class="text-danger"><ValidationMessage For="ValueExpression<int>()" /></span>
     }
     else if (PropertyType == typeof(int?))
     {
-        <InputNumber class="form-control"
-                     step="1"
-                     Value="(int?)PropertyValue"
-                     ValueExpression="ValueExpression<int?>()"
-                     TValue="int?"
-                     ValueChanged="(int? val) => Property.SetValue(Entity, val)" />
+        if (formType== FormControlType.Color)
+        {
+            <FormTeamColorComponent class="form-control"
+            Value="(int?)PropertyValue"
+            TValue="int?"
+            ValueExpression="ValueExpression<int?>()"
+            ValueChanged="(int? val) => Property.SetValue(Entity, val)"
+            Rights="GridRightsType.Update" />
+        }
+        else
+        {
+            <InputNumber class="form-control"
+            step="1"
+            Value="(int?)PropertyValue"
+            ValueExpression="ValueExpression<int?>()"
+            TValue="int?"
+            ValueChanged="(int? val) => Property.SetValue(Entity, val)" />
+        }
         <span class="text-danger"><ValidationMessage For="ValueExpression<int?>()" /></span>
     }
     else if (PropertyType == typeof(double))
     {
         <InputNumber class="form-control"
-                     Value="(double)PropertyValue!"
-                     ValueExpression="ValueExpression<double>()"
-                     TValue="double"
-                     ValueChanged="(double val) => Property.SetValue(Entity, val)" />
+        Value="(double)PropertyValue!"
+        ValueExpression="ValueExpression<double>()"
+        TValue="double"
+        ValueChanged="(double val) => Property.SetValue(Entity, val)" />
         <span class="text-danger"><ValidationMessage For="ValueExpression<double>()" /></span>
     }
     else if (PropertyType == typeof(double?))
     {
         <InputNumber class="form-control"
-                     Value="(double?)PropertyValue"
-                     ValueExpression="ValueExpression<double?>()"
-                     TValue="double?"
-                     ValueChanged="(double? val) => Property.SetValue(Entity, val)" />
+        Value="(double?)PropertyValue"
+        ValueExpression="ValueExpression<double?>()"
+        TValue="double?"
+        ValueChanged="(double? val) => Property.SetValue(Entity, val)" />
         <span class="text-danger"><ValidationMessage For="ValueExpression<double?>()" /></span>
     }
     else if (PropertyType == typeof(bool))
@@ -95,28 +123,48 @@
     else if (PropertyType == typeof(decimal))
     {
         <InputNumber class="form-control"
-                     Value="(decimal)PropertyValue!"
-                     ValueExpression="ValueExpression<decimal>()"
-                     TValue="decimal"
-                     ValueChanged="(decimal val) => Property.SetValue(Entity, val)" />
+        Value="(decimal)PropertyValue!"
+        ValueExpression="ValueExpression<decimal>()"
+        TValue="decimal"
+        ValueChanged="(decimal val) => Property.SetValue(Entity, val)" />
         <span class="text-danger"><ValidationMessage For="ValueExpression<decimal>()" /></span>
     }
     else if (PropertyType == typeof(decimal?))
     {
         <InputNumber class="form-control"
-                     Value="(decimal?)PropertyValue"
-                     ValueExpression="ValueExpression<decimal?>()"
-                     TValue="decimal?"
-                     ValueChanged="(decimal? val) => Property.SetValue(Entity, val)" />
+        Value="(decimal?)PropertyValue"
+        ValueExpression="ValueExpression<decimal?>()"
+        TValue="decimal?"
+        ValueChanged="(decimal? val) => Property.SetValue(Entity, val)" />
         <span class="text-danger"><ValidationMessage For="ValueExpression<decimal?>()" /></span>
     }
     else if (PropertyType == typeof(DateTime?))
     {
         <DateTimeInput
-                     Value="(DateTime?)PropertyValue"
-                     ValueChanged="(DateTime? val) => Property.SetValue(Entity, val)" />
+        Value="(DateTime?)PropertyValue"
+        ValueChanged="(DateTime? val) => Property.SetValue(Entity, val)" />
         <span class="text-danger"><ValidationMessage For="ValueExpression<DateTime?>()" /></span>
     }
+    else if (PropertyType == typeof(Guid?))
+    {
+        <div class="form-group row mb-3">
+            <label class="col-sm-2 col-form-label">@Property.Name</label>
+            <div class="col-sm-10">
+                <InputSelect class="form-control"
+                Value="@(PropertyValue as Guid?)"
+                ValueExpression="ValueExpression<Guid?>()"
+                ValueChanged="(Guid? val) => Property.SetValue(Entity, val)">
+                    <option value="">Seleziona un'opzione</option>
+                    @foreach (var opt in options)
+                    {
+                        <option value="@opt.Key">@opt.Value</option>
+                    }
+                </InputSelect>
+            </div>
+        </div> 
+    }
+
+
     else if (PropertyType?.IsEnum == true)
     {
         <EnumField Entity="@Entity" Property="@Property" />
@@ -138,5 +186,46 @@
         var constant = Expression.Constant(Entity);
         var exp = Expression.Property(constant, Property!.Name);
         return Expression.Lambda<Func<PropertyType>>(exp);
+    }
+
+    private IEnumerable<KeyValuePair<Guid, string>>? options = new List< KeyValuePair<Guid, string>>();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await base.OnParametersSetAsync();
+
+        if (Property != null) 
+            options = await GetDropdownOptions(Property);
+
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await base.OnAfterRenderAsync(firstRender);
+
+
+    }
+
+
+
+    private async Task<IEnumerable<KeyValuePair<Guid, string>>?> GetDropdownOptions(PropertyInfo property)
+    {
+        var methodName = $"GetValuesFor{property.Name}";
+        var method = property.DeclaringType?.GetMethod(methodName, BindingFlags.Public | BindingFlags.Static);
+
+        if (method != null && typeof(Task<IEnumerable<KeyValuePair<Guid, string>>>).IsAssignableFrom(method.ReturnType))
+        {
+            var formDropDownType = Property.GetAttribute<FormControlDropDownTypeAttribute>()?.Type;
+            if (formDropDownType!=null)
+            {
+                var serviceDropdown = services.FirstOrDefault(_ => _.ProvidedItem == formDropDownType);
+                if (serviceDropdown != null)
+                {
+                    Thread.Sleep(100);
+                    return await Task.Run(() => method.Invoke(null, [serviceDropdown]) as Task<IEnumerable<KeyValuePair<Guid, string>>>);
+                }
+            }
+        }
+
+        return new List< KeyValuePair<Guid, string>>();
     }
 }

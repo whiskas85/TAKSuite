@@ -1,0 +1,42 @@
+﻿@page "/teams"
+@attribute [Authorize]
+
+@using BlazorReflection.Data
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Components.Pages.Components
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@inject TeamService service
+
+<PageTitle>Lista Teams</PageTitle>
+<h3>Lista teams</h3>
+
+<GenericDataTable TItem="Team"
+                  TModel="TeamViewModel"
+                  Service="service"
+                  LoadItems="LoadData"
+                  Rights="RightsType">
+
+    <Columns>
+        <GridColumn TItem="Team" HeaderText="Colore" Class="action-grid-button" SortKeySelector="x => x.Color">
+            <TeamColorComponent Rights="RightsType" Team="@context" />
+        </GridColumn>
+        <GridColumn TItem="Team" HeaderText="Nome" IsDefaultSortColumn=true SortKeySelector="x => x.Name">
+            @context.Name
+        </GridColumn>
+        <GridColumn TItem="Team" HeaderText="Punti" SortKeySelector="x => x.Points">
+            @context.Points
+        </GridColumn>
+        
+    </Columns>
+</GenericDataTable>
+
+@code {
+    private GridRightsType RightsType = GridRightsType.Delete;
+
+    private async Task<List<Team>> LoadData()
+    {
+        var items = await service.GetAllAsync();
+        return items.OrderByDescending(x => x.Name).ToList();
+    }
+}

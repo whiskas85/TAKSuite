@@ -1,0 +1,51 @@
+﻿@page "/tasks"
+@attribute [Authorize]
+
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Components.Pages.Components
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@inject TaskService service
+
+<PageTitle>@pageTitle</PageTitle>
+<h3>@pageTitle</h3>
+
+<GenericDataTable TItem="TaskEntity"
+                  TModel="TaskViewModel"
+                  Service="service"
+                  LoadItems="LoadData"
+                  Rights="BlazorReflection.Data.GridRightsType.Delete">
+
+    <Columns>
+        <GridColumn TItem="TaskEntity" HeaderText="Attività" SortKeySelector="x => x.Name">
+            @context.Name
+        </GridColumn>
+        <GridColumn TItem="TaskEntity" HeaderText="Stato" SortKeySelector="x => x.Status">
+            @context.Status.GetDisplayName()
+        </GridColumn>
+        
+        <GridColumn TItem="TaskEntity" HeaderText="Team assegnato" SortKeySelector="x => x.AssignedTeam.Name">
+            @context.AssignedTeam?.Name
+        </GridColumn>
+        <GridColumn TItem="TaskEntity" HeaderText="Team exec" SortKeySelector="x => x.ExecutingTeam.Name">
+            @context.ExecutingTeam?.Name
+        </GridColumn>
+        
+        <GridColumn TItem="TaskEntity" HeaderText="Priorità" SortKeySelector="x => x.Priority.Name">
+            @context.Priority?.Name
+        </GridColumn>
+        
+        <GridColumn TItem="TaskEntity" HeaderText="Ultima modifica" SortKeySelector="x => x.LastModified">
+            @context.LastModified.ToString("dd/MM HH:mm")
+        </GridColumn>
+    </Columns>
+</GenericDataTable>
+
+@code {
+    private string pageTitle = "Lista Task";
+    private async Task<List<TaskEntity>> LoadData()
+    {
+        var items = await service.GetAllAsync();
+        return items.OrderByDescending(x => x.CreationDate).ToList();
+    }
+}

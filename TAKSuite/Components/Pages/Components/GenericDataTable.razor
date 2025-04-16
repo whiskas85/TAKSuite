@@ -1,8 +1,18 @@
 ﻿@using BlazorReflection.Data
+@using System.Text.Json
+@using System.Text.Json.Serialization
 @using TAKSuite.Components.Pages.Components
 @using TAKSuite.Data.Models
 @typeparam TItem where TItem : class, IGuidModel, new()
 @typeparam TModel where TModel : IFormModel<TItem>
+
+
+<style>
+    .action-grid-button {
+        width: 30px;
+    }
+
+</style>
 
 <Modal @ref="_modal" Title="Aggiungi" Size="ModalSize.Large">
     <BodyTemplate>
@@ -40,9 +50,9 @@ OnRowDoubleClick="HandleDoubleClick">
 
         @if (Rights >= GridRightsType.Update)
         {
-            <GridColumn TItem="TItem">
+            <GridColumn TItem="TItem" class="action-grid-button">
                 <Tooltip Placement="TooltipPlacement.Top" Title="Modifica">
-                    <Button @onclick="() => EditItem(context)" Color="ButtonColor.Primary" Class="me-2 my-2 d-flex align-items-center gap-2">
+                    <Button @onclick="() => HandleDoubleClick(context)" Color="ButtonColor.Primary" Class="align-items-center">
                         <Icon Name="IconName.PencilFill" />
                     </Button>
                 </Tooltip>
@@ -50,9 +60,9 @@ OnRowDoubleClick="HandleDoubleClick">
         }
         @if (Rights >= GridRightsType.Delete)
         {
-            <GridColumn TItem="TItem">
+            <GridColumn TItem="TItem" class="action-grid-button">
                 <Tooltip Placement="TooltipPlacement.Top" Title="Cancella">
-                    <Button @onclick="() => DeleteItem(context)" Color="ButtonColor.Danger" Class="me-2 my-2 d-flex align-items-center gap-2">
+                    <Button @onclick="() => DeleteItem(context)" Color="ButtonColor.Danger" Class="align-items-center">
                         <Icon  Name="IconName.Trash3Fill" />
                     </Button>
                 </Tooltip>
@@ -66,7 +76,7 @@ OnRowDoubleClick="HandleDoubleClick">
     [Parameter] public TItem? Item { get; set; }
     [Parameter, EditorRequired] public DataServiceAbstract<TItem> Service { get; set; }
     [Parameter, EditorRequired] public RenderFragment? Columns { get; set; }
-    
+
     // 👇 Metodo esterno per caricare i dati
     [Parameter, EditorRequired] public Func<Task<List<TItem>>> LoadItems { get; set; } = default!;  
 
@@ -134,8 +144,24 @@ OnRowDoubleClick="HandleDoubleClick">
     {
         if (Rights >= GridRightsType.Update)
         {
-            _model = (TModel)TModel.Create(item);
+            var clone = DeepClone(item);
+            if (clone is null) return;
+
+            _model = (TModel)TModel.Create(clone);
             await _modal.ShowAsync();
         }
+    }
+
+
+    public static T? DeepClone<T>(T obj)
+    {
+        var options = new JsonSerializerOptions
+            {
+                ReferenceHandler = ReferenceHandler.Preserve,
+                WriteIndented = true
+            };
+
+        var json = JsonSerializer.Serialize(obj, options);
+        return JsonSerializer.Deserialize<T>(json, options);
     }
 }

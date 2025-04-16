@@ -1,6 +1,5 @@
 ﻿using BlazorBootstrap;
 using BlazorReflection.Attributes;
-using TAKSuite.Components.Pages.EventEntityComponents;
 using TAKSuite.Data.Models;
 
 namespace TAKSuite.Components.Pages.Components.Data

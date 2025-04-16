@@ -4,12 +4,13 @@ using TAKSuite.Data.Models;
 
 namespace TAKSuite.Data.Services
 {
-    public class TeamService : DataServiceAbstract<Team>
+    public class TeamService : DataServiceAbstract<Team>, IDataProvider
     {
         public TeamService(ApplicationDbContext context, IMemoryCache cache) : base(context.Teams, context, cache)
         {
             Includes = [_ => _.TeamLeader];
         }
+        public Type ProvidedItem { get => typeof(Team); }
 
         public async Task<List<Team>> GetSubTeamsAsync(Team team, bool includeMyTeam = false)
         {

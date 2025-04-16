@@ -6,8 +6,6 @@ using BlazorReflection.Data;
 using TAKSuite.Components.Pages.Components.Data;
 using TAKSuite.Components.Pages.Components;
 
-namespace TAKSuite.Components.Pages.SimpleTables.EventEntityPages;
-
 public class EventEntityModel : BaseEntityViewModel<EventEntity>, IFormModel<EventEntity>
 {
     public EventEntityModel(EventEntity model) : base(model) { }
@@ -25,6 +23,7 @@ public class EventEntityModel : BaseEntityViewModel<EventEntity>, IFormModel<Eve
 
     [Required(ErrorMessage = "Title is required.")]
     [FormControl(FormControlType.Text)]
+    [DisplayName("Titlolo")]
     public string? Title
     {
         get => Model.Title;

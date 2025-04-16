@@ -4,7 +4,8 @@
     {
         Text,
         Textarea,
-        MarkDown
+        MarkDown,
+        Color
     }
 
     public enum GridRightsType

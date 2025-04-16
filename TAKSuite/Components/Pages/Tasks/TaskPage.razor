@@ -87,7 +87,8 @@ else
                                 var statusName = log.NewStatus.GetDisplayName();
                                 <div class="border rounded px-2 py-1 d-flex flex-column">
                                     <p class="fw-bold mb-1">@statusName</p>
-                                    <p class="small text-secondary mb-0"><Icon Name="IconName.Person"/> @log.Team?.Name - @log.User?.Nick</p>
+                                    <p class="small text-secondary mb-0"><Icon Name="IconName.PeopleFill" /> @log.Team?.Name - @log.User?.Nick</p>
+                                    <p class="small text-secondary mb-0"><Icon Name="IconName.Person" /> @log.User?.Nick</p>
                                     <p class="small text-muted mb-0"><Icon Name="IconName.ClockFill" />@log.Timestamp.ToString()</p>
                                 </div>
                             }

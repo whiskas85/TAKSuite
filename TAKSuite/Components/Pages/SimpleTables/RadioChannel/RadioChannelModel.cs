@@ -6,8 +6,6 @@ using BlazorReflection.Data;
 using TAKSuite.Components.Pages.Components.Data;
 using TAKSuite.Components.Pages.Components;
 
-namespace TAKSuite.Components.Pages.EventEntityComponents;
-
 public class RadioChannelModel : BaseEntityViewModel<RadioChannel>, IFormModel<RadioChannel>
 {
     public RadioChannelModel(RadioChannel model) : base(model) { }

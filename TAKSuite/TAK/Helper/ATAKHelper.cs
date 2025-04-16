@@ -1,14 +1,39 @@
 ﻿using System.Xml;
+using TAKSuite.Helper;
 
 namespace TAKSuite.TAK.Helper
 {
+    public class PredefinedColor
+    {
+        public string Name { get; set; }
+        public int Argb { get; set; }
+
+        public string ToHex()
+        {
+            return ColorConverterHelper.ArgbToHex(Argb);
+        }
+    }
     public class ATAKHelper
     {
-        // Lista dei colori predefiniti
-        public static List<int> ATAKPredefinedColors =
-        [
-            -1, -256, -35072, -65281, -65536, -8454144, -8454017, -16777089, -16776961, -16711681, -16744577, -16711936, -16744704, -8947849, -16777216
-        ];
+        // Lista dei colori predefiniti con nome
+        public static List<PredefinedColor> ATAKPredefinedColors = new List<PredefinedColor>
+        {
+            new PredefinedColor { Name = "White", Argb = -1 },                   // Transparent / None
+            new PredefinedColor { Name = "Yellow", Argb = -256 },               // Yellow
+            new PredefinedColor { Name = "Orange", Argb = -35072 },             // Orange
+            new PredefinedColor { Name = "Magenta", Argb = -65281 },            // Magenta
+            new PredefinedColor { Name = "Red", Argb = -65536 },                // Red
+            new PredefinedColor { Name = "Maroon", Argb = -8454144 },            // Brown
+            new PredefinedColor { Name = "Purple", Argb = -8454017 },             // Light Pink
+            new PredefinedColor { Name = "Dark Blue", Argb = -16777089 },            // Cyan
+            new PredefinedColor { Name = "Blue", Argb = -16776961 },            // Blue
+            new PredefinedColor { Name = "Cyan", Argb = -16711681 },      // Aqua / Light Blue
+            new PredefinedColor { Name = "Teal", Argb = -16744577 },       // Turquoise
+            new PredefinedColor { Name = "Green", Argb = -16711936 },           // Green
+            new PredefinedColor { Name = "Dark Green", Argb = -16744704 },            // Lime Green
+            new PredefinedColor { Name = "Grey", Argb = -8947849 },             // Gray
+            new PredefinedColor { Name = "Black", Argb = -16777216 }            // Black
+        };
         public const int COLOR_WAYPOINT_COMPLETED = -8947849;
         public static void ChangeSpotmapColor(XmlDocument doc, int newArgbValue)
         {

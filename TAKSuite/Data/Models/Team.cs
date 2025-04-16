@@ -24,6 +24,6 @@
         // Relazione gerarchica: lista dei sotto-team
         
         public List<Team> SubTeams { get; set; } = new();
-        public string MissionUid { get; set; }
+        public string? MissionUid { get; set; }
     }
 }

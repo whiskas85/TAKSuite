@@ -65,6 +65,8 @@ builder.Services.AddSingleton<UserSession>();      // CoTManager
 // Add services
 //ServicesRegistration.ConfigureServices(builder.Services);
 
+builder.Services.AddTransient<IDataProvider, TeamService>();
+builder.Services.AddTransient<IDataProvider, TaskPrioritiesService>();
 builder.Services.AddTransient<TeamService>();
 builder.Services.AddTransient<RegistrationCodeService>();
 builder.Services.AddTransient<ParckingService>();

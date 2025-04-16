@@ -1,0 +1,139 @@
+@using BlazorColorPicker
+@using BlazorReflection.Data
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Components.Pages.Components
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@using TAKSuite.Helper
+@using TAKSuite.TAK.Helper
+
+@inject TeamService TeamService
+
+<style>
+    .color-rounded-rectangle {
+    width: 100%;
+    height: 30px;
+    border-radius: 5px;
+    display: inline-block;
+    border: 1px solid #ccc;
+    }
+
+    .color-button {
+    width: 38px;
+    height: 38px;
+    border: none;
+    margin: 5px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 2px solid #ccc;
+    }
+
+    .color-button-active {
+    border-color:dodgerblue;
+    border-width:4px;
+    }
+
+    .custom-button {
+    display: block;
+    width: 100%;
+    margin-top: 10px;
+    padding: 5px;
+    border: none;
+    cursor: pointer;
+    text-align: center;
+    }
+
+</style>
+
+
+<ColorPicker Title="Seleziona Colore"
+IsOpened="isOpened"
+Closed="@(color => SetPredefinedColor(color))"
+MyColor="@color">
+</ColorPicker>
+
+
+<Modal @ref="colorDialog"
+Title="ATAK Color" Size="ModalSize.Regular">
+    <BodyTemplate>
+        <div id="color-popup" class="color-popup show">
+            @foreach (var predefinedColor in ATAKHelper.ATAKPredefinedColors)
+            {
+                var hexColor = predefinedColor.ToHex();
+                string classButton = "color-button";
+                if (predefinedColor.Argb == Team.Color)
+                {
+                    classButton += " color-button-active";
+                }
+                <Tooltip Color="TooltipColor.Light" Title="@predefinedColor.Name">
+                    <button class="@classButton" style="background-color:@hexColor;" @onclick="() => SetPredefinedColor(hexColor)">
+                    </button>
+                </Tooltip>
+                @* <button class="color-button"
+                        style="background-color:@hexColor;"
+                        @onclick="() => SetPredefinedColor(hexColor, Team)">
+                </button> *@
+            }
+            @if (Rights >= GridRightsType.Update)
+            {
+                <Button Color="ButtonColor.Secondary" class="custom-button" @onclick="() => OpenCustomColorPicker()">Custom</Button>
+            }
+        </div>
+    </BodyTemplate>
+</Modal>
+
+<div class="color-button d-flex align-items-stretch" @onclick="ShowColorDialog"
+     style="background-color: @ColorConverterHelper.ArgbToHex(Team.Color)">
+</div>
+
+
+
+
+@code{
+    [Parameter, EditorRequired] public Team Team { get; set; }
+    [Parameter] public GridRightsType Rights { get; set; } = GridRightsType.Read;
+
+
+    private Modal colorDialog = default!;
+    private string color = "";
+
+    private bool isOpened = false;
+
+
+    private async Task ShowColorDialog()
+    {
+        if (Rights<GridRightsType.Update) return;
+
+        color = ColorConverterHelper.ArgbToHex(Team.Color);
+        await colorDialog.ShowAsync();
+    }
+    private async Task SetPredefinedColor(string color)
+    {
+        var intColor = ColorConverterHelper.HexToArgb(color);
+
+        isOpened = false;
+        await colorDialog.HideAsync();
+
+        if (intColor == Team.Color)
+            return;
+
+        Team.Color = intColor;        
+        await SaveTeam();
+    }
+    private async Task OpenCustomColorPicker()
+    {
+        await colorDialog.HideAsync();
+        isOpened = true;
+        StateHasChanged();
+    }
+
+
+    private async Task SaveTeam()
+    {
+        if (Team.Id != Guid.Empty)
+        {
+            await TeamService.UpdateAsync(Team);
+            StateHasChanged();
+        }
+    }
+}

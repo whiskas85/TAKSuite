@@ -22,7 +22,7 @@
     <Content Remove="Components\Pages\SimpleTables\EventEntityPages\EventAdd.razor" />
     <Content Remove="Components\Pages\SimpleTables\EventEntityPages\EventEntities.razor" />
     <Content Remove="Components\Pages\MedevacPage - Copia.razor" />
-    <Content Remove="Components\Pages\SimpleTables\RegistrationCode\RegCode2.razor" />
+    <Content Remove="Components\Pages\RegistrationCode\RegCode2.razor" />
     <Content Remove="Components\Pages\SimpleTables\RadioChannel\RadioChannelPage - Copia.razor" />
     <Content Remove="Components\Pages\TeamSettingsPage\TeamPage - Copia.razor" />
     <Content Remove="Components\Pages\Weather.razor" />
@@ -58,6 +58,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="Components\Pages\SimpleTables\TaskPage\old\" />
     <Folder Include="Controller\" />
     <Folder Include="EPSG\" />
     <Folder Include="TAK\API\" />

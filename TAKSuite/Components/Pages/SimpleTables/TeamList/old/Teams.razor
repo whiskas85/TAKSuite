@@ -1,4 +1,4 @@
-﻿@page "/teams"
+﻿@page "/teams2"
 @attribute [Authorize]
 
 @using System.Drawing
@@ -122,7 +122,7 @@ else
                                     <h3>ATAK Color</h3>
                                     @foreach (var predefinedColor in ATAKHelper.ATAKPredefinedColors)
                                     {
-                                        var hexColor = ColorConverterHelper.ArgbToHex(predefinedColor);
+                                        var hexColor = predefinedColor.ToHex();
 
                                         <button class="color-button"
                                                 style="background-color:@hexColor;"
