@@ -124,7 +124,15 @@ else
                 foreach (var uid in uids.EnumerateArray())
                 {
                     var callsign = uid.GetProperty("details").GetProperty("callsign").GetString();
-                    var color = uid.GetProperty("details").GetProperty("color").GetString();
+
+                    string color = null;
+
+                    if (uid.TryGetProperty("details", out var details) &&
+                        details.TryGetProperty("color", out var colorProp))
+                    {
+                        color = colorProp.GetString();
+                    }
+
                     var timestamp = uid.GetProperty("timestamp").GetDateTime().ToString("yyyy-MM-dd HH:mm:ss");
                     var type = uid.GetProperty("details").GetProperty("type").GetString();
                     var cotUid = uid.GetProperty("data").GetString();  // Aggiungi l'UID
