@@ -14,35 +14,31 @@
 </div>
 
 @code {
-    [Parameter] public TaskEntity TaskEntity { get; set; }
+    [Parameter] public MissionSuite MissionEntity { get; set; }
 
     private int missionProgressMin = 0;
     private int missionProgressMax = VisualStates.Length - 1;
     private int missionProgress;
     private List<TickMark> listTaskStatus = new();
 
-    private static readonly TaskStatusTak[] VisualStates = new[]
+    private static readonly MissionStatusTak[] VisualStates = new[]
     {
-        TaskStatusTak.Created,
-        TaskStatusTak.Scheduled,
-        TaskStatusTak.Accepted,
-        TaskStatusTak.Assigned,
-        TaskStatusTak.InProgress,
-        TaskStatusTak.Completed
+        MissionStatusTak.Created,
+        MissionStatusTak.Assigned,
+        MissionStatusTak.InProgress,
+        MissionStatusTak.Completed
     };
 
-    private static readonly HashSet<TaskStatusTak> CompletedEquivalents = new()
+    private static readonly HashSet<MissionStatusTak> CompletedEquivalents = new()
     {
-        TaskStatusTak.Aborted,
-        TaskStatusTak.Canceled,
-        TaskStatusTak.Failed,
-        TaskStatusTak.RejectedTier1,
-        TaskStatusTak.RejectedTier2
+        MissionStatusTak.Archived,
+        MissionStatusTak.Canceled,
+        MissionStatusTak.Stopped,
     };
 
-    private static TaskStatusTak NormalizeStatus(TaskStatusTak status)
+    private static MissionStatusTak NormalizeStatus(MissionStatusTak status)
     {
-        return CompletedEquivalents.Contains(status) ? TaskStatusTak.Completed : status;
+        return CompletedEquivalents.Contains(status) ? MissionStatusTak.Completed : status;
     }
 
     private static List<TickMark> GetTickMarks()
@@ -54,7 +50,7 @@
         }).ToList();
     }
 
-    private static int GetNormalizedProgress(TaskStatusTak status)
+    private static int GetNormalizedProgress(MissionStatusTak status)
     {
         var normalized = NormalizeStatus(status);
         var index = Array.IndexOf(VisualStates, normalized);
@@ -64,6 +60,6 @@
     protected override void OnInitialized()
     {
         listTaskStatus = GetTickMarks();
-        missionProgress = GetNormalizedProgress(TaskEntity.Status);
+        missionProgress = GetNormalizedProgress(MissionEntity.Status);
     }
 }

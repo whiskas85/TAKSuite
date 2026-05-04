@@ -14,7 +14,8 @@ namespace TAKSuite.Data.Services
         {
             Includes = [ _ =>_.Priority,
                          _=> _.Logs,
-                         _=> _.Hierarchy ];
+                         _=> _.Hierarchy,
+                         _=> _.Items];
         }
        
 

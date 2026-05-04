@@ -1,0 +1,36 @@
+﻿.task-section {
+    padding: 12px;
+    border-radius: 4px;
+    /* colore principale */
+    --accent-rgb: 13, 202, 240; /* fallback */
+
+    border-left: 4px solid var(--accent-color);
+    /* BACKGROUND DERIVATO */
+    background-color: color-mix( in srgb, var(--accent-color) 12%, transparent );
+}
+
+/* Titolo */
+.section-title {
+    color: var(--accent-color);
+    font-weight: 600;
+}
+
+/* Handle */
+.drag-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    cursor: grab;
+    user-select: none;
+    color: var(--accent-color);
+    opacity: 0.85;
+}
+.task-section .input-group {
+    margin-bottom: 12px; /* spazio tra le righe */
+}
+
+/* ultimo elemento non aggiunge spazio extra */
+.task-section .input-group:last-child {
+    margin-bottom: 0;
+}

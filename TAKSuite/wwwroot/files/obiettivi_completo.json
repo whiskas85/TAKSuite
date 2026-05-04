@@ -1,0 +1,262 @@
+{
+  "obiettivi": [
+    {
+      "id": "ALPHA",
+      "title": "OBJ ALPHA – Armatura Atomica",
+      "type": "A+E",
+      "duration": 25,
+      "radio_channel": "LPD10",
+      "description": [
+        "In questo avamposto è presente personale altamente addestrato, incluso almeno un cavaliere con armatura atomica, immune alle armi da fuoco di piccolo calibro.",
+        "La squadra protegge un ordigno nucleare tattico: bassa potenza d'esplosione, ma con un rilascio radioattivo localmente devastante.",
+        "Attivando l’ordigno irradieremo la zona dell’avamposto ed eviteremo per qualche mese la ricostruzione, rallentando l’ascesa della Confraternita di Morbello."
+      ],
+      "info": ["Cercare Fumetti"],
+      "notes": ["Il cavaliere è invulnerabile", "Raggio esplosione 50m"],
+      "objectives": [
+        "Eliminare tutte le forze ostili presenti (A)",
+        "Disattivare l'armatura atomica del cavaliere",
+        "Recuperarne il nucleo di fusione.",
+        "Allontanarsi 50m",
+        "Usare il nucleo di fusione per innescare l'ordigno (info.pdf?)"
+      ]
+    },
+    {
+      "id": "BRAVO",
+      "title": "OBJ BRAVO – Missile",
+      "type": "A+E",
+      "duration": 20,
+      "radio_channel": "LPD12",
+      "description": [
+        "In questo remoto punto di Morbello la confraternita sta posizionando un importante missile vettore.",
+        "Collegatevi al terminale per comprendere i piani di volo e gli obiettivi.",
+        "Individuate e manomettete il quadro elettrico del missile vettore.",
+        "Recatevi sul posto e collegatevi al terminale per capire i piani di volo ed eventuali obbiettivi, dobbiamo sapere di più sulle intenzioni di questo regime militare.",
+        "Cercate poi il quadro elettrico del missile vettore e manomettetelo.",
+        "Fate attenzione: la zona è presidiata da un folto gruppo di scudieri, in caso di ingaggio eliminateli senza pietà."
+      ],
+      "info": ["Cercare Fumetti"],
+      "notes": [],
+      "objectives": [
+        "Eliminare tutti gli scudieri (A)",
+        "Manomettere l'impianto elettrico del vettore (quadro elettrico)",
+        "Accedere al terminale e fotografare i piani di volo."
+      ]
+    },
+    {
+      "id": "CHARLIE",
+      "title": "OBJ CHARLIE – Psychobuff",
+      "type": "A+E",
+      "duration": 15,
+      "radio_channel": "LPD14",
+      "description": [
+        "Nascosto a fondo valle nel bosco si trova il laboratorio dove i predoni fanno esperimenti su varie droghe, dobbiamo saperne di più: catalogate tutte le droghe/carburanti per nome e quantità presente.",
+        "Siamo solo a conoscenza di come si chiami la più potente droga utilizzata/trattata da queste \"bestie\", lo Psychobuff, recuperatene un campione."
+      ],
+      "info": ["Cercare Fumetti"],
+      "notes": [],
+      "objectives": [
+        "Eliminare tutti i predoni presenti (A)",
+        "Indagare droghe e carburanti",
+        "Compilare il rapportino dedicato (Allegato Charlie)",
+        "Recuperare un campione di Psychobuff ed esfiltrarlo."
+      ]
+    },
+    {
+      "id": "DELTA",
+      "title": "OBJ DELTA – Ghoul",
+      "type": "F+E",
+      "duration": 20,
+      "radio_channel": "LPD16",
+      "description": [
+        "A queste coordinate c'è una vecchia struttura da cui, sino a poco tempo fa, un ghoul trasmetteva il suo programma radiofonico indisturbato.",
+        "I predoni ne hanno preso possesso e fatto fuori l'innocuo speaker, successivamente hanno protetto l'ingresso con un campo minato.",
+        "Sminate l'ingresso e rimettete in funzione l'apparato radio.",
+        "Sicuramente nelle vicinanze i predoni hanno lasciato il necessario per avvicinarsi alla radio in sicurezza."
+      ],
+      "info": ["Cercare Fumetti"],
+      "notes": ["Campo minato", "Ribelli"],
+      "objectives": [
+        "Segnalare tutte le mine.",
+        "Riattivare la radio.",
+        "Resistere ad attacco dei predoni."
+      ]
+    },
+    {
+      "id": "ECHO",
+      "title": "OBJ ECHO – Polveriera Gunner",
+      "type": "A+E",
+      "duration": 15,
+      "radio_channel": "LPD18",
+      "description": [
+        "Questa è la polveriera dei Gunner, vi conservano munizioni per armi leggere e veicoli da combattimento.",
+        "Dobbiamo distruggere tutto, sicuramente sarà presente dell'esplosivo che fa al caso nostro.",
+        "Prima di innescarlo ricordatevi di fotografare eventuali progetti di armi/veicoli."
+      ],
+      "info": ["Cercare Fumetti"],
+      "notes": [],
+      "objectives": [
+        "Eliminare i Gunner presenti (A)",
+        "Raggruppare le munizioni accanto al DRONE",
+        "Fotografare progetti (armi o veicoli)",
+        "Allontanarsi 50m",
+        "Far brillare il tutto"
+      ]
+    },
+    {
+      "id": "FOXTROT",
+      "title": "OBJ FOXTROT – FATMAN",
+      "type": "A+E",
+      "duration": 20,
+      "radio_channel": "LPD20",
+      "description": [
+        "Accampamento dove i Gunner stoccano il lanciatore nucleare da fanteria FATMAN.",
+        "Attaccate il sito e prendetene il controllo.",
+        "Recuperate le testate (mininuke) e preparate la zona di atterraggio per il drone da trasporto."
+      ],
+      "info": ["Cercare Fumetti"],
+      "notes": [],
+      "objectives": [
+        "Eliminare i Gunner presenti (A)",
+        "Fotografare il progetto del FATMAN.",
+        "Creare la zona di atterraggio DRONE (allegato FOXTROT)",
+        "Raggruppare tutte le mininuke nella zona di atterraggio drone."
+      ]
+    },
+    {
+      "id": "GOLF",
+      "title": "OBJ GOLF – Hub Robotico",
+      "type": "A+E",
+      "duration": 20,
+      "radio_channel": "LPD22",
+      "description": [
+        "Hub di ricerca robotica pesantemente sorvegliato.",
+        "Vengono condotti esperimenti avanzati sulla nuova generazione di sintetici GEN4.",
+        "L’azione deve essere camuffata come attacco dei predoni."
+      ],
+      "info": ["Cercare Fumetti"],
+      "notes": ["Civili scienziati"],
+      "objectives": [
+        "Eliminare le guardie di difesa (A)",
+        "Fotografare i documenti di ricerca GEN4 ed eventuale prototipo (chiedere a scienziati)",
+        "Esfiltrare le scorte di viveri.",
+        "Neutralizzare gli scienziati con arma bianca."
+      ]
+    },
+    {
+      "id": "HOTEL",
+      "title": "OBJ HOTEL - Iron Steel",
+      "type": "A+E",
+      "duration": 20,
+      "radio_channel": "LPD24",
+      "description": [
+        "In questa zona è presente un laboratorio dove vengono effettuati esperimenti su esseri umani.",
+        "Sappiamo che hanno rapito un nostro ricognitore di nome Iron Steel.",
+        "Iron durante le sue ricognizioni aveva con sé un baule contenente i suoi effetti personali ed informazioni confidenziali.",
+        "Anche qui dobbiamo simulare un attacco da parte dei predoni."
+      ],
+      "info": ["Cercare Fumetti"],
+      "notes": [],
+      "objectives": [
+        "Eliminare la difesa (A)",
+        "Recuperare da Iron Steel il codice",
+        "Utilizzare il codice per aprire il baule",
+        "Recuperare ed esfiltrare effetti personali Iron Steel e le informazioni confidenziali",
+        "Neutralizzare scienziati con arma bianca"
+      ]
+    },
+    {
+      "id": "INDIA",
+      "title": "OBJ INDIA – Cassette",
+      "type": "E",
+      "duration": 0,
+      "radio_channel": "",
+      "description": [
+        "I Minutemen utilizzavano cassette criptate per comunicare.",
+        "Sono note le coordinate di nove cassette."
+      ],
+      "info": ["Cercare Fumetti"],
+      "notes": [],
+      "objectives": [
+        "Raccogliere informazioni dalle cassette",
+        "Testimoniare il passaggio con foto (minimo 2 operatori)",
+        "Scoprire il destino dei volontari e del generale"
+      ]
+    },
+    {
+      "id": "LIMA",
+      "title": "OBJ LIMA - Ponti",
+      "type": "E",
+      "duration": 0,
+      "radio_channel": "",
+      "description": [
+        "Piazzare la carica nel punto indicato e testimoniare con foto del vostro passaggio."
+      ],
+      "info": ["Cercare Fumetti"],
+      "notes": [],
+      "objectives": [
+        "Piazzare la carica e testimoniare con foto del passaggio"
+      ]
+    },
+    {
+      "id": "MIKE1",
+      "title": "OBJ MIKE1 - ACQUEDOTTO",
+      "type": "E",
+      "duration": 0,
+      "radio_channel": "",
+      "description": [
+        "Recuperare campione acqua e riportarlo al vault."
+      ],
+      "info": ["Cercare Fumetti"],
+      "notes": [],
+      "objectives": [
+        "Recuperare campione acqua e documentare il passaggio"
+      ]
+    },
+    {
+      "id": "MIKE2",
+      "title": "OBJ MIKE2 - ANTENNA",
+      "type": "E",
+      "duration": 0,
+      "radio_channel": "",
+      "description": [
+        "Ripristinare funzionamento antenna e testimoniare il processo con video."
+      ],
+      "info": ["Cercare Fumetti"],
+      "notes": [],
+      "objectives": [
+        "Ripristinare antenna e documentare con video"
+      ]
+    },
+    {
+      "id": "MIKE3",
+      "title": "OBJ MIKE3 – TRALICCI",
+      "type": "E",
+      "duration": 0,
+      "radio_channel": "",
+      "description": [
+        "Testimoniare con foto il passaggio su ciascun traliccio per verificarne l'integrità."
+      ],
+      "info": ["Cercare Fumetti"],
+      "notes": [],
+      "objectives": [
+        "Fotografare il passaggio su tutti i tralicci"
+      ]
+    },
+    {
+      "id": "NOVEMBER",
+      "title": "OBJ NOVEMBER - Fumetti",
+      "type": "E",
+      "duration": 0,
+      "radio_channel": "",
+      "description": [
+        "Individuare fumetti e testimoniare ogni copia trovata."
+      ],
+      "info": ["Cercare Fumetti"],
+      "notes": [],
+      "objectives": [
+        "Foto dei fumetti"
+      ]
+    }
+  ]
+}

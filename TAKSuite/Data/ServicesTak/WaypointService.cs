@@ -6,7 +6,6 @@ using Microsoft.EntityFrameworkCore;
 using TAKSuite.TAK.Helper;
 using System.Xml;
 using System.Text.Json.Nodes;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace TAKSuite.Data.ServicesTak
 {

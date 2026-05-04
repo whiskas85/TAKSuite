@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TAKSuite.Data;
 
@@ -11,13 +12,15 @@ using TAKSuite.Data;
 namespace TAKSuite.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260102103058_MissionTAK")]
+    partial class MissionTAK
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.7")
+                .HasAnnotation("ProductVersion", "9.0.4")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
@@ -335,7 +338,7 @@ namespace TAKSuite.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("MissionsTakSuite");
+                    b.ToTable("MissionSuite");
                 });
 
             modelBuilder.Entity("TAKSuite.Data.Models.RadioChannel", b =>
@@ -403,9 +406,6 @@ namespace TAKSuite.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<int?>("Durata")
-                        .HasColumnType("int");
-
                     b.Property<Guid?>("ExecutingTeamId")
                         .HasColumnType("uniqueidentifier");
 
@@ -429,19 +429,8 @@ namespace TAKSuite.Migrations
                     b.Property<Guid?>("PriorityId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid?>("RadioChannelId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("Sottotitolo")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<int>("Status")
                         .HasColumnType("int");
-
-                    b.Property<string>("TipologiaObiettivo")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
 
                     b.PrimitiveCollection<string>("Uids")
                         .IsRequired()
@@ -456,8 +445,6 @@ namespace TAKSuite.Migrations
                     b.HasIndex("MissionTAKSuiteId");
 
                     b.HasIndex("PriorityId");
-
-                    b.HasIndex("RadioChannelId");
 
                     b.ToTable("Tasks");
                 });
@@ -662,29 +649,6 @@ namespace TAKSuite.Migrations
                     b.ToTable("UsersAtak");
                 });
 
-            modelBuilder.Entity("TaskStringItem", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("TaskEntityId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<int>("Type")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Value")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TaskEntityId");
-
-                    b.ToTable("TaskStringItems");
-                });
-
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole", null)
@@ -794,10 +758,6 @@ namespace TAKSuite.Migrations
                         .WithMany()
                         .HasForeignKey("PriorityId");
 
-                    b.HasOne("TAKSuite.Data.Models.RadioChannel", "RadioChannel")
-                        .WithMany()
-                        .HasForeignKey("RadioChannelId");
-
                     b.Navigation("AssignedTeam");
 
                     b.Navigation("ExecutingTeam");
@@ -805,8 +765,6 @@ namespace TAKSuite.Migrations
                     b.Navigation("MissionTAKSuite");
 
                     b.Navigation("Priority");
-
-                    b.Navigation("RadioChannel");
                 });
 
             modelBuilder.Entity("TAKSuite.Data.Models.TaskHierarchy", b =>
@@ -904,17 +862,6 @@ namespace TAKSuite.Migrations
                     b.Navigation("Team");
                 });
 
-            modelBuilder.Entity("TaskStringItem", b =>
-                {
-                    b.HasOne("TAKSuite.Data.Models.TaskEntity", "Task")
-                        .WithMany("Items")
-                        .HasForeignKey("TaskEntityId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Task");
-                });
-
             modelBuilder.Entity("TAKSuite.Data.Models.Documentation", b =>
                 {
                     b.Navigation("DocumentationOwners");
@@ -932,8 +879,6 @@ namespace TAKSuite.Migrations
                     b.Navigation("Documents");
 
                     b.Navigation("Hierarchy");
-
-                    b.Navigation("Items");
 
                     b.Navigation("Logs");
                 });

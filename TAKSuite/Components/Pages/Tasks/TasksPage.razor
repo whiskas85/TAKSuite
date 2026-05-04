@@ -39,6 +39,13 @@ Responsive="true"
         <GridColumn TItem="TaskEntity" HeaderText="Azioni">
             <Button Color="ButtonColor.Danger" @onclick="() => DeleteTask(context)"><Icon Name="IconName.X" /></Button>
         </GridColumn>
+        <GridColumn TItem="TaskEntity" HeaderText="Editor">
+            <NavLink class="btn btn-sm btn-primary"
+                     href="@($"/objeditor/{context.Id}")">
+                <Icon Name="IconName.Pencil" />
+            </NavLink>
+        </GridColumn>
+
     </GridColumns>
 </Grid>
 

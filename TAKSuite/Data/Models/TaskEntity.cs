@@ -1,4 +1,6 @@
-﻿namespace TAKSuite.Data.Models
+﻿using System.ComponentModel.DataAnnotations.Schema;
+
+namespace TAKSuite.Data.Models
 {
     public class TaskEntity: IGuidModel
     {
@@ -17,6 +19,9 @@
         public string MissionUid { get; set; } = "";    // Missione dalla quale attingere
 
 
+        public MissionSuite? MissionTAKSuite { get; set; } // missione TAKSuite di appartenenza
+
+
         // Documentazione
         public List<Documentation> Documents { get; set; } = new(); // Documenti allegati
 
@@ -30,6 +35,25 @@
 
 
 
+
+
+
+        public Guid? RadioChannelId { get; set; }     // ✅ FK
+        public RadioChannel? RadioChannel { get; set; } // ✅ Navigation
+
+        public string Sottotitolo { get; set; } = string.Empty;
+
+        public string TipologiaObiettivo { get; set; } = string.Empty;
+        public int? Durata { get; set; }
+
+
+
+
+        // ✅ UNICA COLLECTION MAPPATA
+        public List<TaskStringItem> Items { get; set; } = new();
+
+
+
         // Controllo date
         public DateTime CreationDate { get; set; } = DateTime.UtcNow;
         public DateTime LastModified { get; set; } = DateTime.UtcNow;
@@ -40,6 +64,8 @@
         // Log contenenti le date dei cambi di stato
         public List<TaskLog> Logs { get; set; } = new();
 
+
+        // Sotto task e gerarchia (per ora non sviluppati)
         public List<TaskHierarchy> Hierarchy { get; set; } = new();
 
     }

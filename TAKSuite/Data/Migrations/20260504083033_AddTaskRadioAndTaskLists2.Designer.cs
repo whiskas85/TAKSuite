@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TAKSuite.Data;
 
@@ -11,9 +12,11 @@ using TAKSuite.Data;
 namespace TAKSuite.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260504083033_AddTaskRadioAndTaskLists2")]
+    partial class AddTaskRadioAndTaskLists2
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -680,8 +683,6 @@ namespace TAKSuite.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TaskEntityId");
-
                     b.ToTable("TaskStringItems");
                 });
 
@@ -904,17 +905,6 @@ namespace TAKSuite.Migrations
                     b.Navigation("Team");
                 });
 
-            modelBuilder.Entity("TaskStringItem", b =>
-                {
-                    b.HasOne("TAKSuite.Data.Models.TaskEntity", "Task")
-                        .WithMany("Items")
-                        .HasForeignKey("TaskEntityId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Task");
-                });
-
             modelBuilder.Entity("TAKSuite.Data.Models.Documentation", b =>
                 {
                     b.Navigation("DocumentationOwners");
@@ -932,8 +922,6 @@ namespace TAKSuite.Migrations
                     b.Navigation("Documents");
 
                     b.Navigation("Hierarchy");
-
-                    b.Navigation("Items");
 
                     b.Navigation("Logs");
                 });

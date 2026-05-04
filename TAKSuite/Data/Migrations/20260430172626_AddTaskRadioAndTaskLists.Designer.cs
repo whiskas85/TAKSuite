@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TAKSuite.Data;
 
@@ -11,9 +12,11 @@ using TAKSuite.Data;
 namespace TAKSuite.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260430172626_AddTaskRadioAndTaskLists")]
+    partial class AddTaskRadioAndTaskLists
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -21,6 +24,46 @@ namespace TAKSuite.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
+
+            modelBuilder.Entity("ActionItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TaskEntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TaskEntityId");
+
+                    b.ToTable("ActionItem");
+                });
+
+            modelBuilder.Entity("InfoItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TaskEntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TaskEntityId");
+
+                    b.ToTable("InfoItem");
+                });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
                 {
@@ -153,6 +196,26 @@ namespace TAKSuite.Migrations
                     b.HasKey("UserId", "LoginProvider", "Name");
 
                     b.ToTable("AspNetUserTokens", (string)null);
+                });
+
+            modelBuilder.Entity("NoteItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TaskEntityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TaskEntityId");
+
+                    b.ToTable("NoteItem");
                 });
 
             modelBuilder.Entity("TAKSuite.Data.ApplicationUser", b =>
@@ -662,27 +725,26 @@ namespace TAKSuite.Migrations
                     b.ToTable("UsersAtak");
                 });
 
-            modelBuilder.Entity("TaskStringItem", b =>
+            modelBuilder.Entity("ActionItem", b =>
                 {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
+                    b.HasOne("TAKSuite.Data.Models.TaskEntity", "Task")
+                        .WithMany("Actions")
+                        .HasForeignKey("TaskEntityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
-                    b.Property<Guid>("TaskEntityId")
-                        .HasColumnType("uniqueidentifier");
+                    b.Navigation("Task");
+                });
 
-                    b.Property<int>("Type")
-                        .HasColumnType("int");
+            modelBuilder.Entity("InfoItem", b =>
+                {
+                    b.HasOne("TAKSuite.Data.Models.TaskEntity", "Task")
+                        .WithMany("Info")
+                        .HasForeignKey("TaskEntityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
-                    b.Property<string>("Value")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TaskEntityId");
-
-                    b.ToTable("TaskStringItems");
+                    b.Navigation("Task");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
@@ -734,6 +796,17 @@ namespace TAKSuite.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("NoteItem", b =>
+                {
+                    b.HasOne("TAKSuite.Data.Models.TaskEntity", "Task")
+                        .WithMany("Notes")
+                        .HasForeignKey("TaskEntityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Task");
                 });
 
             modelBuilder.Entity("TAKSuite.Data.ApplicationUser", b =>
@@ -904,17 +977,6 @@ namespace TAKSuite.Migrations
                     b.Navigation("Team");
                 });
 
-            modelBuilder.Entity("TaskStringItem", b =>
-                {
-                    b.HasOne("TAKSuite.Data.Models.TaskEntity", "Task")
-                        .WithMany("Items")
-                        .HasForeignKey("TaskEntityId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Task");
-                });
-
             modelBuilder.Entity("TAKSuite.Data.Models.Documentation", b =>
                 {
                     b.Navigation("DocumentationOwners");
@@ -929,13 +991,17 @@ namespace TAKSuite.Migrations
 
             modelBuilder.Entity("TAKSuite.Data.Models.TaskEntity", b =>
                 {
+                    b.Navigation("Actions");
+
                     b.Navigation("Documents");
 
                     b.Navigation("Hierarchy");
 
-                    b.Navigation("Items");
+                    b.Navigation("Info");
 
                     b.Navigation("Logs");
+
+                    b.Navigation("Notes");
                 });
 
             modelBuilder.Entity("TAKSuite.Data.Models.Team", b =>

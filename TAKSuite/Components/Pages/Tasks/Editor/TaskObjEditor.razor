@@ -1,0 +1,135 @@
+﻿@page "/objeditor/{TaskId:guid}"
+@inherits ConnectedUserInfo
+
+@using TAKSuite.Data.Models
+@using Microsoft.AspNetCore.Components.Forms
+@using BlazorReflection
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Components.Layout
+@using TAKSuite.Components.Pages.Documentation
+@using TAKSuite.Components.Pages.Missions
+@using TAKSuite.Components.Pages.Tasks.TaskComponents
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.ModelsTak
+@using TAKSuite.Data.Services
+@using TAKSuite.TAK.CoT
+
+@inject TaskService taskService
+@inject RadioChannelService radioChannelService
+
+<PageTitle>@taskEntity?.Name</PageTitle>
+
+@if (taskEntity == null)
+{
+    <p>Caricamento...</p>
+}
+else
+{
+    <div class="container-fluid">
+
+        <h3>Task Editor</h3>
+
+        <!-- NOME / SOTTOTITOLO -->
+        <div class="row mb-3">
+            <div class="col">
+                <label class="form-label">Nome</label>
+                <InputText class="form-control"
+                           @bind-Value="taskEntity.Name" />
+            </div>
+
+            <div class="col">
+                <label class="form-label">Sottotitolo</label>
+                <InputText class="form-control"
+                           @bind-Value="taskEntity.Sottotitolo" />
+            </div>
+        </div>
+
+        <!-- METADATI -->
+        <div class="row mb-3">
+            <div class="col">
+                <label class="form-label">Tipologia Obiettivo</label>
+                <InputText class="form-control"
+                           @bind-Value="taskEntity.TipologiaObiettivo" />
+            </div>
+
+            <div class="col">
+                <label class="form-label">Durata (min)</label>
+                <InputNumber class="form-control"
+                             @bind-Value="taskEntity.Durata" />
+            </div>
+
+            <div class="col">
+                <label class="form-label">Canale Radio</label>
+                <InputSelect class="form-control"
+                             @bind-Value="taskEntity.RadioChannelId">
+                    <option value="">Seleziona un canale</option>
+                    @foreach (var r in RadioList.OrderBy(r => r.Name))
+                    {
+                        <option value="@r.Id">@r.Name</option>
+                    }
+                </InputSelect>
+            </div>
+        </div>
+
+        <!-- DESCRIZIONE -->
+        <h5>Descrizione</h5>
+        <MarkdownEditor SpellChecker="false"
+                        @bind-Value="taskEntity.Description" />
+
+        <TaskStringSection Title="ℹ INFO"
+                           Items="taskEntity.Items"
+                           AccentColor="#3399ff"
+                           ButtonText="Aggiungi Info"
+                           Placeholder="Inserisci informazione…"
+                           Task="taskEntity"
+                           SectionType="TaskStringItemType.Info"/>
+
+        <TaskStringSection Title="⚠ NOTE"
+                           Items="taskEntity.Items"
+                           AccentColor="#ff4444"
+                           ButtonText="Aggiungi Nota"
+                           Placeholder="Inserisci nota…"
+                           Task="taskEntity"
+                           SectionType="TaskStringItemType.Note" />
+
+        <TaskStringSection Title="🚧 AZIONI"
+                           Items="taskEntity.Items"
+                           AccentColor="#ffcc00"
+                           ButtonText="Aggiungi Azione"
+                           Placeholder="Inserisci azione operativa…"
+                           Task="taskEntity" 
+                           SectionType="TaskStringItemType.Action" />
+        
+
+        <!-- SALVA -->
+        <div class="mt-4">
+            <Button Color="ButtonColor.Success"
+                    @onclick="Save">
+                Salva Task
+            </Button>
+        </div>
+
+    </div>
+}
+
+@code {
+    [Parameter] public Guid TaskId { get; set; }
+
+    TaskEntity? taskEntity;
+    List<RadioChannel> RadioList = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        taskEntity = await taskService.GetAsync(TaskId);
+        RadioList = await radioChannelService.GetAllAsync();
+    }
+
+    private async Task Save()
+    {
+        if (taskEntity == null)
+            return;
+
+        taskEntity.LastModified = DateTime.UtcNow;
+        await taskService.UpdateAsync(taskEntity);
+    }
+}

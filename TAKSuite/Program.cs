@@ -80,6 +80,7 @@ builder.Services.AddTransient<DocumentationService>();
 builder.Services.AddTransient<TaskService>();
 builder.Services.AddTransient<TaskPrioritiesService>();
 builder.Services.AddTransient<EventEntityService>();
+builder.Services.AddTransient<MissionSuiteEntityServices>();
 
 
 

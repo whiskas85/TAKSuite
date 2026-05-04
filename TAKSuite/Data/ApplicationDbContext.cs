@@ -17,10 +17,15 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<DocumentationOwner> DocumentationOwners { get; set; }
 
     public DbSet<TaskEntity> Tasks { get; set; }
+    public DbSet<TaskStringItem> TaskStringItems { get; set; }
+
     public DbSet<TaskLog> TaskLogs { get; set; }
     public DbSet<TaskHierarchy> TaskHierarchy { get; set; }
     public DbSet<TaskPriority> TaskPriorities { get; set; }
     public DbSet<EventEntity> EventEntities { get; set; }
+
+    public DbSet<MissionSuite> MissionsTakSuite { get; set; }
+
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

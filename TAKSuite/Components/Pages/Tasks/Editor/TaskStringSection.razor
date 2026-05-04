@@ -1,0 +1,173 @@
+﻿@using TAKSuite.Data.Models
+@inject IJSRuntime JS
+
+<div class="task-section"
+     @ref="_containerRef"
+     style="--accent-color:@AccentColor">
+
+    <!-- HEADER -->
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <strong class="section-title">
+            <Icon Name="@TitleIcon" /> @Title
+        </strong>
+
+        <Button Outline="true"
+                Color="ButtonColor.Primary"
+                @onclick="Add">
+            <Icon Name="IconName.DatabaseAdd" /> + @ButtonText
+        </Button>
+    </div>
+
+    <!-- EMPTY STATE -->
+    @if (_items.Count == 0)
+    {
+        <div class="empty-section-hint">
+            Nessun elemento inserito
+        </div>
+    }
+
+    <!-- ITEMS -->
+    @foreach (var item in _items)
+    {
+        <div class="input-group mb-2 align-items-center" @key="item">
+
+            <!-- HANDLE -->
+            <span class="drag-handle">
+                <Icon Name="IconName.List" />
+            </span>
+
+            <!-- INPUT -->
+            <input class="form-control"
+                   placeholder="@Placeholder"
+                   @bind="item.Value" />
+
+            <!-- REMOVE -->
+            <button class="btn btn-danger"
+                    @onclick="() => Remove(item)">
+                ✕
+            </button>
+        </div>
+    }
+</div>
+
+<!-- ✅ JS INLINE: FOCUS DAVVERO SULL'ULTIMO INPUT -->
+<script>
+    window.taskStringSectionFocusLast = function (container) {
+        if (!container) return;
+
+        const initialCount = container.querySelectorAll("input").length;
+
+        const observer = new MutationObserver(() => {
+            const inputs = container.querySelectorAll("input");
+            if (inputs.length > initialCount) {
+                observer.disconnect();
+                inputs[inputs.length - 1].focus();
+            }
+        });
+
+        observer.observe(container, {
+            childList: true,
+            subtree: true
+        });
+    };
+</script>
+
+<!-- ✅ CSS LOCALE -->
+<style>
+    .task-section {
+        padding: 12px;
+        border-radius: 4px;
+        border-left: 4px solid var(--accent-color);
+        background-color: color-mix(in srgb, var(--accent-color) 12%, transparent);
+        min-height: 64px;
+    }
+
+    .section-title {
+        color: var(--accent-color);
+        font-weight: 600;
+    }
+
+    .drag-handle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        cursor: grab;
+        user-select: none;
+        color: var(--accent-color);
+        opacity: 0.85;
+    }
+
+    .task-section .input-group {
+        margin-bottom: 12px;
+    }
+
+        .task-section .input-group:last-child {
+            margin-bottom: 0;
+        }
+
+    .empty-section-hint {
+        padding: 10px 12px;
+        margin-top: 8px;
+        border-radius: 4px;
+        font-size: 0.9rem;
+        opacity: 0.6;
+        color: var(--accent-color);
+        border: 1px dashed var(--accent-color);
+    }
+</style>
+
+@code {
+    private ElementReference _containerRef;
+
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string ButtonText { get; set; } = "";
+    [Parameter] public string Placeholder { get; set; } = "";
+    [Parameter] public string AccentColor { get; set; } = "#0dcaf0";
+    [Parameter] public IconName TitleIcon { get; set; } = IconName.InfoCircle;
+
+    [Parameter] public TaskEntity Task { get; set; } = null!;
+    [Parameter] public List<TaskStringItem> Items { get; set; } = new();
+    [Parameter] public TaskStringItemType SectionType { get; set; }
+
+
+    List<TaskStringItem> _items = new List<TaskStringItem>();
+
+    protected override Task OnInitializedAsync()
+    {
+        UpdateItems();
+        return base.OnInitializedAsync();
+    }
+
+    private void UpdateItems()
+    {
+        _items = Items.Where(i => i.Type == SectionType).ToList();
+    }
+
+
+    async Task Add()
+    {
+        // 1️⃣ prepara il focus PRIMA
+        await JS.InvokeVoidAsync("taskStringSectionFocusLast", _containerRef);
+
+        // 2️⃣ aggiungi l'item
+        var item = new TaskStringItem
+        {
+            TaskEntityId = Task.Id,
+            Task = Task,
+            Type = SectionType
+        };
+
+        Items.Add(item);
+        UpdateItems();
+        // 3️⃣ render
+        StateHasChanged();
+    }
+
+    void Remove(TaskStringItem item)
+    {
+        Items.Remove(item);
+        UpdateItems();
+
+    }
+}

@@ -1,0 +1,52 @@
+﻿@page "/missionstaksuite"
+@attribute [Authorize]
+
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Components.Pages.Components
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@inject MissionSuiteEntityServices entityService
+
+<PageTitle>Lista Missioni</PageTitle>
+
+
+
+<GenericDataTable TItem="MissionSuite"
+                  TModel="MissionTakSuiteModel"
+                  Service="entityService"
+                  LoadItems="Load"
+                  Rights="BlazorReflection.Data.GridRightsType.Delete"
+>
+
+    <Columns>
+
+        <GridColumn TItem="MissionSuite">
+            <a href="missiontak/@context.Id"
+               title="@context.Name"
+               target="_blank"
+               rel="noopener noreferrer"
+               class="text-decoration-none">
+                <!-- Bootstrap Icons -->
+                <Tooltip Title="Apri link">
+                    <Icon Name="IconName.BoxArrowUpRight" />
+                </Tooltip>
+            </a>
+        </GridColumn>
+
+        <GridColumn TItem="MissionSuite" HeaderText="Name" SortKeySelector="x => x.Name">
+            @context.Name
+        </GridColumn>
+        <GridColumn TItem="MissionSuite" HeaderText="Descrizione">
+            @context.Descrizione
+        </GridColumn>
+    </Columns>
+</GenericDataTable>
+
+@code {
+
+    private async Task<List<MissionSuite>> Load()
+    {
+        var items = await entityService.GetAllAsync();
+        return items.OrderByDescending(x => x.Name).ToList();
+    }
+}

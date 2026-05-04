@@ -38,6 +38,13 @@
         <GridColumn TItem="TaskEntity" HeaderText="Ultima modifica" SortKeySelector="x => x.LastModified">
             @context.LastModified.ToString("dd/MM HH:mm")
         </GridColumn>
+
+        <GridColumn TItem="TaskEntity" HeaderText="Editor">
+            <NavLink class="btn btn-sm btn-primary"
+                     href="@($"/objeditor/{context.Id}")">
+                <Icon Name="IconName.Pencil" />
+            </NavLink>
+        </GridColumn>
     </Columns>
 </GenericDataTable>
 

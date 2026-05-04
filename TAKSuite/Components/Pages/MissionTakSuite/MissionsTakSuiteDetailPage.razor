@@ -1,0 +1,69 @@
+﻿@page "/missiontak/{MissionTakId:guid}"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Components.Pages.Components
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@inject MissionSuiteEntityServices entityService
+
+<PageTitle>@missionTak?.Name</PageTitle>
+@if (missionTak == null)
+{
+    <p>Caricamento...</p>
+}
+else
+{
+    <div class="d-flex justify-content-between">
+
+        <div class="d-flex flex-column">
+            <h1>@missionTak?.Name</h1>
+            <p>@missionTak?.Descrizione</p>
+        </div>
+
+        
+        @{var currentStatus = missionTak.Status.GetDisplayName();}
+        <div class="d-flex gap-2">
+            <div class="d-flex gap-2">
+                <Dropdown Color="DropdownColor.Secondary">
+                    <DropdownToggleButton>@currentStatus</DropdownToggleButton>
+                    <DropdownMenu Class="p-0 text-muted" Style="width: 320px;">
+                        <div class="px-2 py-1 d-flex flex-column">
+                            <TAKSuite.Components.Pages.Components.MissionProgress MissionEntity="missionTak" />
+                        </div>
+                            
+                        @* @foreach (var log in missionTak.Logs.OrderBy(_ => _.Timestamp))
+                        {
+                            var statusName = log.NewStatus.GetDisplayName();
+                            <div class="border rounded px-2 py-1 d-flex flex-column">
+                                <p class="fw-bold mb-1">@statusName</p>
+                                <p class="small text-secondary mb-0"><Icon Name="IconName.PeopleFill" /> @log.Team?.Name - @log.User?.Nick</p>
+                                <p class="small text-secondary mb-0"><Icon Name="IconName.Person" /> @log.User?.Nick</p>
+                                <p class="small text-muted mb-0"><Icon Name="IconName.ClockFill" />@log.Timestamp.ToString()</p>
+                            </div>
+                        } *@
+                    </DropdownMenu>
+                </Dropdown>
+
+            @* <Button Color="ButtonColor.Primary" @onclick="EnableEdit" Outline="true"><Icon Name="IconName.PencilFill"></Icon></Button>   *@
+            </div>
+        </div>
+    </div>
+
+
+
+}
+@code {
+    [Parameter] public Guid MissionTakId { get; set; }
+    [Parameter] public MissionSuite? missionTak { get; set; }
+    private async Task<MissionSuite?> Load()
+    {
+        return await entityService.GetAsync(MissionTakId);  
+    }
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        missionTak = await Load();
+    }
+}

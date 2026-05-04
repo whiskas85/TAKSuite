@@ -63,10 +63,10 @@ Width="300"/>
                 new NavItem { Id = $"8.{counter++}", Href = "/documentation", IconName = IconName.ListNested, Text = "Documentazione", ParentId = "8" },
                 new NavItem { Id = $"8.{counter++}", Href = "/tasks", IconName = IconName.ListNested, Text = "Lista Task", ParentId = "8" },
                 new NavItem { Id = $"8.{counter++}", Href = "/evententitylist", IconName = IconName.ListNested, Text = "Lista Eventi", ParentId = "8" },
+                new NavItem { Id = $"8.{counter++}", Href = "/missionstaksuite", IconName = IconName.ListNested, Text = "Lista Missioni", ParentId = "8" },
 
 
 
-                
             // new NavItem { Id = "1", Href = "/getting-started", IconName = IconName.HouseDoorFill, Text = "Getting Started"},
 
             // new NavItem { Id = "2", IconName = IconName.LayoutSidebarInset, Text = "Content" },
@@ -87,7 +87,7 @@ Width="300"/>
             // new NavItem { Id = "12", Href = "/switch", IconName = IconName.ToggleOn, Text = "Switch", ParentId="8"},
         };
 
-
+        
 
 
         navItems = await RetrieveAllTeams(navItems.ToList(), "Teams");

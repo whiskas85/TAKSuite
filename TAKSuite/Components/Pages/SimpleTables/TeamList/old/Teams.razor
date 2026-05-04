@@ -137,11 +137,13 @@ else
                             @if (team == editingTeam && showColorPicker)
                             {
                                 <div @ref="colorPickerRef">
-                                    <ColorPicker Title="Seleziona Colore"
+                                    @* <ColorPicker Title="Seleziona Colore"
                                     IsOpened="isOpened"
                                     Closed="@(color => SetPredefinedColor(color, team))"
                                     MyColor="@color">
-                                    </ColorPicker>
+                                    </ColorPicker> 
+                                    kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+                                    *@
                                 </div>
                             }
                         </td>
