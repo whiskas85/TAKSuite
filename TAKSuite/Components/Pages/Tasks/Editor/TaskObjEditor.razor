@@ -1,4 +1,4 @@
-﻿@page "/objeditor/{TaskId:guid}"
+@page "/objeditor/{TaskId:guid}"
 @inherits ConnectedUserInfo
 
 @using TAKSuite.Data.Models
@@ -16,6 +16,8 @@
 
 @inject TaskService taskService
 @inject RadioChannelService radioChannelService
+@inject TaskTemplateService templateService
+@inject IJSRuntime JS
 
 <PageTitle>@taskEntity?.Name</PageTitle>
 
@@ -33,14 +35,11 @@ else
         <div class="row mb-3">
             <div class="col">
                 <label class="form-label">Nome</label>
-                <InputText class="form-control"
-                           @bind-Value="taskEntity.Name" />
+                <InputText class="form-control" @bind-Value="taskEntity.Name" />
             </div>
-
             <div class="col">
                 <label class="form-label">Sottotitolo</label>
-                <InputText class="form-control"
-                           @bind-Value="taskEntity.Sottotitolo" />
+                <InputText class="form-control" @bind-Value="taskEntity.Sottotitolo" />
             </div>
         </div>
 
@@ -48,20 +47,15 @@ else
         <div class="row mb-3">
             <div class="col">
                 <label class="form-label">Tipologia Obiettivo</label>
-                <InputText class="form-control"
-                           @bind-Value="taskEntity.TipologiaObiettivo" />
+                <InputText class="form-control" @bind-Value="taskEntity.TipologiaObiettivo" />
             </div>
-
             <div class="col">
                 <label class="form-label">Durata (min)</label>
-                <InputNumber class="form-control"
-                             @bind-Value="taskEntity.Durata" />
+                <InputNumber class="form-control" @bind-Value="taskEntity.Durata" />
             </div>
-
             <div class="col">
                 <label class="form-label">Canale Radio</label>
-                <InputSelect class="form-control"
-                             @bind-Value="taskEntity.RadioChannelId">
+                <InputSelect class="form-control" @bind-Value="taskEntity.RadioChannelId">
                     <option value="">Seleziona un canale</option>
                     @foreach (var r in RadioList.OrderBy(r => r.Name))
                     {
@@ -73,8 +67,7 @@ else
 
         <!-- DESCRIZIONE -->
         <h5>Descrizione</h5>
-        <MarkdownEditor SpellChecker="false"
-                        @bind-Value="taskEntity.Description" />
+        <MarkdownEditor SpellChecker="false" @bind-Value="taskEntity.Description" />
 
         <div class="mb-3">
             <TaskStringSection Title="ℹ INFO"
@@ -105,14 +98,27 @@ else
                                Task="taskEntity"
                                SectionType="TaskStringItemType.Action" />
         </div>
-        
 
-        <!-- SALVA -->
-        <div class="mt-4">
-            <Button Color="ButtonColor.Success"
-                    @onclick="Save">
+        <!-- AZIONI -->
+        <div class="mt-4 d-flex gap-2 flex-wrap">
+            <Button Color="ButtonColor.Success" @onclick="Save">
                 Salva Task
             </Button>
+            <Button Color="ButtonColor.Primary" @onclick="DownloadHtml">
+                <Icon Name="IconName.Download" /> Genera HTML
+            </Button>
+            <Button Color="ButtonColor.Secondary" @onclick="RefreshPreview">
+                <Icon Name="IconName.Eye" /> Aggiorna Anteprima
+            </Button>
+        </div>
+
+        <!-- ANTEPRIMA -->
+        <div class="mt-4">
+            <h5>Anteprima</h5>
+            <iframe id="task-preview-frame"
+                    style="width:100%; height:80vh; border:1px solid #444; border-radius:4px; background:#0f0f0f;"
+                    sandbox="allow-same-origin">
+            </iframe>
         </div>
 
     </div>
@@ -130,13 +136,32 @@ else
         RadioList = await radioChannelService.GetAllAsync();
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && taskEntity != null)
+            await RefreshPreview();
+    }
+
     private async Task Save()
     {
-        if (taskEntity == null)
-            return;
-
+        if (taskEntity == null) return;
         taskEntity.LastModified = DateTime.UtcNow;
-        
         await taskService.UpdateAsync(taskEntity);
+        await RefreshPreview();
+    }
+
+    private async Task RefreshPreview()
+    {
+        if (taskEntity == null) return;
+        var html = await templateService.CompileAsync(taskEntity);
+        await JS.InvokeVoidAsync("setIframeSrcdoc", "task-preview-frame", html);
+    }
+
+    private async Task DownloadHtml()
+    {
+        if (taskEntity == null) return;
+        var html = await templateService.CompileAsync(taskEntity);
+        var filename = $"{taskEntity.Name.Replace(" ", "_")}.html";
+        await JS.InvokeVoidAsync("downloadTextAsFile", filename, html, "text/html;charset=utf-8");
     }
 }

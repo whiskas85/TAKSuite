@@ -1,0 +1,110 @@
+@page "/template-editor"
+@attribute [Authorize]
+
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Data.Services
+
+@inject TaskTemplateService templateService
+@inject IJSRuntime JS
+
+<PageTitle>Editor Template</PageTitle>
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3>Template HTML Task</h3>
+        <div class="d-flex gap-2">
+            <Button Color="ButtonColor.Success" @onclick="Save" Loading="_saving" LoadingText="Salvataggio...">
+                <Icon Name="IconName.Save" /> Salva Template
+            </Button>
+            <Button Color="ButtonColor.Secondary" @onclick="RefreshPreview">
+                <Icon Name="IconName.Eye" /> Aggiorna Anteprima
+            </Button>
+        </div>
+    </div>
+
+    @if (_saved)
+    {
+        <Alert Color="AlertColor.Success" Dismissable="true">Template salvato correttamente.</Alert>
+    }
+
+    <p class="text-muted small mb-2">
+        Placeholder disponibili:
+        <code>{{TITLE}}</code> &nbsp;
+        <code>{{TYPE}}</code> &nbsp;
+        <code>{{DURATION}}</code> &nbsp;
+        <code>{{RADIO_CHANNEL}}</code> &nbsp;
+        <code>{{DESCRIPTION}}</code> &nbsp;
+        <code>{{INFO}}</code> &nbsp;
+        <code>{{NOTES}}</code> &nbsp;
+        <code>{{OBJECTIVES}}</code>
+    </p>
+
+    <div class="row g-3">
+        <!-- EDITOR -->
+        <div class="col-12 col-xl-6">
+            <textarea class="form-control font-monospace template-editor"
+                      @bind="_templateHtml"
+                      @bind:event="oninput"
+                      spellcheck="false"
+                      placeholder="Incolla qui l'HTML del template…" />
+        </div>
+
+        <!-- ANTEPRIMA -->
+        <div class="col-12 col-xl-6">
+            <iframe id="template-preview-frame"
+                    style="width:100%; height:75vh; border:1px solid #444; border-radius:4px; background:#0f0f0f;"
+                    sandbox="allow-same-origin">
+            </iframe>
+        </div>
+    </div>
+</div>
+
+<style>
+    .template-editor {
+        height: 75vh;
+        resize: vertical;
+        font-size: 0.82rem;
+        line-height: 1.5;
+        background: #1e1e1e;
+        color: #d4d4d4;
+        border-color: #444;
+    }
+</style>
+
+@code {
+    private string _templateHtml = string.Empty;
+    private bool _saving;
+    private bool _saved;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _templateHtml = await templateService.LoadTemplateAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            await RefreshPreview();
+    }
+
+    private async Task RefreshPreview()
+    {
+        await JS.InvokeVoidAsync("setIframeSrcdoc", "template-preview-frame", _templateHtml);
+    }
+
+    private async Task Save()
+    {
+        _saving = true;
+        _saved = false;
+        try
+        {
+            await templateService.SaveTemplateAsync(_templateHtml);
+            _saved = true;
+            await RefreshPreview();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

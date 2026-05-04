@@ -81,6 +81,7 @@ builder.Services.AddTransient<TaskService>();
 builder.Services.AddTransient<TaskPrioritiesService>();
 builder.Services.AddTransient<EventEntityService>();
 builder.Services.AddTransient<MissionSuiteEntityServices>();
+builder.Services.AddTransient<TaskTemplateService>();
 
 
 

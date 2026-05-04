@@ -1,4 +1,4 @@
-﻿@page "/tasks"
+@page "/tasks"
 @attribute [Authorize]
 
 @using Microsoft.AspNetCore.Authorization
@@ -6,9 +6,17 @@
 @using TAKSuite.Data.Models
 @using TAKSuite.Data.Services
 @inject TaskService service
+@inject TaskTemplateService templateService
+@inject IJSRuntime JS
 
 <PageTitle>@pageTitle</PageTitle>
 <h3>@pageTitle</h3>
+
+<div class="mb-3">
+    <Button Color="ButtonColor.Warning" @onclick="ExportAll" Loading="_exporting" LoadingText="Esportazione...">
+        <Icon Name="IconName.Download" /> Esporta tutti (ZIP)
+    </Button>
+</div>
 
 <GenericDataTable TItem="TaskEntity"
                   TModel="TaskViewModel"
@@ -23,25 +31,20 @@
         <GridColumn TItem="TaskEntity" HeaderText="Stato" SortKeySelector="x => x.Status">
             @context.Status.GetDisplayName()
         </GridColumn>
-        
         <GridColumn TItem="TaskEntity" HeaderText="Team assegnato" SortKeySelector="x => x.AssignedTeam.Name">
             @context.AssignedTeam?.Name
         </GridColumn>
         <GridColumn TItem="TaskEntity" HeaderText="Team exec" SortKeySelector="x => x.ExecutingTeam.Name">
             @context.ExecutingTeam?.Name
         </GridColumn>
-        
         <GridColumn TItem="TaskEntity" HeaderText="Priorità" SortKeySelector="x => x.Priority.Name">
             @context.Priority?.Name
         </GridColumn>
-        
         <GridColumn TItem="TaskEntity" HeaderText="Ultima modifica" SortKeySelector="x => x.LastModified">
             @context.LastModified.ToString("dd/MM HH:mm")
         </GridColumn>
-
         <GridColumn TItem="TaskEntity" HeaderText="Editor">
-            <NavLink class="btn btn-sm btn-primary"
-                     href="@($"/objeditor/{context.Id}")">
+            <NavLink class="btn btn-sm btn-primary" href="@($"/objeditor/{context.Id}")">
                 <Icon Name="IconName.Pencil" />
             </NavLink>
         </GridColumn>
@@ -50,9 +53,27 @@
 
 @code {
     private string pageTitle = "Lista Task";
+    private bool _exporting;
+
     private async Task<List<TaskEntity>> LoadData()
     {
         var items = await service.GetAllAsync();
         return items.OrderByDescending(x => x.CreationDate).ToList();
+    }
+
+    private async Task ExportAll()
+    {
+        _exporting = true;
+        StateHasChanged();
+        try
+        {
+            var tasks = await service.GetAllAsync();
+            var zipBytes = await templateService.ExportAllAsZipAsync(tasks);
+            await JS.InvokeVoidAsync("downloadBytesAsFile", $"tasks_{DateTime.Now:yyyyMMdd_HHmm}.zip", zipBytes);
+        }
+        finally
+        {
+            _exporting = false;
+        }
     }
 }

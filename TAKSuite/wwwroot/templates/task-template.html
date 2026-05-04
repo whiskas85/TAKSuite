@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>{{TITLE}}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <style>
+    /* BASE */
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background-color: #0f0f0f;
+      color: #e6e6e6;
+    }
+
+    .page {
+      min-height: 100vh;
+      padding: 4vh 5vw;
+      display: flex;
+      flex-direction: column;
+      gap: 4vh;
+    }
+
+    /* HEADER */
+    header {
+      border-bottom: 2px solid #ffcc00;
+      padding-bottom: 2vh;
+    }
+
+    header h1 {
+      font-size: clamp(2.2rem, 3vw, 3.2rem);
+      color: #ffcc00;
+      text-transform: uppercase;
+      margin: 0;
+    }
+
+    /* META */
+    .meta {
+      display: flex;
+      gap: 4vw;
+      margin-top: 2vh;
+      flex-wrap: wrap;
+    }
+
+    .meta-item {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .meta-label {
+      font-size: 0.85rem;
+      color: #999;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .meta-value {
+      font-size: clamp(1.4rem, 2vw, 1.8rem);
+      font-weight: 600;
+      color: #eee;
+    }
+
+    .meta-type {
+      font-size: clamp(1.8rem, 2.6vw, 2.6rem);
+      color: #ffcc00;
+      font-weight: 700;
+    }
+
+    /* LAYOUT PRINCIPALE */
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 4vw;
+    }
+
+    /* DESCRIZIONE */
+    section.description {
+      font-size: clamp(1.25rem, 1.8vw, 1.6rem);
+      line-height: 1.7;
+    }
+
+    /* INFO (BLU) */
+    .infos {
+      margin-top: 3vh;
+      display: flex;
+      flex-direction: column;
+      gap: 1.8vh;
+    }
+
+    .info {
+      background-color: #001a33;
+      border-left: 5px solid #3399ff;
+      padding: 1.6vh 1.8vw;
+      color: #cce6ff;
+      font-size: clamp(1.05rem, 1.4vw, 1.25rem);
+    }
+
+    /* NOTE (ROSSO) */
+    .notes {
+      margin-top: 3vh;
+      display: flex;
+      flex-direction: column;
+      gap: 1.8vh;
+    }
+
+    .note {
+      background-color: #2a0000;
+      border-left: 5px solid #ff3333;
+      padding: 1.6vh 1.8vw;
+      color: #ffcccc;
+      font-size: clamp(1.05rem, 1.4vw, 1.25rem);
+    }
+
+    /* OBIETTIVI */
+    aside.objectives {
+      background-color: #151515;
+      border-left: 4px solid #ff9933;
+      padding: 3vh 2.5vw;
+    }
+
+    aside.objectives h2 {
+      color: #ff9933;
+      margin-top: 0;
+      margin-bottom: 2.5vh;
+      font-size: clamp(1.6rem, 2.2vw, 2.2rem);
+    }
+
+    aside.objectives ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    aside.objectives li {
+      position: relative;
+      padding-left:;      padding-left: 1.8em;
+      font-size: clamp(1.15rem, 1.6vw, 1.4rem);
+      line-height: 1.55;
+    }
+
+    aside.objectives li::before {
+      content: "\25B6"; /* ► */
+      position: absolute;
+      left: 0;
+      color: #ffcc00;
+      top: 0.1em;
+    }
+
+    /* MOBILE */
+    @media (max-width: 900px) {
+      .page {
+        padding: 3vh 5vw;
+        gap: 3vh;
+      }
+
+      main {
+        grid-template-columns: 1fr;
+      }
+
+      aside.objectives {
+        margin-top: 4vh;
+        border-left: none;
+        border-top: 4px solid #ff9933;
+        padding: 3vh 5vw;
+      }
+
+      aside.objectives h2 {
+        font-size: 1.7rem;
+      }
+
+      aside.objectives li {
+        font-size: 1.25rem;
+        margin-bottom: 2.2vh;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="page">
+
+    <header>
+      <h1>{{TITLE}}</h1>
+
+      <div class="meta">
+        <div class="meta-item">
+          <span class="meta-label">Tipologia</span>
+          <span class="meta-value meta-type">{{TYPE}}</span>
+        </div>
+
+        <div class="meta-item">
+          <span class="meta-label">Durata</span>
+          <span class="meta-value">{{DURATION}}'</span>
+        </div>
+
+        <div class="meta-item">
+          <span class="meta-label">Canale radio</span>
+          <span class="meta-value">{{RADIO_CHANNEL}}</span>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="description">
+        {{DESCRIPTION}}
+
+        <div class="infos">
+          {{INFO}}
+        </div>
+
+        <div class="notes">
+          {{NOTES}}
+        </div>
+      </section>
+
+      <aside class="objectives">
+        <h2>Obiettivi</h2>
+        <ul>
+          {{OBJECTIVES}}
+        </ul>
+      </aside>
+    </main>
+
+  </div>
+</body>
+</html>
+

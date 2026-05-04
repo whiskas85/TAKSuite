@@ -56,6 +56,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="MySql.Data" Version="9.7.0" />
+    <PackageReference Include="Markdig" Version="0.41.0" />
     <PackageReference Include="Scrutor" Version="7.0.0" />
   </ItemGroup>
 

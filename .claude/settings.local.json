@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\marco.allario\\\\source\\\\repos\\\\whiskas85\\\\TAKSuite\\\\TAKSuite\\\\wwwroot\" -Force)",
+      "Bash(Select-Object FullName, Name)",
+      "Bash(Format-Table)",
+      "Bash(dir *)",
+      "Bash(dotnet restore *)",
+      "Bash(Copy-Item \"C:\\\\Users\\\\marco.allario\\\\AppData\\\\Local\\\\Temp\\\\ClaudeCodeVS_Session\\\\0b636651-8211-43ca-acf5-ba90c54fc456\\\\template.html\" \"C:\\\\Users\\\\marco.allario\\\\source\\\\repos\\\\whiskas85\\\\TAKSuite\\\\TAKSuite\\\\wwwroot\\\\templates\\\\task-template.html\")",
+      "Bash(dotnet build *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
+    ]
+  }
+}
