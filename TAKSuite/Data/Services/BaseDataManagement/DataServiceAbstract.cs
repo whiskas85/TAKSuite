@@ -15,7 +15,7 @@ public abstract class DataServiceAbstract<T> : IService, IDataService<T> where T
     public Expression<Func<T, object>>[]? Includes { get; set; }
     
     
-    private readonly IMemoryCache _cache;
+    protected readonly IMemoryCache _cache;
     private readonly string _cacheKey = typeof(T).Name;
 
     protected DataServiceAbstract(DbSet<T> dbSet, ApplicationDbContext context, IMemoryCache cache)

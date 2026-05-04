@@ -5,6 +5,7 @@ using Org.BouncyCastle.Tsp;
 using System.Threading.Tasks;
 using TAKSuite.Components.Pages;
 using TAKSuite.Data.Models;
+using TAKSuite.Data.Services.BaseDataManagement;
 
 namespace TAKSuite.Data.Services
 {
@@ -19,6 +20,65 @@ namespace TAKSuite.Data.Services
         }
        
 
+
+        public override async Task<TaskEntity> UpdateAsync(TaskEntity element)
+        {
+            if (element == null) return null;
+
+            var taskId = element.Id;
+            var incomingItems = element.Items
+                .Select(i => new { i.Id, i.Value, i.Type })
+                .ToList();
+
+            // Blazor Server: il DbContext è scoped al circuito, puliamo il tracker
+            _context.ChangeTracker.Clear();
+
+            // --- ITEMS: gestione esplicita tramite DbSet, senza navigation property ---
+
+            var dbItems = await _context.TaskStringItems
+                .Where(i => i.TaskEntityId == taskId)
+                .ToListAsync();
+
+            // Elimina items rimossi
+            var toDelete = dbItems
+                .Where(db => !incomingItems.Any(i => i.Id == db.Id))
+                .ToList();
+            _context.TaskStringItems.RemoveRange(toDelete);
+
+            // Aggiorna esistenti / inserisci nuovi
+            foreach (var incoming in incomingItems)
+            {
+                var existing = dbItems.FirstOrDefault(db => db.Id == incoming.Id);
+                if (existing != null)
+                {
+                    existing.Value = incoming.Value;
+                    existing.Type = incoming.Type;
+                }
+                else
+                {
+                    _context.TaskStringItems.Add(new TaskStringItem
+                    {
+                        Value = incoming.Value,
+                        Type = incoming.Type,
+                        TaskEntityId = taskId
+                    });
+                }
+            }
+
+            // --- TASK: aggiorna solo le proprietà scalari ---
+
+            var existingTask = await DBSet.FindAsync(taskId);
+            if (existingTask == null) return null;
+
+            EntityUpdater.UpdateEntity(existingTask, element);
+
+            await _context.SaveChangesAsync();
+
+            _cache.Remove(typeof(TaskEntity).Name);
+            _cache.Remove($"{typeof(TaskEntity).Name}_{taskId}");
+
+            return element;
+        }
 
         public async Task<TaskEntity> InsertTaskByTeamAsync(TaskEntity newTask, Team team, UserAtak user)
         {
