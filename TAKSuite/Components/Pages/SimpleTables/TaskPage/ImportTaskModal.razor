@@ -3,6 +3,7 @@
 @using System.Text.Json
 
 @inject TaskService taskService
+@inject RadioChannelService radioChannelService
 @inject IJSRuntime JS
 
 <Modal @ref="_modal" Title="Importa Task da Testo" Size="ModalSize.ExtraLarge" OnHidden="OnHidden">
@@ -53,11 +54,15 @@
                       placeholder='{ "name": "...", "items": [...] }'
                       @bind="_jsonText"
                       @bind:event="oninput" />
-            @if (!string.IsNullOrEmpty(_importError))
+            @if (_importSuccess && !string.IsNullOrEmpty(_importError))
+            {
+                <div class="alert alert-warning mt-2 py-2 small">✓ Task creato. ⚠ @_importError</div>
+            }
+            else if (!string.IsNullOrEmpty(_importError))
             {
                 <div class="alert alert-danger mt-2 py-2 small">@_importError</div>
             }
-            @if (_importSuccess)
+            else if (_importSuccess)
             {
                 <div class="alert alert-success mt-2 py-2 small">✓ Task creato correttamente!</div>
             }
@@ -101,8 +106,13 @@
     private bool _promptCopied;
     private bool _importing;
     private bool _importSuccess;
+    private List<RadioChannel> _radioChannels = new();
 
-    public async Task ShowAsync() => await _modal.ShowAsync();
+    public async Task ShowAsync()
+    {
+        _radioChannels = await radioChannelService.GetAllAsync();
+        await _modal.ShowAsync();
+    }
     public async Task HideAsync() => await _modal.HideAsync();
 
     private void OnHidden()
@@ -131,6 +141,7 @@ Restituisci SOLO il JSON (senza markdown, senza backtick, senza spiegazioni). Il
   "sottotitolo": "sottotitolo opzionale",
   "tipologiaObiettivo": "tipo di obiettivo",
   "durata": 30,
+  "radioChannel": "nome del canale radio se presente nel testo, altrimenti null",
   "description": "descrizione estesa in markdown",
   "items": [
     { "type": "Info", "value": "informazione importante" },
@@ -167,12 +178,31 @@ Testo da analizzare:
                 return;
             }
 
+            Guid? radioChannelId = null;
+            string? radioChannelWarning = null;
+            if (!string.IsNullOrWhiteSpace(dto.RadioChannel))
+            {
+                var channelName = dto.RadioChannel.Trim();
+                var match = _radioChannels.FirstOrDefault(r =>
+                    string.Equals(r.Name, channelName, StringComparison.OrdinalIgnoreCase))
+                    ?? _radioChannels.FirstOrDefault(r =>
+                    r.Name.Contains(channelName, StringComparison.OrdinalIgnoreCase))
+                    ?? _radioChannels.FirstOrDefault(r =>
+                    channelName.Contains(r.Name, StringComparison.OrdinalIgnoreCase));
+
+                if (match != null)
+                    radioChannelId = match.Id;
+                else
+                    radioChannelWarning = $"Canale radio \"{channelName}\" non trovato — campo lasciato vuoto.";
+            }
+
             var task = new TaskEntity
             {
                 Name = dto.Name.Trim(),
                 Sottotitolo = dto.Sottotitolo?.Trim() ?? string.Empty,
                 TipologiaObiettivo = dto.TipologiaObiettivo?.Trim() ?? string.Empty,
                 Durata = dto.Durata,
+                RadioChannelId = radioChannelId,
                 Description = dto.Description?.Trim() ?? string.Empty,
                 CreationDate = DateTime.UtcNow,
                 LastModified = DateTime.UtcNow,
@@ -200,6 +230,7 @@ Testo da analizzare:
             {
                 _importSuccess = true;
                 _jsonText = string.Empty;
+                if (radioChannelWarning != null) _importError = radioChannelWarning;
                 await OnTaskCreated.InvokeAsync();
             }
             else
@@ -227,6 +258,7 @@ Testo da analizzare:
         public string? Sottotitolo { get; set; }
         public string? TipologiaObiettivo { get; set; }
         public int? Durata { get; set; }
+        public string? RadioChannel { get; set; }
         public string? Description { get; set; }
         public List<TaskItemDto>? Items { get; set; }
     }
