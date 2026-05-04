@@ -76,29 +76,35 @@ else
         <MarkdownEditor SpellChecker="false"
                         @bind-Value="taskEntity.Description" />
 
-        <TaskStringSection Title="ℹ INFO"
-                           Items="taskEntity.Items"
-                           AccentColor="#3399ff"
-                           ButtonText="Aggiungi Info"
-                           Placeholder="Inserisci informazione…"
-                           Task="taskEntity"
-                           SectionType="TaskStringItemType.Info"/>
+        <div class="mb-3">
+            <TaskStringSection Title="ℹ INFO"
+                               Items="taskEntity.Items"
+                               AccentColor="#3399ff"
+                               ButtonText="Aggiungi Info"
+                               Placeholder="Inserisci informazione…"
+                               Task="taskEntity"
+                               SectionType="TaskStringItemType.Info" />
+        </div>
 
-        <TaskStringSection Title="⚠ NOTE"
-                           Items="taskEntity.Items"
-                           AccentColor="#ff4444"
-                           ButtonText="Aggiungi Nota"
-                           Placeholder="Inserisci nota…"
-                           Task="taskEntity"
-                           SectionType="TaskStringItemType.Note" />
+        <div class="mb-3">
+            <TaskStringSection Title="⚠ NOTE"
+                               Items="taskEntity.Items"
+                               AccentColor="#ff4444"
+                               ButtonText="Aggiungi Nota"
+                               Placeholder="Inserisci nota…"
+                               Task="taskEntity"
+                               SectionType="TaskStringItemType.Note" />
+        </div>
 
-        <TaskStringSection Title="🚧 AZIONI"
-                           Items="taskEntity.Items"
-                           AccentColor="#ffcc00"
-                           ButtonText="Aggiungi Azione"
-                           Placeholder="Inserisci azione operativa…"
-                           Task="taskEntity" 
-                           SectionType="TaskStringItemType.Action" />
+        <div class="mb-3">
+            <TaskStringSection Title="🚧 AZIONI"
+                               Items="taskEntity.Items"
+                               AccentColor="#ffcc00"
+                               ButtonText="Aggiungi Azione"
+                               Placeholder="Inserisci azione operativa…"
+                               Task="taskEntity"
+                               SectionType="TaskStringItemType.Action" />
+        </div>
         
 
         <!-- SALVA -->
@@ -130,6 +136,7 @@ else
             return;
 
         taskEntity.LastModified = DateTime.UtcNow;
+        
         await taskService.UpdateAsync(taskEntity);
     }
 }
