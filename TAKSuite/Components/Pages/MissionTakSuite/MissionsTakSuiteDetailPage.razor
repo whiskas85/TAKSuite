@@ -1,10 +1,17 @@
-﻿@page "/missiontak/{MissionTakId:guid}"
+@page "/missiontak/{MissionTakId:guid}"
 @attribute [Authorize]
 @using Microsoft.AspNetCore.Authorization
 @using TAKSuite.Components.Pages.Components
+@using TAKSuite.Components.Pages.SimpleTables.TaskPage
 @using TAKSuite.Data.Models
 @using TAKSuite.Data.Services
+@using TAKSuite.TAK.CoT
 @inject MissionSuiteEntityServices entityService
+@inject MartiApiClient MartiApiClient
+
+@inject TaskService service
+@inject TaskTemplateService templateService
+@inject IJSRuntime JS
 
 <PageTitle>@missionTak?.Name</PageTitle>
 @if (missionTak == null)
@@ -13,6 +20,10 @@
 }
 else
 {
+    <ImportTaskModal @ref="_importModal"
+                     MissionId="MissionTakId"
+                     OnTaskCreated="OnTaskCreated" />
+
     <div class="d-flex justify-content-between">
 
         <div class="d-flex flex-column">
@@ -20,7 +31,6 @@ else
             <p>@missionTak?.Descrizione</p>
         </div>
 
-        
         @{var currentStatus = missionTak.Status.GetDisplayName();}
         <div class="d-flex gap-2">
             <div class="d-flex gap-2">
@@ -30,40 +40,143 @@ else
                         <div class="px-2 py-1 d-flex flex-column">
                             <TAKSuite.Components.Pages.Components.MissionProgress MissionEntity="missionTak" />
                         </div>
-                            
-                        @* @foreach (var log in missionTak.Logs.OrderBy(_ => _.Timestamp))
-                        {
-                            var statusName = log.NewStatus.GetDisplayName();
-                            <div class="border rounded px-2 py-1 d-flex flex-column">
-                                <p class="fw-bold mb-1">@statusName</p>
-                                <p class="small text-secondary mb-0"><Icon Name="IconName.PeopleFill" /> @log.Team?.Name - @log.User?.Nick</p>
-                                <p class="small text-secondary mb-0"><Icon Name="IconName.Person" /> @log.User?.Nick</p>
-                                <p class="small text-muted mb-0"><Icon Name="IconName.ClockFill" />@log.Timestamp.ToString()</p>
-                            </div>
-                        } *@
                     </DropdownMenu>
                 </Dropdown>
-
-            @* <Button Color="ButtonColor.Primary" @onclick="EnableEdit" Outline="true"><Icon Name="IconName.PencilFill"></Icon></Button>   *@
             </div>
         </div>
+
     </div>
 
+    <div>
+        <label class="form-label">TAK Mission UID</label>
+        <Dropdown Color="DropdownColor.Secondary" @bind-Value="@missionTak.TakMissionUid" @bind-Value:after="DebouncedRefresh">
+            <DropdownToggleButton>@missionTak.TakMissionUid</DropdownToggleButton>
+            <DropdownMenu>
+                @foreach (var item in MissionsList)
+                {
+                    <DropdownItem @onclick="() => SaveMissionUid(missionTak, item)" Type="DropdownItemType.Button">@item.Name</DropdownItem>
+                }
+            </DropdownMenu>
+        </Dropdown>
+    </div>
 
+    <div class="mt-4 mb-3 d-flex gap-2 flex-wrap">
+        <Button Color="ButtonColor.Success" @onclick="Save">
+            <Icon Name="IconName.Save" /> Salva Missione
+        </Button>
+        <Button Color="ButtonColor.Warning" @onclick="ExportAll" Loading="_exporting" LoadingText="Esportazione...">
+            <Icon Name="IconName.Download" /> Esporta tutti (ZIP)
+        </Button>
+        <Button Color="ButtonColor.Info" @onclick="() => _importModal.ShowAsync()">
+            <Icon Name="IconName.Magic" /> Importa da testo
+        </Button>
+    </div>
 
+    <GenericDataTable @ref="_dataTable"
+                      TItem="TaskEntity"
+                      TModel="TaskViewModel"
+                      Service="service"
+                      LoadItems="LoadData"
+                      PrepareBeforeSave="PrepareBeforeSave"
+                      Rights="BlazorReflection.Data.GridRightsType.Delete">
+
+        <Columns>
+            <GridColumn TItem="TaskEntity" HeaderText="Attività" SortKeySelector="x => x.Name">
+                @context.Name
+            </GridColumn>
+            <GridColumn TItem="TaskEntity" HeaderText="Stato" SortKeySelector="x => x.Status">
+                @context.Status.GetDisplayName()
+            </GridColumn>
+            <GridColumn TItem="TaskEntity" HeaderText="Team assegnato" SortKeySelector="x => x.AssignedTeam.Name">
+                @context.AssignedTeam?.Name
+            </GridColumn>
+            <GridColumn TItem="TaskEntity" HeaderText="Team exec" SortKeySelector="x => x.ExecutingTeam.Name">
+                @context.ExecutingTeam?.Name
+            </GridColumn>
+            <GridColumn TItem="TaskEntity" HeaderText="Priorità" SortKeySelector="x => x.Priority.Name">
+                @context.Priority?.Name
+            </GridColumn>
+            <GridColumn TItem="TaskEntity" HeaderText="Ultima modifica" SortKeySelector="x => x.LastModified">
+                @context.LastModified.ToString("dd/MM HH:mm")
+            </GridColumn>
+            <GridColumn TItem="TaskEntity" HeaderText="Editor">
+                <NavLink class="btn btn-sm btn-primary" href="@($"/objeditor/{context.Id}")">
+                    <Icon Name="IconName.Pencil" />
+                </NavLink>
+            </GridColumn>
+        </Columns>
+    </GenericDataTable>
 }
+
 @code {
     [Parameter] public Guid MissionTakId { get; set; }
-    [Parameter] public MissionSuite? missionTak { get; set; }
-    private async Task<MissionSuite?> Load()
+
+    private MissionSuite? missionTak;
+    private List<MissionAtak> MissionsList = new();
+    private bool _exporting;
+
+    private ImportTaskModal _importModal = default!;
+    private GenericDataTable<TaskEntity, TaskViewModel> _dataTable = default!;
+
+    private Task PrepareBeforeSave(TaskViewModel model)
     {
-        return await entityService.GetAsync(MissionTakId);  
+        model.Model.MissionTAKSuiteId = MissionTakId;
+        return Task.CompletedTask;
     }
 
+    private async Task OnTaskCreated()
+    {
+        await _dataTable.RefreshAsync();
+    }
+
+    private async Task<MissionSuite?> Load()
+    {
+        return await entityService.GetAsync(MissionTakId);
+    }
+
+    protected async Task Save()
+    {
+        await entityService.UpdateAsync(missionTak);
+    }
+
+    protected async Task SaveMissionUid(MissionSuite suite, MissionAtak mission)
+    {
+        suite.TakMissionUid = mission.Name;
+        StateHasChanged();
+    }
+
+    protected async Task DebouncedRefresh() { }
 
     protected override async Task OnInitializedAsync()
     {
         await base.OnInitializedAsync();
         missionTak = await Load();
+        MissionsList = await MartiApiClient.GetAllMissionsDataAsync();
+        StateHasChanged();
+    }
+
+    private async Task<List<TaskEntity>> LoadData()
+    {
+        var all = await service.GetAllAsync();
+        return all
+            .Where(t => t.MissionTAKSuiteId == MissionTakId)
+            .OrderByDescending(x => x.CreationDate)
+            .ToList();
+    }
+
+    private async Task ExportAll()
+    {
+        _exporting = true;
+        StateHasChanged();
+        try
+        {
+            var tasks = await LoadData();
+            var zipBytes = await templateService.ExportAllAsZipAsync(tasks);
+            await JS.InvokeVoidAsync("downloadBytesAsFile", $"tasks_{DateTime.Now:yyyyMMdd_HHmm}.zip", zipBytes);
+        }
+        finally
+        {
+            _exporting = false;
+        }
     }
 }

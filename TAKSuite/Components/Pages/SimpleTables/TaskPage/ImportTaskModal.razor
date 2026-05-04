@@ -97,6 +97,7 @@
 
 @code {
     [Parameter] public EventCallback OnTaskCreated { get; set; }
+    [Parameter] public Guid? MissionId { get; set; }
 
     private Modal _modal = default!;
     private int _tab = 0;
@@ -212,6 +213,7 @@ Testo da analizzare:
                 TipologiaObiettivo = dto.TipologiaObiettivo?.Trim() ?? string.Empty,
                 Durata = dto.Durata,
                 RadioChannelId = radioChannelId,
+                MissionTAKSuiteId = MissionId,
                 Description = dto.Description?.Trim() ?? string.Empty,
                 CreationDate = DateTime.UtcNow,
                 LastModified = DateTime.UtcNow,

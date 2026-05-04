@@ -5,7 +5,10 @@
 @using TAKSuite.Components.Pages.Components
 @using TAKSuite.Data.Models
 @using TAKSuite.Data.Services
+@using TAKSuite.TAK.CoT
 @inject MissionSuiteEntityServices entityService
+
+
 
 <PageTitle>Lista Missioni</PageTitle>
 
@@ -49,4 +52,5 @@
         var items = await entityService.GetAllAsync();
         return items.OrderByDescending(x => x.Name).ToList();
     }
+
 }

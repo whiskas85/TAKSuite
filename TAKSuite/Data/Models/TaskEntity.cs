@@ -19,7 +19,8 @@ namespace TAKSuite.Data.Models
         public string MissionUid { get; set; } = "";    // Missione dalla quale attingere
 
 
-        public MissionSuite? MissionTAKSuite { get; set; } // missione TAKSuite di appartenenza
+        public Guid? MissionTAKSuiteId { get; set; }       // FK esplicita
+        public MissionSuite? MissionTAKSuite { get; set; }
 
 
         // Documentazione
