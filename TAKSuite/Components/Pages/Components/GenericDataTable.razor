@@ -104,14 +104,13 @@ OnRowDoubleClick="HandleDoubleClick">
             await PrepareBeforeSave(item);
         }
 
-
         await Service.AddOrUpdateAsync(item.Model);
-        await _modal.HideAsync();
 
-        // refresh grid
+        // Refresh BEFORE hiding: the modal form is still stable (no re-renders),
+        // so GetAllAsync won't race against dropdown reloads triggered by HideAsync.
         await RefreshListAsync();
+        await _modal.HideAsync();
         await grid.RefreshData();
-
     }
     protected override async Task OnInitializedAsync()
     {
