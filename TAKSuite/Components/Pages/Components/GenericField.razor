@@ -215,17 +215,17 @@
         if (method != null && typeof(Task<IEnumerable<KeyValuePair<Guid, string>>>).IsAssignableFrom(method.ReturnType))
         {
             var formDropDownType = Property.GetAttribute<FormControlDropDownTypeAttribute>()?.Type;
-            if (formDropDownType!=null)
+            if (formDropDownType != null)
             {
                 var serviceDropdown = services.FirstOrDefault(_ => _.ProvidedItem == formDropDownType);
                 if (serviceDropdown != null)
                 {
-                    Thread.Sleep(100);
-                    return await Task.Run(() => method.Invoke(null, [serviceDropdown]) as Task<IEnumerable<KeyValuePair<Guid, string>>>);
+                    var task = method.Invoke(null, [serviceDropdown]) as Task<IEnumerable<KeyValuePair<Guid, string>>>;
+                    if (task != null) return await task;
                 }
             }
         }
 
-        return new List< KeyValuePair<Guid, string>>();
+        return new List<KeyValuePair<Guid, string>>();
     }
 }
