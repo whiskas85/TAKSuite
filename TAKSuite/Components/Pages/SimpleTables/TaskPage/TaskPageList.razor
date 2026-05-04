@@ -12,13 +12,19 @@
 <PageTitle>@pageTitle</PageTitle>
 <h3>@pageTitle</h3>
 
-<div class="mb-3">
+<ImportTaskModal @ref="_importModal" OnTaskCreated="OnTaskCreated" />
+
+<div class="mb-3 d-flex gap-2">
     <Button Color="ButtonColor.Warning" @onclick="ExportAll" Loading="_exporting" LoadingText="Esportazione...">
         <Icon Name="IconName.Download" /> Esporta tutti (ZIP)
     </Button>
+    <Button Color="ButtonColor.Info" @onclick="() => _importModal.ShowAsync()">
+        <Icon Name="IconName.Magic" /> Importa da testo
+    </Button>
 </div>
 
-<GenericDataTable TItem="TaskEntity"
+<GenericDataTable @ref="_dataTable"
+                  TItem="TaskEntity"
                   TModel="TaskViewModel"
                   Service="service"
                   LoadItems="LoadData"
@@ -54,6 +60,13 @@
 @code {
     private string pageTitle = "Lista Task";
     private bool _exporting;
+    private ImportTaskModal _importModal = default!;
+    private GenericDataTable<TaskEntity, TaskViewModel> _dataTable = default!;
+
+    private async Task OnTaskCreated()
+    {
+        await _dataTable.RefreshAsync();
+    }
 
     private async Task<List<TaskEntity>> LoadData()
     {

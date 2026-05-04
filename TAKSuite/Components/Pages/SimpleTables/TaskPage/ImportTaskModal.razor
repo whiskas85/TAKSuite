@@ -1,0 +1,239 @@
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@using System.Text.Json
+
+@inject TaskService taskService
+@inject IJSRuntime JS
+
+<Modal @ref="_modal" Title="Importa Task da Testo" Size="ModalSize.ExtraLarge" OnHidden="OnHidden">
+    <BodyTemplate>
+
+        <ul class="nav nav-tabs mb-3">
+            <li class="nav-item">
+                <button class="nav-link @(_tab == 0 ? "active" : "")" @onclick='() => _tab = 0'>
+                    1. Incolla testo
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link @(_tab == 1 ? "active" : "")" @onclick='() => _tab = 1'>
+                    2. Importa JSON
+                </button>
+            </li>
+        </ul>
+
+        @if (_tab == 0)
+        {
+            <p class="text-muted small mb-2">
+                Incolla il testo dell'obiettivo (da PDF o altra fonte), poi clicca <strong>Genera Prompt</strong>
+                e incollalo su ChatGPT. Torna alla tab 2 per importare il JSON generato.
+            </p>
+            <textarea class="form-control font-monospace import-textarea"
+                      placeholder="Incolla qui il testo…"
+                      @bind="_rawText"
+                      @bind:event="oninput" />
+            <div class="mt-3 d-flex align-items-center gap-3">
+                <Button Color="ButtonColor.Primary"
+                        @onclick="GeneratePrompt"
+                        Disabled="@(string.IsNullOrWhiteSpace(_rawText))">
+                    <Icon Name="IconName.Clipboard" /> Genera e copia prompt
+                </Button>
+                @if (_promptCopied)
+                {
+                    <span class="text-success small">✓ Prompt copiato! Incollalo su ChatGPT, poi torna alla tab 2.</span>
+                }
+            </div>
+        }
+
+        @if (_tab == 1)
+        {
+            <p class="text-muted small mb-2">
+                Incolla qui il JSON restituito da ChatGPT, poi clicca <strong>Crea Task</strong>.
+            </p>
+            <textarea class="form-control font-monospace import-textarea"
+                      placeholder='{ "name": "...", "items": [...] }'
+                      @bind="_jsonText"
+                      @bind:event="oninput" />
+            @if (!string.IsNullOrEmpty(_importError))
+            {
+                <div class="alert alert-danger mt-2 py-2 small">@_importError</div>
+            }
+            @if (_importSuccess)
+            {
+                <div class="alert alert-success mt-2 py-2 small">✓ Task creato correttamente!</div>
+            }
+            <div class="mt-3">
+                <Button Color="ButtonColor.Success"
+                        @onclick="ImportJson"
+                        Loading="_importing"
+                        LoadingText="Creazione…"
+                        Disabled="@(string.IsNullOrWhiteSpace(_jsonText))">
+                    <Icon Name="IconName.PlusCircle" /> Crea Task
+                </Button>
+            </div>
+        }
+
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Secondary" @onclick="HideAsync">Chiudi</Button>
+    </FooterTemplate>
+</Modal>
+
+<style>
+    .import-textarea {
+        height: 320px;
+        resize: vertical;
+        background: #1e1e1e;
+        color: #d4d4d4;
+        border-color: #444;
+        font-size: 0.82rem;
+        line-height: 1.5;
+    }
+</style>
+
+@code {
+    [Parameter] public EventCallback OnTaskCreated { get; set; }
+
+    private Modal _modal = default!;
+    private int _tab = 0;
+    private string _rawText = string.Empty;
+    private string _jsonText = string.Empty;
+    private string _importError = string.Empty;
+    private bool _promptCopied;
+    private bool _importing;
+    private bool _importSuccess;
+
+    public async Task ShowAsync() => await _modal.ShowAsync();
+    public async Task HideAsync() => await _modal.HideAsync();
+
+    private void OnHidden()
+    {
+        _tab = 0;
+        _rawText = string.Empty;
+        _jsonText = string.Empty;
+        _importError = string.Empty;
+        _promptCopied = false;
+        _importSuccess = false;
+    }
+
+    private async Task GeneratePrompt()
+    {
+        var prompt = BuildPrompt(_rawText.Trim());
+        await JS.InvokeVoidAsync("copyToClipboard", prompt);
+        _promptCopied = true;
+    }
+
+    private string BuildPrompt(string text) => $$"""
+Sei un assistente per la pianificazione tattica. Analizza il testo seguente e restituisci un JSON strutturato che descriva un task operativo.
+
+Restituisci SOLO il JSON (senza markdown, senza backtick, senza spiegazioni). Il formato deve essere ESATTAMENTE questo:
+{
+  "name": "titolo breve del task",
+  "sottotitolo": "sottotitolo opzionale",
+  "tipologiaObiettivo": "tipo di obiettivo",
+  "durata": 30,
+  "description": "descrizione estesa in markdown",
+  "items": [
+    { "type": "Info", "value": "informazione importante" },
+    { "type": "Note", "value": "nota di attenzione" },
+    { "type": "Action", "value": "azione operativa da eseguire" }
+  ]
+}
+
+Regole:
+- "type" può essere SOLO uno di: Info, Note, Action
+- "durata" è un numero intero (minuti stimati)
+- "description" può contenere markdown
+- Includi tutti gli elementi Info, Note e Action rilevanti estratti dal testo
+- Rispondi SOLO con il JSON puro, senza nessun testo aggiuntivo
+
+Testo da analizzare:
+{{text}}
+""";
+
+    private async Task ImportJson()
+    {
+        _importError = string.Empty;
+        _importSuccess = false;
+        _importing = true;
+        StateHasChanged();
+        try
+        {
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var dto = JsonSerializer.Deserialize<TaskImportDto>(_jsonText.Trim(), options);
+
+            if (dto == null || string.IsNullOrWhiteSpace(dto.Name))
+            {
+                _importError = "JSON non valido o campo 'name' mancante.";
+                return;
+            }
+
+            var task = new TaskEntity
+            {
+                Name = dto.Name.Trim(),
+                Sottotitolo = dto.Sottotitolo?.Trim() ?? string.Empty,
+                TipologiaObiettivo = dto.TipologiaObiettivo?.Trim() ?? string.Empty,
+                Durata = dto.Durata,
+                Description = dto.Description?.Trim() ?? string.Empty,
+                CreationDate = DateTime.UtcNow,
+                LastModified = DateTime.UtcNow,
+                Status = TaskStatusTak.Created
+            };
+
+            if (dto.Items != null)
+            {
+                int order = 0;
+                foreach (var item in dto.Items)
+                {
+                    if (string.IsNullOrWhiteSpace(item.Value)) continue;
+                    if (!Enum.TryParse<TaskStringItemType>(item.Type, true, out var itemType)) continue;
+                    task.Items.Add(new TaskStringItem
+                    {
+                        Type = itemType,
+                        Value = item.Value.Trim(),
+                        Order = order++
+                    });
+                }
+            }
+
+            var created = await taskService.AddAsync(task);
+            if (created != null)
+            {
+                _importSuccess = true;
+                _jsonText = string.Empty;
+                await OnTaskCreated.InvokeAsync();
+            }
+            else
+            {
+                _importError = "Errore durante il salvataggio del task.";
+            }
+        }
+        catch (JsonException ex)
+        {
+            _importError = $"Errore nel parsing JSON: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            _importError = $"Errore: {ex.Message}";
+        }
+        finally
+        {
+            _importing = false;
+        }
+    }
+
+    private class TaskImportDto
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? Sottotitolo { get; set; }
+        public string? TipologiaObiettivo { get; set; }
+        public int? Durata { get; set; }
+        public string? Description { get; set; }
+        public List<TaskItemDto>? Items { get; set; }
+    }
+
+    private class TaskItemDto
+    {
+        public string Type { get; set; } = string.Empty;
+        public string? Value { get; set; }
+    }
+}

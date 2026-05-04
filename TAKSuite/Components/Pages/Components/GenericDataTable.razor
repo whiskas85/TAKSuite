@@ -80,6 +80,10 @@ OnRowDoubleClick="HandleDoubleClick">
     // 👇 Metodo esterno per caricare i dati
     [Parameter, EditorRequired] public Func<Task<List<TItem>>> LoadItems { get; set; } = default!;  
 
+    [Parameter]
+    public Func<TModel, Task> PrepareBeforeSave { get; set; } = default!;
+
+
     [Parameter] public GridRightsType Rights { get; set; } = GridRightsType.Read;
 
 
@@ -95,6 +99,12 @@ OnRowDoubleClick="HandleDoubleClick">
     }
     protected async Task AddOrUpdate(TModel item)
     {
+        if (PrepareBeforeSave != null)
+        {
+            await PrepareBeforeSave(item);
+        }
+
+
         await Service.AddOrUpdateAsync(item.Model);
         await _modal.HideAsync();
 
@@ -118,6 +128,12 @@ OnRowDoubleClick="HandleDoubleClick">
         {
             ItemList = await LoadItems.Invoke();
         }
+    }
+
+    public async Task RefreshAsync()
+    {
+        await RefreshListAsync();
+        await grid.RefreshData();
     }
     private async Task AddButtonClick()
     {
