@@ -7,6 +7,7 @@ public class TaskStringItem
     public string Value { get; set; } = string.Empty;
     
     public TaskStringItemType Type { get; set; }
+    public int Order { get; set; }
     public Guid TaskEntityId { get; set; }
     public TaskEntity Task { get; set; }
 }

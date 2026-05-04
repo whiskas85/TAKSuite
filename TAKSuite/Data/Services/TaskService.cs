@@ -27,7 +27,7 @@ namespace TAKSuite.Data.Services
 
             var taskId = element.Id;
             var incomingItems = element.Items
-                .Select(i => new { i.Id, i.Value, i.Type })
+                .Select(i => new { i.Id, i.Value, i.Type, i.Order })
                 .ToList();
 
             // Blazor Server: il DbContext è scoped al circuito, puliamo il tracker
@@ -53,6 +53,7 @@ namespace TAKSuite.Data.Services
                 {
                     existing.Value = incoming.Value;
                     existing.Type = incoming.Type;
+                    existing.Order = incoming.Order;
                 }
                 else
                 {
@@ -60,6 +61,7 @@ namespace TAKSuite.Data.Services
                     {
                         Value = incoming.Value,
                         Type = incoming.Type,
+                        Order = incoming.Order,
                         TaskEntityId = taskId
                     });
                 }

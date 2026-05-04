@@ -1,85 +1,77 @@
-﻿@using TAKSuite.Data.Models
+@using TAKSuite.Data.Models
 @inject IJSRuntime JS
 
-<div class="task-section"
-     @ref="_containerRef"
-     style="--accent-color:@AccentColor">
+<div class="task-section" style="--accent-color:@AccentColor">
 
     <!-- HEADER -->
     <div class="d-flex justify-content-between align-items-center mb-2">
         <strong class="section-title">
             <Icon Name="@TitleIcon" /> @Title
         </strong>
-
-        <Button Outline="true"
-                Color="ButtonColor.Primary"
-                @onclick="Add">
-            <Icon Name="IconName.DatabaseAdd" /> + @ButtonText
-        </Button>
     </div>
-
-    <!-- EMPTY STATE -->
-    @if (_items.Count == 0)
-    {
-        <div class="empty-section-hint">
-            Nessun elemento inserito
-        </div>
-    }
 
     <!-- ITEMS -->
     @foreach (var item in _items)
     {
-        <div class="input-group mb-2 align-items-center" @key="item">
+        <div class="input-group mb-2 align-items-center item-row @(_dragOver == item ? "drag-over" : "")"
+             @key="item.Id"
+             draggable="true"
+             @ondragstart="() => OnDragStart(item)"
+             @ondragover="() => OnDragOver(item)"
+             @ondragover:preventDefault="true"
+             @ondrop="() => OnDrop(item)"
+             @ondragend="OnDragEnd">
 
-            <!-- HANDLE -->
-            <span class="drag-handle">
-                <Icon Name="IconName.List" />
+            <span class="drag-handle" title="Trascina per riordinare">
+                <Icon Name="IconName.GripVertical" />
             </span>
 
-            <!-- INPUT -->
             <input class="form-control"
                    placeholder="@Placeholder"
-                   @bind="item.Value" />
+                   value="@item.Value"
+                   @onchange="e => item.Value = e.Value?.ToString() ?? string.Empty" />
 
-            <!-- REMOVE -->
-            <button class="btn btn-danger"
+            <button class="btn btn-outline-danger btn-sm remove-btn"
                     @onclick="() => Remove(item)">
                 ✕
             </button>
         </div>
     }
+
+    <!-- AREA "CLICK TO ADD" -->
+    @if (!_isAdding)
+    {
+        <div class="add-zone" @onclick="StartAdding">
+            <span class="add-zone-icon">+</span>
+            <span>@ButtonText</span>
+        </div>
+    }
+    else
+    {
+        <div class="input-group mb-1">
+            <input class="form-control new-item-input"
+                   @ref="_newInputRef"
+                   placeholder="@Placeholder"
+                   @bind="_newValue"
+                   @onkeydown="OnNewItemKeyDown"
+                   @onblur="ConfirmAdd" />
+            <button class="btn btn-outline-secondary btn-sm"
+                    @onmousedown:preventDefault="true"
+                    @onclick="CancelAdd">
+                ✕
+            </button>
+        </div>
+    }
+
 </div>
 
-<!-- ✅ JS INLINE: FOCUS DAVVERO SULL'ULTIMO INPUT -->
-<script>
-    window.taskStringSectionFocusLast = function (container) {
-        if (!container) return;
-
-        const initialCount = container.querySelectorAll("input").length;
-
-        const observer = new MutationObserver(() => {
-            const inputs = container.querySelectorAll("input");
-            if (inputs.length > initialCount) {
-                observer.disconnect();
-                inputs[inputs.length - 1].focus();
-            }
-        });
-
-        observer.observe(container, {
-            childList: true,
-            subtree: true
-        });
-    };
-</script>
-
-<!-- ✅ CSS LOCALE -->
 <style>
     .task-section {
         padding: 12px;
         border-radius: 4px;
         border-left: 4px solid var(--accent-color);
         background-color: color-mix(in srgb, var(--accent-color) 12%, transparent);
-        min-height: 64px;
+        min-height: 48px;
     }
 
     .section-title {
@@ -87,87 +79,202 @@
         font-weight: 600;
     }
 
+    .item-row {
+        transition: opacity 0.15s;
+    }
+
+    .item-row.drag-over {
+        outline: 2px dashed var(--accent-color);
+        outline-offset: 2px;
+        border-radius: 4px;
+        opacity: 0.7;
+    }
+
     .drag-handle {
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 34px;
+        width: 28px;
         cursor: grab;
         user-select: none;
         color: var(--accent-color);
-        opacity: 0.85;
+        opacity: 0.7;
+        flex-shrink: 0;
     }
 
-    .task-section .input-group {
-        margin-bottom: 12px;
+    .drag-handle:active {
+        cursor: grabbing;
     }
 
-        .task-section .input-group:last-child {
-            margin-bottom: 0;
-        }
+    .remove-btn {
+        border-color: transparent;
+        opacity: 0.5;
+        transition: opacity 0.15s;
+    }
 
-    .empty-section-hint {
-        padding: 10px 12px;
-        margin-top: 8px;
+    .remove-btn:hover {
+        opacity: 1;
+        border-color: var(--bs-danger);
+    }
+
+    .add-zone {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        margin-top: 6px;
+        border: 2px dashed color-mix(in srgb, var(--accent-color) 50%, transparent);
         border-radius: 4px;
-        font-size: 0.9rem;
-        opacity: 0.6;
+        color: color-mix(in srgb, var(--accent-color) 70%, transparent);
+        font-size: 0.875rem;
+        cursor: pointer;
+        transition: border-color 0.15s, color 0.15s, background-color 0.15s;
+        user-select: none;
+    }
+
+    .add-zone:hover {
+        border-color: var(--accent-color);
         color: var(--accent-color);
-        border: 1px dashed var(--accent-color);
+        background-color: color-mix(in srgb, var(--accent-color) 6%, transparent);
+    }
+
+    .add-zone-icon {
+        font-size: 1.1rem;
+        font-weight: 600;
+        line-height: 1;
+    }
+
+    .new-item-input {
+        animation: fadeIn 0.1s ease-in;
+    }
+
+    @@keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-4px); }
+        to   { opacity: 1; transform: translateY(0); }
     }
 </style>
 
 @code {
-    private ElementReference _containerRef;
-
     [Parameter] public string Title { get; set; } = "";
     [Parameter] public string ButtonText { get; set; } = "";
     [Parameter] public string Placeholder { get; set; } = "";
     [Parameter] public string AccentColor { get; set; } = "#0dcaf0";
     [Parameter] public IconName TitleIcon { get; set; } = IconName.InfoCircle;
-
     [Parameter] public TaskEntity Task { get; set; } = null!;
     [Parameter] public List<TaskStringItem> Items { get; set; } = new();
     [Parameter] public TaskStringItemType SectionType { get; set; }
 
+    List<TaskStringItem> _items = new();
 
-    List<TaskStringItem> _items = new List<TaskStringItem>();
+    // Drag state
+    TaskStringItem? _dragged;
+    TaskStringItem? _dragOver;
 
-    protected override Task OnInitializedAsync()
+    // Add state
+    bool _isAdding;
+    string _newValue = string.Empty;
+    ElementReference _newInputRef;
+
+    protected override void OnParametersSet()
     {
-        UpdateItems();
-        return base.OnInitializedAsync();
+        _items = Items
+            .Where(i => i.Type == SectionType)
+            .OrderBy(i => i.Order)
+            .ToList();
     }
 
-    private void UpdateItems()
+    // --- Drag & Drop ---
+
+    void OnDragStart(TaskStringItem item) => _dragged = item;
+
+    void OnDragOver(TaskStringItem item) => _dragOver = item;
+
+    void OnDrop(TaskStringItem target)
     {
-        _items = Items.Where(i => i.Type == SectionType).ToList();
+        if (_dragged == null || _dragged == target) return;
+
+        var from = _items.IndexOf(_dragged);
+        var to   = _items.IndexOf(target);
+        if (from < 0 || to < 0) return;
+
+        _items.RemoveAt(from);
+        _items.Insert(to, _dragged);
+
+        SyncOrder();
+        _dragged = null;
+        _dragOver = null;
     }
 
-
-    async Task Add()
+    void OnDragEnd()
     {
-        // 1️⃣ prepara il focus PRIMA
-        await JS.InvokeVoidAsync("taskStringSectionFocusLast", _containerRef);
+        _dragged  = null;
+        _dragOver = null;
+    }
 
-        // 2️⃣ aggiungi l'item
-        var item = new TaskStringItem
-        {
-            TaskEntityId = Task.Id,
-            Task = Task,
-            Type = SectionType
-        };
+    void SyncOrder()
+    {
+        for (int i = 0; i < _items.Count; i++)
+            _items[i].Order = i;
+    }
 
-        Items.Add(item);
-        UpdateItems();
-        // 3️⃣ render
+    // --- Add ---
+
+    async Task StartAdding()
+    {
+        _isAdding = true;
+        _newValue = string.Empty;
         StateHasChanged();
+        await System.Threading.Tasks.Task.Delay(50); // attendi render
+        try { await JS.InvokeVoidAsync("eval", "document.querySelector('.new-item-input')?.focus()"); }
+        catch { }
     }
+
+    void ConfirmAdd()
+    {
+        var v = _newValue.Trim();
+        if (!string.IsNullOrEmpty(v))
+        {
+            var item = new TaskStringItem
+            {
+                TaskEntityId = Task.Id,
+                Task = Task,
+                Type = SectionType,
+                Value = v,
+                Order = _items.Count
+            };
+            Items.Add(item);
+            _items.Add(item);
+        }
+        _isAdding = false;
+        _newValue = string.Empty;
+    }
+
+    void CancelAdd()
+    {
+        _isAdding = false;
+        _newValue = string.Empty;
+    }
+
+    async Task OnNewItemKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            ConfirmAdd();
+            // Riapri subito per aggiungere un altro item
+            await StartAdding();
+        }
+        else if (e.Key == "Escape")
+        {
+            CancelAdd();
+        }
+    }
+
+    // --- Remove ---
 
     void Remove(TaskStringItem item)
     {
         Items.Remove(item);
-        UpdateItems();
-
+        _items.Remove(item);
+        SyncOrder();
     }
 }
