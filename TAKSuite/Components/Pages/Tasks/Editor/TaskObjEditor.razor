@@ -27,96 +27,102 @@
 }
 else
 {
-    <div class="container-fluid">
+    <div class="obj-editor-wrapper">
 
-        <h3>Task Editor</h3>
+        <!-- EDITOR (sinistra) -->
+        <div class="obj-editor-content">
 
-        <!-- NOME / SOTTOTITOLO -->
-        <div class="row mb-3">
-            <div class="col">
-                <label class="form-label">Nome</label>
-                <InputText class="form-control" @bind-Value="taskEntity.Name" />
+            <h3>Task Editor</h3>
+
+            <div class="row mb-3">
+                <div class="col">
+                    <label class="form-label">Nome</label>
+                    <InputText class="form-control" @bind-Value="taskEntity.Name" />
+                </div>
+                <div class="col">
+                    <label class="form-label">Sottotitolo</label>
+                    <InputText class="form-control" @bind-Value="taskEntity.Sottotitolo" />
+                </div>
             </div>
-            <div class="col">
-                <label class="form-label">Sottotitolo</label>
-                <InputText class="form-control" @bind-Value="taskEntity.Sottotitolo" />
+
+            <div class="row mb-3">
+                <div class="col">
+                    <label class="form-label">Tipologia Obiettivo</label>
+                    <InputText class="form-control" @bind-Value="taskEntity.TipologiaObiettivo" />
+                </div>
+                <div class="col">
+                    <label class="form-label">Durata (min)</label>
+                    <InputNumber class="form-control" @bind-Value="taskEntity.Durata" />
+                </div>
+                <div class="col">
+                    <label class="form-label">Canale Radio</label>
+                    <InputSelect class="form-control" @bind-Value="taskEntity.RadioChannelId">
+                        <option value="">Seleziona un canale</option>
+                        @foreach (var r in RadioList.OrderBy(r => r.Name))
+                        {
+                            <option value="@r.Id">@r.Name</option>
+                        }
+                    </InputSelect>
+                </div>
             </div>
-        </div>
 
-        <!-- METADATI -->
-        <div class="row mb-3">
-            <div class="col">
-                <label class="form-label">Tipologia Obiettivo</label>
-                <InputText class="form-control" @bind-Value="taskEntity.TipologiaObiettivo" />
+            <h5>Descrizione</h5>
+            <MarkdownEditor SpellChecker="false" @bind-Value="taskEntity.Description" />
+
+            <div class="mb-3 mt-3">
+                <TaskStringSection Title="ℹ INFO"
+                                   Items="taskEntity.Items"
+                                   AccentColor="#3399ff"
+                                   ButtonText="Aggiungi Info"
+                                   Placeholder="Inserisci informazione…"
+                                   Task="taskEntity"
+                                   SectionType="TaskStringItemType.Info" />
             </div>
-            <div class="col">
-                <label class="form-label">Durata (min)</label>
-                <InputNumber class="form-control" @bind-Value="taskEntity.Durata" />
+
+            <div class="mb-3">
+                <TaskStringSection Title="⚠ NOTE"
+                                   Items="taskEntity.Items"
+                                   AccentColor="#ff4444"
+                                   ButtonText="Aggiungi Nota"
+                                   Placeholder="Inserisci nota…"
+                                   Task="taskEntity"
+                                   SectionType="TaskStringItemType.Note" />
             </div>
-            <div class="col">
-                <label class="form-label">Canale Radio</label>
-                <InputSelect class="form-control" @bind-Value="taskEntity.RadioChannelId">
-                    <option value="">Seleziona un canale</option>
-                    @foreach (var r in RadioList.OrderBy(r => r.Name))
-                    {
-                        <option value="@r.Id">@r.Name</option>
-                    }
-                </InputSelect>
+
+            <div class="mb-3">
+                <TaskStringSection Title="🚧 AZIONI"
+                                   Items="taskEntity.Items"
+                                   AccentColor="#ffcc00"
+                                   ButtonText="Aggiungi Azione"
+                                   Placeholder="Inserisci azione operativa…"
+                                   Task="taskEntity"
+                                   SectionType="TaskStringItemType.Action" />
             </div>
+
+            <div class="mt-4 d-flex gap-2 flex-wrap">
+                <Button Color="ButtonColor.Success" @onclick="Save">
+                    <Icon Name="IconName.Save" /> Salva Task
+                </Button>
+                <Button Color="ButtonColor.Primary" @onclick="DownloadHtml">
+                    <Icon Name="IconName.Download" /> Genera HTML
+                </Button>
+                <Button Color="@(_previewOpen ? ButtonColor.Light : ButtonColor.Secondary)"
+                        @onclick="TogglePreview">
+                    <Icon Name="@(_previewOpen ? IconName.LayoutSidebarReverse : IconName.LayoutSidebarReverse)" />
+                    @(_previewOpen ? "Chiudi Anteprima" : "Anteprima")
+                </Button>
+            </div>
+
         </div>
 
-        <!-- DESCRIZIONE -->
-        <h5>Descrizione</h5>
-        <MarkdownEditor SpellChecker="false" @bind-Value="taskEntity.Description" />
-
-        <div class="mb-3">
-            <TaskStringSection Title="ℹ INFO"
-                               Items="taskEntity.Items"
-                               AccentColor="#3399ff"
-                               ButtonText="Aggiungi Info"
-                               Placeholder="Inserisci informazione…"
-                               Task="taskEntity"
-                               SectionType="TaskStringItemType.Info" />
-        </div>
-
-        <div class="mb-3">
-            <TaskStringSection Title="⚠ NOTE"
-                               Items="taskEntity.Items"
-                               AccentColor="#ff4444"
-                               ButtonText="Aggiungi Nota"
-                               Placeholder="Inserisci nota…"
-                               Task="taskEntity"
-                               SectionType="TaskStringItemType.Note" />
-        </div>
-
-        <div class="mb-3">
-            <TaskStringSection Title="🚧 AZIONI"
-                               Items="taskEntity.Items"
-                               AccentColor="#ffcc00"
-                               ButtonText="Aggiungi Azione"
-                               Placeholder="Inserisci azione operativa…"
-                               Task="taskEntity"
-                               SectionType="TaskStringItemType.Action" />
-        </div>
-
-        <!-- AZIONI -->
-        <div class="mt-4 d-flex gap-2 flex-wrap">
-            <Button Color="ButtonColor.Success" @onclick="Save">
-                Salva Task
-            </Button>
-            <Button Color="ButtonColor.Primary" @onclick="DownloadHtml">
-                <Icon Name="IconName.Download" /> Genera HTML
-            </Button>
-            <Button Color="ButtonColor.Secondary" @onclick="RefreshPreview">
-                <Icon Name="IconName.Eye" /> Aggiorna Anteprima
-            </Button>
-        </div>
-
-        <!-- ANTEPRIMA -->
-        <div class="mt-4">
-            <h5>Anteprima</h5>
+        <!-- PANNELLO ANTEPRIMA (destra) -->
+        <div class="obj-preview-panel @(_previewOpen ? "open" : "")">
+            <div class="obj-preview-header">
+                <span>Anteprima</span>
+                <button class="btn btn-sm btn-close btn-close-white" @onclick="TogglePreview" />
+            </div>
             <iframe id="task-preview-frame"
-                    style="width:100%; height:80vh; border:1px solid #444; border-radius:4px; background:#0f0f0f;"
+                    class="obj-preview-iframe"
                     sandbox="allow-same-origin">
             </iframe>
         </div>
@@ -124,11 +130,73 @@ else
     </div>
 }
 
+<style>
+    .obj-editor-wrapper {
+        display: flex;
+        position: relative;
+        min-height: 100vh;
+    }
+
+    .obj-editor-content {
+        flex: 1;
+        min-width: 0;
+        padding: 1rem 1.5rem;
+        transition: margin-right 0.35s cubic-bezier(.4,0,.2,1);
+    }
+
+    /* Quando il pannello è aperto lascia spazio a destra */
+    .obj-editor-wrapper:has(.obj-preview-panel.open) .obj-editor-content {
+        margin-right: min(48vw, 780px);
+    }
+
+    /* PANNELLO LATERALE */
+    .obj-preview-panel {
+        position: fixed;
+        top: 0;
+        right: 0;
+        width: min(48vw, 780px);
+        height: 100vh;
+        background: #111;
+        border-left: 2px solid #333;
+        display: flex;
+        flex-direction: column;
+        transform: translateX(100%);
+        transition: transform 0.35s cubic-bezier(.4,0,.2,1);
+        z-index: 1050;
+    }
+
+    .obj-preview-panel.open {
+        transform: translateX(0);
+        box-shadow: -6px 0 24px rgba(0,0,0,.5);
+    }
+
+    .obj-preview-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.5rem 1rem;
+        background: #1a1a1a;
+        border-bottom: 1px solid #333;
+        color: #ccc;
+        font-size: 0.9rem;
+        font-weight: 600;
+        flex-shrink: 0;
+    }
+
+    .obj-preview-iframe {
+        flex: 1;
+        width: 100%;
+        border: none;
+        background: #0f0f0f;
+    }
+</style>
+
 @code {
     [Parameter] public Guid TaskId { get; set; }
 
     TaskEntity? taskEntity;
     List<RadioChannel> RadioList = new();
+    bool _previewOpen;
 
     protected override async Task OnInitializedAsync()
     {
@@ -136,9 +204,10 @@ else
         RadioList = await radioChannelService.GetAllAsync();
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    private async Task TogglePreview()
     {
-        if (firstRender && taskEntity != null)
+        _previewOpen = !_previewOpen;
+        if (_previewOpen)
             await RefreshPreview();
     }
 
@@ -147,7 +216,8 @@ else
         if (taskEntity == null) return;
         taskEntity.LastModified = DateTime.UtcNow;
         await taskService.UpdateAsync(taskEntity);
-        await RefreshPreview();
+        if (_previewOpen)
+            await RefreshPreview();
     }
 
     private async Task RefreshPreview()
