@@ -54,7 +54,7 @@
                    placeholder="@Placeholder"
                    @bind="_newValue"
                    @onkeydown="OnNewItemKeyDown"
-                   @onblur="ConfirmAdd" />
+                   @onblur="async () => await ConfirmAdd()" />
             <button class="btn btn-outline-secondary btn-sm"
                     @onmousedown:preventDefault="true"
                     @onclick="CancelAdd">
@@ -163,6 +163,7 @@
     [Parameter] public TaskEntity Task { get; set; } = null!;
     [Parameter] public List<TaskStringItem> Items { get; set; } = new();
     [Parameter] public TaskStringItemType SectionType { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
 
     List<TaskStringItem> _items = new();
 
@@ -189,7 +190,7 @@
 
     void OnDragOver(TaskStringItem item) => _dragOver = item;
 
-    void OnDrop(TaskStringItem target)
+    async Task OnDrop(TaskStringItem target)
     {
         if (_dragged == null || _dragged == target) return;
 
@@ -203,6 +204,7 @@
         SyncOrder();
         _dragged = null;
         _dragOver = null;
+        await OnChanged.InvokeAsync();
     }
 
     void OnDragEnd()
@@ -229,7 +231,7 @@
         catch { }
     }
 
-    void ConfirmAdd()
+    async Task ConfirmAdd()
     {
         var v = _newValue.Trim();
         if (!string.IsNullOrEmpty(v))
@@ -244,6 +246,7 @@
             };
             Items.Add(item);
             _items.Add(item);
+            await OnChanged.InvokeAsync();
         }
         _isAdding = false;
         _newValue = string.Empty;
@@ -259,8 +262,7 @@
     {
         if (e.Key == "Enter")
         {
-            ConfirmAdd();
-            // Riapri subito per aggiungere un altro item
+            await ConfirmAdd();
             await StartAdding();
         }
         else if (e.Key == "Escape")
@@ -271,10 +273,11 @@
 
     // --- Remove ---
 
-    void Remove(TaskStringItem item)
+    async Task Remove(TaskStringItem item)
     {
         Items.Remove(item);
         _items.Remove(item);
         SyncOrder();
+        await OnChanged.InvokeAsync();
     }
 }
