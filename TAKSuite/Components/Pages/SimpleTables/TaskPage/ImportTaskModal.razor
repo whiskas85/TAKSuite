@@ -127,12 +127,18 @@
 
     private async Task GeneratePrompt()
     {
-        var prompt = BuildPrompt(_rawText.Trim());
+        var prompt = BuildPrompt(_rawText.Trim(), _radioChannels);
         await JS.InvokeVoidAsync("copyToClipboard", prompt);
         _promptCopied = true;
     }
 
-    private string BuildPrompt(string text) => $$"""
+    private string BuildPrompt(string text, List<RadioChannel> channels)
+    {
+        var channelList = channels.Count > 0
+            ? string.Join(", ", channels.OrderBy(c => c.Name).Select(c => $"\"{c.Name}\""))
+            : "nessun canale disponibile";
+
+        return $$"""
 Sei un assistente per la pianificazione tattica. Analizza il testo seguente e restituisci un JSON strutturato che descriva un task operativo.
 
 Restituisci SOLO il JSON (senza markdown, senza backtick, senza spiegazioni). Il formato deve essere ESATTAMENTE questo:
@@ -141,7 +147,7 @@ Restituisci SOLO il JSON (senza markdown, senza backtick, senza spiegazioni). Il
   "sottotitolo": "sottotitolo opzionale",
   "tipologiaObiettivo": "tipo di obiettivo",
   "durata": 30,
-  "radioChannel": "nome del canale radio se presente nel testo, altrimenti null",
+  "radioChannel": "scegli da lista canali o null",
   "description": "descrizione estesa in markdown",
   "items": [
     { "type": "Info", "value": "informazione importante" },
@@ -155,11 +161,14 @@ Regole:
 - "durata" è un numero intero (minuti stimati)
 - "description" può contenere markdown
 - Includi tutti gli elementi Info, Note e Action rilevanti estratti dal testo
+- Per "radioChannel": scegli il nome più simile tra quelli disponibili basandoti sul canale citato nel testo (es. frequenza, nome, codice). Se nessuno corrisponde, metti null.
+- Lista canali disponibili: {{channelList}}
 - Rispondi SOLO con il JSON puro, senza nessun testo aggiuntivo
 
 Testo da analizzare:
 {{text}}
 """;
+    }
 
     private async Task ImportJson()
     {
