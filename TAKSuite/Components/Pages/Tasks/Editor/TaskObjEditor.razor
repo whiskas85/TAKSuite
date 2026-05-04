@@ -34,8 +34,7 @@ else
             class="preview-dock-tab @(_previewOpen ? "open" : "")"
             @onclick="TogglePreview"
             title="@(_previewOpen ? "Chiudi anteprima" : "Apri anteprima")">
-        <Icon Name="IconName.LayoutSidebarReverse" />
-        <span>Anteprima</span>
+        <span class="tab-label">Anteprima</span>
     </button>
 
     <!-- LAYOUT PRINCIPALE -->
@@ -175,19 +174,14 @@ else
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 8px;
         padding: 0;
         background: #2a2a2a;
         color: #bbb;
         border: none;
         border-left: 1px solid #444;
-        border-radius: 0;
         cursor: pointer;
         z-index: 1052;
         transition: right 0.35s cubic-bezier(.4,0,.2,1), background 0.15s;
-        writing-mode: vertical-lr;
-        font-size: 0.8rem;
-        letter-spacing: 0.05em;
         user-select: none;
         box-shadow: -2px 0 8px rgba(0,0,0,.4);
     }
@@ -199,6 +193,16 @@ else
 
     .preview-dock-tab.open {
         right: min(46vw, 760px);
+    }
+
+    .tab-label {
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+        font-size: 0.75rem;
+        letter-spacing: 0.12em;
+        white-space: nowrap;
+        text-transform: uppercase;
+        font-weight: 600;
     }
 
     /* EDITOR — si sposta a sinistra quando il pannello è aperto */
