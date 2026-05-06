@@ -3,6 +3,7 @@
 @inject TaskPrioritiesService taskPrioritiesService
 @inject TaskService taskService
 @inject TeamService teamService
+@inject MissionSuiteEntityServices missionSuiteService
 @code {
     [Parameter] public TaskModel? Model { get; set; }
     [Parameter] public EventCallback OnSuccess { get; set; }
@@ -11,19 +12,28 @@
     [Parameter] public UserAtak User { get; set; }
 
     private Modal modal = default!;
+    private ModalSelectPoi _poiModal = default!;
     private string title = "Aggiungi Task";
     private List<Team> teams = new();
     private List<TaskPriority> taskPriorities = new();
+    private string? _takMissionName;
 
 
     public async Task ShowAsync()
     {
         if (Model == null)
         {
-            Model = new TaskModel(); // Initialize task model if it's null
+            Model = new TaskModel();
         }
 
         taskPriorities = (await taskPrioritiesService.GetAllAsync()).OrderBy(_ => _.Level).ToList();
+
+        if (!Model.Id.HasValue && !Model.Priority.HasValue)
+        {
+            var defaultPriority = taskPriorities.FirstOrDefault(p => p.IsDefault);
+            if (defaultPriority != null)
+                Model.Priority = defaultPriority.Id;
+        }
 
         if (Model.AssignedTeam == null)
         {
@@ -42,9 +52,21 @@
             Model.AssignedTeamId = Model.AssignedTeam.Id;
         }
 
-        if (Model.Id != null)
+        _takMissionName = null;
+        if (Model.Id.HasValue)
         {
             title = "Modifica Task";
+            var entity = await taskService.GetAsync(Model.Id.Value);
+            if (entity != null)
+            {
+                Model.PoiUid = entity.PoiUid;
+                Model.PoiName = entity.PoiName;
+                if (entity.MissionTAKSuiteId.HasValue)
+                {
+                    var mission = await missionSuiteService.GetAsync(entity.MissionTAKSuiteId.Value);
+                    _takMissionName = mission?.TakMissionUid;
+                }
+            }
         }
         else
         {
@@ -60,7 +82,17 @@
     private async void OnHidden()
     {
         Model = new TaskModel();
+        _takMissionName = null;
         await OnModalHidden.InvokeAsync();
+    }
+
+    private async Task ShowPoiModal() => await _poiModal.ShowAsync();
+
+    private void OnPoiSelected(UidEntry entry)
+    {
+        Model!.PoiUid = entry.Data;
+        Model!.PoiName = entry.Details?.Callsign;
+        StateHasChanged();
     }
 
     private async void OnSubmit()
@@ -69,11 +101,13 @@
         {
             Name = Model.Name,
             Description = Model.Description,
-            Status = TaskStatusTak.Created, // Task starts in Created status
+            Status = TaskStatusTak.Created,
             CreationDate = DateTime.UtcNow,
             LastModified = DateTime.UtcNow,
             PriorityId = Model.Priority,
-            MissionUid = ""
+            MissionUid = "",
+            PoiUid = Model.PoiUid,
+            PoiName = Model.PoiName
         };
 
 
@@ -124,7 +158,7 @@
                     <div class="form-group row mb-3">
                         <label class="col-sm-2 col-form-label" for="AssignedTeamId">Squadra Assegnata</label>
                         <div class="col-sm-10">
-                            <InputSelect id="AssignedTeamId" class="form-control" @bind-value="Model!.AssignedTeamId">
+                            <InputSelect id="AssignedTeamId" class="form-control" @bind-Value="Model!.AssignedTeamId">
                                 <option value="">Seleziona una squadra</option>
                                 @foreach (var team in teams)
                                 {
@@ -140,7 +174,7 @@
                 <div class="form-group row mb-3">
                     <label class="col-sm-2 col-form-label" for="taskPrio">Priorità</label>
                     <div class="col-sm-10">
-                        <InputSelect id="taskPrio" class="form-control" @bind-value="Model!.Priority">
+                        <InputSelect id="taskPrio" class="form-control" @bind-Value="Model!.Priority">
                             <option value="">Seleziona una priorità</option>
                             @foreach (var priority in taskPriorities)
                             {
@@ -160,6 +194,34 @@
                         <InputTextArea id="Description" class="form-control" @bind-Value="Model!.Description" />
                     </div>
                 </div>
+
+                <div class="form-group row mb-3">
+                    <label for="inputPoiUid" class="col-sm-2 col-form-label">POI Riferimento</label>
+                    <div class="col-sm-10">
+                        <div class="input-group">
+                            <InputText id="inputPoiUid" class="form-control" @bind-Value="Model!.PoiUid" placeholder="UID del POI di riferimento" />
+                            <Button Color="ButtonColor.Secondary"
+                                    @onclick="ShowPoiModal"
+                                    Disabled="@(string.IsNullOrEmpty(_takMissionName))">
+                                <Icon Name="IconName.Search" />
+                            </Button>
+                        </div>
+                        @if (!string.IsNullOrEmpty(Model!.PoiName))
+                        {
+                            <div class="mt-1 text-info">
+                                <Icon Name="IconName.GeoAltFill" /> <strong>@Model.PoiName</strong>
+                            </div>
+                        }
+                        @if (string.IsNullOrEmpty(_takMissionName))
+                        {
+                            <small class="form-text text-muted">La ricerca è disponibile solo per task associati a una missione TAK</small>
+                        }
+                        else
+                        {
+                            <small class="form-text text-muted">Cerca il POI dalla missione <strong>@_takMissionName</strong></small>
+                        }
+                    </div>
+                </div>
             </div>
         </EditForm>
     </BodyTemplate>
@@ -168,3 +230,7 @@
         <Button Color="ButtonColor.Secondary" @onclick="HideAsync">Chiudi</Button>
     </FooterTemplate>
 </Modal>
+
+<ModalSelectPoi @ref="_poiModal"
+                MissionTakName="@_takMissionName"
+                OnPoiSelected="OnPoiSelected" />

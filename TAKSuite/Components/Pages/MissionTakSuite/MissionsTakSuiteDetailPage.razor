@@ -3,14 +3,18 @@
 @using Microsoft.AspNetCore.Authorization
 @using TAKSuite.Components.Pages.Components
 @using TAKSuite.Components.Pages.SimpleTables.TaskPage
+@using BlazorReflection.Attributes
 @using TAKSuite.Data.Models
 @using TAKSuite.Data.Services
+@using TAKSuite.Data.ServicesTak
 @using TAKSuite.TAK.CoT
 @inject MissionSuiteEntityServices entityService
 @inject MartiApiClient MartiApiClient
-
+@inject NavigationManager Navigation
 @inject TaskService service
 @inject TaskTemplateService templateService
+@inject AttachmentService AttachmentService
+@inject ToastService ToastService
 @inject IJSRuntime JS
 
 <PageTitle>@missionTak?.Name</PageTitle>
@@ -47,10 +51,10 @@ else
 
     </div>
 
-    <div>
-        <label class="form-label">TAK Mission UID</label>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+        <label class="form-label mb-0">TAK Mission UID</label>
         <Dropdown Color="DropdownColor.Secondary" @bind-Value="@missionTak.TakMissionUid" @bind-Value:after="DebouncedRefresh">
-            <DropdownToggleButton>@missionTak.TakMissionUid</DropdownToggleButton>
+            <DropdownToggleButton>@(missionTak.TakMissionUid ?? "Seleziona missione TAK")</DropdownToggleButton>
             <DropdownMenu>
                 @foreach (var item in MissionsList)
                 {
@@ -58,18 +62,54 @@ else
                 }
             </DropdownMenu>
         </Dropdown>
-    </div>
-
-    <div class="mt-4 mb-3 d-flex gap-2 flex-wrap">
         <Button Color="ButtonColor.Success" @onclick="Save">
             <Icon Name="IconName.Save" /> Salva Missione
         </Button>
-        <Button Color="ButtonColor.Warning" @onclick="ExportAll" Loading="_exporting" LoadingText="Esportazione...">
-            <Icon Name="IconName.Download" /> Esporta tutti (ZIP)
-        </Button>
-        <Button Color="ButtonColor.Info" @onclick="() => _importModal.ShowAsync()">
-            <Icon Name="IconName.Magic" /> Importa da testo
-        </Button>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header fw-bold">Dettagli Missione</div>
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span class="text-muted">Stato</span>
+                        <Badge Color="BadgeColor.Primary">@missionTak.Status.GetDisplayName()</Badge>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span class="text-muted">Creata il</span>
+                        <span>@missionTak.CreationDate.ToString("dd/MM/yyyy HH:mm")</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span class="text-muted">Ultima modifica</span>
+                        <span>@missionTak.LastModified.ToString("dd/MM/yyyy HH:mm")</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span class="text-muted">Task totali</span>
+                        <Badge Color="BadgeColor.Secondary">@_tasks.Count</Badge>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span class="text-muted">TAK Mission UID</span>
+                        <span class="font-monospace small">@(missionTak.TakMissionUid ?? "N/D")</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header fw-bold">Stato Task</div>
+                <div class="card-body d-flex justify-content-center align-items-center" style="min-height:220px">
+                    @if (_chartData != null)
+                    {
+                        <PieChart @ref="_pieChart" Width="300" />
+                    }
+                    else
+                    {
+                        <span class="text-muted">Nessun task</span>
+                    }
+                </div>
+            </div>
+        </div>
     </div>
 
     <GenericDataTable @ref="_dataTable"
@@ -78,7 +118,34 @@ else
                       Service="service"
                       LoadItems="LoadData"
                       PrepareBeforeSave="PrepareBeforeSave"
+                      RowHref="@(t => $"/taskdetail/{t.Id}")"
                       Rights="BlazorReflection.Data.GridRightsType.Delete">
+
+        <AdditionalToolbarContent>
+            <Button Color="ButtonColor.Warning" @onclick="ExportAll" Loading="_exporting" LoadingText="Esportazione...">
+                <Icon Name="IconName.Download" /> Esporta tutti (ZIP)
+            </Button>
+            @if (!string.IsNullOrEmpty(missionTak?.TakMissionUid))
+            {
+                <Button Color="ButtonColor.Success" @onclick="PushAllToTak" Loading="_pushing" LoadingText="Invio...">
+                    <Icon Name="IconName.CloudUploadFill" /> Invia tutto a TAK
+                </Button>
+            }
+            <Button Color="ButtonColor.Info" @onclick="() => _importModal.ShowAsync()">
+                <Icon Name="IconName.Magic" /> Importa da testo
+            </Button>
+        </AdditionalToolbarContent>
+
+        <AdditionalFormContent Context="model">
+            <div class="form-group mt-3">
+                <label>POI Riferimento</label>
+                <PoiSearchField Value="@model.PoiUid"
+                                ValueChanged="@(v => model.PoiUid = v)"
+                                NameValue="@model.PoiName"
+                                NameValueChanged="@(v => model.PoiName = v)"
+                                MissionTakName="@missionTak?.TakMissionUid" />
+            </div>
+        </AdditionalFormContent>
 
         <Columns>
             <GridColumn TItem="TaskEntity" HeaderText="Attività" SortKeySelector="x => x.Name">
@@ -113,10 +180,17 @@ else
 
     private MissionSuite? missionTak;
     private List<MissionAtak> MissionsList = new();
+    private List<TaskEntity> _tasks = new();
     private bool _exporting;
+    private bool _pushing;
 
     private ImportTaskModal _importModal = default!;
     private GenericDataTable<TaskEntity, TaskViewModel> _dataTable = default!;
+
+    private PieChart _pieChart = default!;
+    private ChartData? _chartData;
+    private PieChartOptions _chartOptions = new() { Responsive = true, Plugins = new() { Legend = new() { Position = "bottom" } } };
+    private bool _chartInitialized;
 
     private Task PrepareBeforeSave(TaskViewModel model)
     {
@@ -127,6 +201,7 @@ else
     private async Task OnTaskCreated()
     {
         await _dataTable.RefreshAsync();
+        await RefreshChartAsync();
     }
 
     private async Task<MissionSuite?> Load()
@@ -152,7 +227,59 @@ else
         await base.OnInitializedAsync();
         missionTak = await Load();
         MissionsList = await MartiApiClient.GetAllMissionsDataAsync();
+        _tasks = await LoadData();
+        BuildChartData();
         StateHasChanged();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_chartData != null && !_chartInitialized && _pieChart is not null)
+        {
+            _chartInitialized = true;
+            await _pieChart.InitializeAsync(_chartData, _chartOptions);
+        }
+    }
+
+    private void BuildChartData()
+    {
+        if (_tasks.Count == 0) { _chartData = null; return; }
+
+        var grouped = _tasks
+            .GroupBy(t => t.Status)
+            .OrderBy(g => g.Key)
+            .ToList();
+
+        var colors = new[]
+        {
+            "rgba(108,117,125,0.8)", "rgba(13,202,240,0.8)", "rgba(255,193,7,0.8)",
+            "rgba(13,110,253,0.8)", "rgba(111,66,193,0.8)", "rgba(25,135,84,0.8)",
+            "rgba(220,53,69,0.8)", "rgba(253,126,20,0.8)", "rgba(102,16,242,0.8)",
+            "rgba(32,201,151,0.8)", "rgba(214,51,132,0.8)", "rgba(23,162,184,0.8)"
+        };
+
+        var dataset = new PieChartDataset
+        {
+            Data = grouped.Select(g => (double?)g.Count()).ToList(),
+            BackgroundColor = grouped.Select((_, i) => colors[i % colors.Length]).ToList()
+        };
+
+        _chartData = new ChartData
+        {
+            Labels = grouped.Select(g => g.Key.GetDisplayName()).ToList(),
+            Datasets = new List<IChartDataset> { dataset }
+        };
+    }
+
+    private async Task RefreshChartAsync()
+    {
+        _tasks = await LoadData();
+        BuildChartData();
+        if (_chartData != null)
+        {
+            _chartInitialized = false;
+            StateHasChanged();
+        }
     }
 
     private async Task<List<TaskEntity>> LoadData()
@@ -162,6 +289,26 @@ else
             .Where(t => t.MissionTAKSuiteId == MissionTakId)
             .OrderByDescending(x => x.CreationDate)
             .ToList();
+    }
+
+    private async Task PushAllToTak()
+    {
+        if (missionTak?.TakMissionUid == null) return;
+        _pushing = true;
+        try
+        {
+            var tasks = await LoadData();
+            var result = await templateService.PushAllHtmlToTakAsync(tasks, missionTak.TakMissionUid, AttachmentService);
+            ToastService.Notify(new(ToastType.Success, "TAK", result.ToString()));
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(new(ToastType.Danger, "TAK", $"Errore: {ex.Message}"));
+        }
+        finally
+        {
+            _pushing = false;
+        }
     }
 
     private async Task ExportAll()

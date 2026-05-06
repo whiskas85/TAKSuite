@@ -5,6 +5,27 @@
 
 @switch (TaskEnt.Status)
 {
+    case TaskStatusTak.Created:
+        <Tooltip Placement="TooltipPlacement.Top" Title="Schedula attività ad una squadra">
+            <Dropdown Color="DropdownColor.Light" Direction="DropdownDirection.Dropdown" Split="true" Class="me-2 my-2">
+                <DropdownActionButton @onclick="() => ScheduleTask(TaskEnt, Team)">Schedula</DropdownActionButton>
+                <DropdownToggleButton />
+                <DropdownMenu>
+                    <DropdownHeader>Squadra</DropdownHeader>
+                    <DropdownItem @onclick="() => ScheduleTask(TaskEnt, Team)" Type="DropdownItemType.Link">@Team?.Name</DropdownItem>
+                    @if (Subteams.Any())
+                    {
+                        <DropdownDivider />
+                        <DropdownHeader>Sottosquadre</DropdownHeader>
+                        @foreach (var subteam in Subteams)
+                        {
+                            <DropdownItem @onclick="() => ScheduleTask(TaskEnt, subteam)" Type="DropdownItemType.Link">@subteam.Name</DropdownItem>
+                        }
+                    }
+                </DropdownMenu>
+            </Dropdown>
+        </Tooltip>
+        break;
     case TaskStatusTak.Scheduled:
         <Tooltip Placement="TooltipPlacement.Top" Title="Schedula attività ad una squadra">
             <Dropdown Color="DropdownColor.Light" Direction="DropdownDirection.Dropdown" Split="true" Class="me-2 my-2">
@@ -146,6 +167,17 @@
                 @if (ShowButtonTitle)
                 {
                     <span class="d-flex align-items-center">Abortito</span>
+                }
+            </Button>
+        </Tooltip>
+        break;
+    case TaskStatusTak.RejectedTier1:
+        <Tooltip Placement="TooltipPlacement.Top" Title="Ripristina task">
+            <Button @onclick="() => RestoreTask(TaskEnt, Team)" Color="ButtonColor.Success" Class="me-2 my-2 d-flex align-items-center gap-2">
+                <Icon color="IconColor.Success" Name="IconName.FileArrowUpFill" />
+                @if (ShowButtonTitle)
+                {
+                    <span class="d-flex align-items-center">Ripristina</span>
                 }
             </Button>
         </Tooltip>

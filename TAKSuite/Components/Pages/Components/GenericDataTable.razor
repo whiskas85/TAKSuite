@@ -5,6 +5,7 @@
 @using TAKSuite.Data.Models
 @typeparam TItem where TItem : class, IGuidModel, new()
 @typeparam TModel where TModel : IFormModel<TItem>
+@inject NavigationManager Navigation
 
 
 <style>
@@ -16,20 +17,18 @@
 
 <Modal @ref="_modal" Title="Aggiungi" Size="ModalSize.Large">
     <BodyTemplate>
-        @* <AutoFormField TModel="TModel"
-            TItem="TItem"
-            Model="_model"
-            IsEditMode="@(Item != null)"
-            OnSubmitted="HandleSubmitted">
-        </AutoFormField> *@
-        <GenericForm 
-            Entity="_model" 
-            TEntity="TModel" 
+        <GenericForm
+            Entity="_model"
+            TEntity="TModel"
             OnSubmit="AddOrUpdate"
             OnClose="CloseModal"/>
+        @if (AdditionalFormContent != null && _model != null)
+        {
+            @AdditionalFormContent(_model)
+        }
     </BodyTemplate>
     <FooterTemplate>
-        <Button Color="ButtonColor.Primary" @onclick="() =>AddOrUpdate(_model)">Salva</Button>
+        <Button Color="ButtonColor.Primary" @onclick="() => AddOrUpdate(_model!)">Salva</Button>
         <Button Color="ButtonColor.Secondary" @onclick="CloseModal">Chiudi</Button>
     </FooterTemplate>
 </Modal>
@@ -39,6 +38,7 @@
     {
         <Button Color="ButtonColor.Primary" @onclick="AddButtonClick">Aggiungi</Button>
     }
+    @AdditionalToolbarContent
 </div>
 
 <GenericGrid @ref="grid"
@@ -52,7 +52,7 @@ OnRowDoubleClick="HandleDoubleClick">
         {
             <GridColumn TItem="TItem" class="action-grid-button">
                 <Tooltip Placement="TooltipPlacement.Top" Title="Modifica">
-                    <Button @onclick="() => HandleDoubleClick(context)" Color="ButtonColor.Primary" Class="align-items-center">
+                    <Button @onclick="() => HandleEdit(context)" Color="ButtonColor.Primary" Class="align-items-center">
                         <Icon Name="IconName.PencilFill" />
                     </Button>
                 </Tooltip>
@@ -83,6 +83,13 @@ OnRowDoubleClick="HandleDoubleClick">
     [Parameter]
     public Func<TModel, Task> PrepareBeforeSave { get; set; } = default!;
 
+    [Parameter]
+    public RenderFragment<TModel>? AdditionalFormContent { get; set; }
+
+    [Parameter]
+    public RenderFragment? AdditionalToolbarContent { get; set; }
+
+    [Parameter] public Func<TItem, string>? RowHref { get; set; }
 
     [Parameter] public GridRightsType Rights { get; set; } = GridRightsType.Read;
 
@@ -117,6 +124,18 @@ OnRowDoubleClick="HandleDoubleClick">
         await RefreshListAsync();
 
     }
+    
+    private async Task HandleEdit(TItem item)
+    {
+        if (Rights >= GridRightsType.Update)
+        {
+            var clone = DeepClone(item);
+            if (clone is null) return;
+
+            _model = (TModel)TModel.Create(clone);
+            await _modal.ShowAsync();
+        }
+    }
 
 
 
@@ -138,6 +157,8 @@ OnRowDoubleClick="HandleDoubleClick">
     {
         TItem addElement = new();
         _model = (TModel)TModel.Create(addElement);
+        _model.Model.Id = Guid.Empty;
+
         await _modal.ShowAsync();
     }
     private async Task EditItem(TItem item)
@@ -157,6 +178,11 @@ OnRowDoubleClick="HandleDoubleClick">
     }
     private async Task HandleDoubleClick(TItem item)
     {
+        if (RowHref != null)
+        {
+            Navigation.NavigateTo(RowHref(item));
+            return;
+        }
         if (Rights >= GridRightsType.Update)
         {
             var clone = DeepClone(item);

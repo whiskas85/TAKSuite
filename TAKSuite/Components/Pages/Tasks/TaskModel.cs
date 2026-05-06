@@ -22,6 +22,9 @@ namespace TAKSuite.Components.Pages.Tasks
         public Guid? AssignedTeamId { get; set; }
         public Guid? Priority { get; set; }
 
+        public string? PoiUid { get; set; }
+        public string? PoiName { get; set; }
+
 
     }
 }

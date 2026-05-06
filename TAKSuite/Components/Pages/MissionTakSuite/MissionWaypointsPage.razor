@@ -1,0 +1,208 @@
+@page "/missiontak/{MissionTakId:guid}/waypoints"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.ModelsTak
+@using TAKSuite.Data.Services
+@using TAKSuite.Data.ServicesTak
+@using TAKSuite.TAK.CoT
+@using TAKSuite.TAK.Helper
+@using TAKSuite.Helper
+@inject MissionSuiteEntityServices MissionSuiteService
+@inject WaypointService WaypointService
+@inject AttachmentService AttachmentService
+@inject CoTManager CoTManager
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>Waypoints — @(_mission?.Name ?? "Missione")</PageTitle>
+
+@if (_mission == null)
+{
+    <p>Caricamento...</p>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-0">Waypoints TAK</h2>
+            <p class="text-muted mb-0">@_mission.Name</p>
+        </div>
+        <Button Color="ButtonColor.Secondary" Outline="true"
+                @onclick='() => Navigation.NavigateTo($"/missiontak/{MissionTakId}")'>
+            <Icon Name="IconName.ArrowLeft" /> Dettagli missione
+        </Button>
+    </div>
+
+    @if (string.IsNullOrEmpty(_mission.TakMissionUid))
+    {
+        <div class="alert alert-warning">
+            Nessuna missione TAK collegata. Collega un TAK Mission UID dalla pagina dei dettagli.
+        </div>
+    }
+    else
+    {
+        <Grid @ref="_grid"
+              TItem="Waypoint"
+              Class="table table-hover"
+              HeaderRowCssClass="bg-success text-white border-bottom-0 h5"
+              DataProvider="WaypointDataProvider"
+              AllowFiltering="false"
+              AllowPaging="false"
+              AllowSorting="true"
+              RowClass="GetRowClass"
+              Responsive="true">
+            <GridColumns>
+                <GridColumn TItem="Waypoint" HeaderText="" TextAlignment="Alignment.Center">
+                    @if (context.Color.HasValue)
+                    {
+                        <div style="width: 18px; height: 18px; border-radius: 50%; background-color: @ColorConverterHelper.ArgbToHex(context.Color.Value); border: 1px solid #888; margin: auto;"></div>
+                    }
+                </GridColumn>
+                <GridColumn TItem="Waypoint" HeaderText="Callsign" SortKeySelector="x => x.Callsign">
+                    @context.Callsign
+                </GridColumn>
+                <GridColumn TItem="Waypoint" HeaderText="Ultima modifica" SortKeySelector="x => x.LastUpdateTime">
+                    @context.LastUpdateTime.ToString("dd/MM HH:mm")
+                </GridColumn>
+                <GridColumn TItem="Waypoint" HeaderText="Lat">
+                    @context.Lat
+                </GridColumn>
+                <GridColumn TItem="Waypoint" HeaderText="Lon">
+                    @context.Lon
+                </GridColumn>
+                <GridColumn TItem="Waypoint" HeaderText="">
+                    @if (context.Color != ATAKHelper.COLOR_WAYPOINT_COMPLETED)
+                    {
+                        <Button Size="ButtonSize.Small" Color="ButtonColor.Success"
+                                @onclick="() => CompleteWaypoint(context)">
+                            <Icon Name="IconName.CheckLg" />
+                        </Button>
+                    }
+                    <Button Size="ButtonSize.Small" Color="ButtonColor.Secondary" Position="Position.Relative"
+                            @onclick="() => OpenAttachments(context)">
+                        <Icon Name="IconName.Paperclip" />
+                        @if (context.AttachmentUidList.Count > 0)
+                        {
+                            <Badge Color="BadgeColor.Danger"
+                                   Position="Position.Absolute"
+                                   Placement="BadgePlacement.TopRight"
+                                   IndicatorType="BadgeIndicatorType.RoundedPill">
+                                @context.AttachmentUidList.Count
+                            </Badge>
+                        }
+                    </Button>
+                    <Button Size="ButtonSize.Small" Color="ButtonColor.Primary"
+                            @onclick="() => OpenMaps(context.Lat, context.Lon)">
+                        <Icon Name="IconName.GeoAltFill" />
+                    </Button>
+                </GridColumn>
+            </GridColumns>
+        </Grid>
+    }
+
+    <Modal @ref="_attachmentModal" Title="Allegati waypoint" Size="ModalSize.Large">
+        <BodyTemplate>
+            <Grid TItem="AtakAttachment"
+                  Class="table table-hover"
+                  HeaderRowCssClass="bg-success text-white border-bottom-0"
+                  DataProvider="AttachmentDataProvider"
+                  AllowFiltering="false"
+                  AllowPaging="false"
+                  AllowSorting="true"
+                  Responsive="true">
+                <GridColumns>
+                    <GridColumn TItem="AtakAttachment" HeaderText="Nome" SortKeySelector="x => x.Name">
+                        @context.Name
+                    </GridColumn>
+                    <GridColumn TItem="AtakAttachment" HeaderText="Tipo" SortKeySelector="x => x.MediaType">
+                        @context.MediaType
+                    </GridColumn>
+                    <GridColumn TItem="AtakAttachment" HeaderText="">
+                        <Button Size="ButtonSize.Small" @onclick="() => DownloadAttachment(context)">
+                            @if (context.MediaType?.Contains("jpeg") == true)
+                            {
+                                <Icon Name="IconName.FileEarmarkImage" Color="IconColor.Primary" />
+                            }
+                            else if (context.MediaType?.Contains("pdf") == true)
+                            {
+                                <Icon Name="IconName.FileEarmarkPdfFill" Color="IconColor.Primary" />
+                            }
+                            else
+                            {
+                                <Icon Name="IconName.FileEarmarkArrowDownFill" Color="IconColor.Primary" />
+                            }
+                        </Button>
+                    </GridColumn>
+                </GridColumns>
+            </Grid>
+        </BodyTemplate>
+        <FooterTemplate>
+            <Button Color="ButtonColor.Secondary" @onclick="() => _attachmentModal.HideAsync()">Chiudi</Button>
+        </FooterTemplate>
+    </Modal>
+}
+
+@code {
+    [Parameter] public Guid MissionTakId { get; set; }
+
+    private MissionSuite? _mission;
+    private Grid<Waypoint> _grid = default!;
+    private Modal _attachmentModal = default!;
+    private string? _selectedWaypointUid;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _mission = await MissionSuiteService.GetAsync(MissionTakId);
+    }
+
+    private async Task<GridDataProviderResult<Waypoint>> WaypointDataProvider(GridDataProviderRequest<Waypoint> request)
+    {
+        var missionUid = _mission?.TakMissionUid ?? string.Empty;
+        var list = string.IsNullOrEmpty(missionUid)
+            ? new List<Waypoint>()
+            : (await WaypointService.GetAllWaypointsAsync(missionUid))
+                .OrderBy(w => w.Color ?? 0)
+                .ThenBy(w => w.Callsign)
+                .ToList();
+        return request.ApplyTo(list);
+    }
+
+    private string GetRowClass(Waypoint wpt)
+        => wpt.Color == ATAKHelper.COLOR_WAYPOINT_COMPLETED ? "table-success" : string.Empty;
+
+    private async Task CompleteWaypoint(Waypoint item)
+    {
+        await CoTManager.ChangeCotColor(item.Uid, ATAKHelper.COLOR_WAYPOINT_COMPLETED);
+        await _grid.RefreshDataAsync();
+    }
+
+    private async Task OpenMaps(double? lat, double? lon)
+    {
+        if (lat == null || lon == null) return;
+        var url = $"https://www.google.com/maps?q={lat.ToString()!.Replace(",", ".")},{lon.ToString()!.Replace(",", ".")}";
+        await JS.InvokeVoidAsync("open", url, "_blank");
+    }
+
+    private async Task OpenAttachments(Waypoint item)
+    {
+        _selectedWaypointUid = item.Uid;
+        await _attachmentModal.ShowAsync();
+    }
+
+    private async Task<GridDataProviderResult<AtakAttachment>> AttachmentDataProvider(GridDataProviderRequest<AtakAttachment> request)
+    {
+        var list = string.IsNullOrEmpty(_selectedWaypointUid)
+            ? new List<AtakAttachment>()
+            : await AttachmentService.GetAllAsync(_selectedWaypointUid);
+        return request.ApplyTo(list);
+    }
+
+    private async Task DownloadAttachment(AtakAttachment attach)
+    {
+        if (attach.FileBytes == null) return;
+        var base64 = Convert.ToBase64String(attach.FileBytes);
+        var mediaType = attach.MediaType ?? "application/octet-stream";
+        await JS.InvokeVoidAsync("downloadFile", $"data:{mediaType};base64,{base64}", attach.Name);
+    }
+}

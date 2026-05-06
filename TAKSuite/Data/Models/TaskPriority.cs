@@ -8,5 +8,6 @@ namespace TAKSuite.Data.Models
         public string Name { get; set; } = "";
         public int Level { get; set; }
         public CardColor CardColor { get; set; }
+        public bool IsDefault { get; set; }
     }
 }

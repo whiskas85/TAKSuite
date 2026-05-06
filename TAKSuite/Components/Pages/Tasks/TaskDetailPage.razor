@@ -1,0 +1,300 @@
+@page "/taskdetail/{TaskId:guid}"
+@attribute [Authorize]
+@inherits ConnectedUserInfo
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Components.Layout
+@using TAKSuite.Components.Pages.Tasks.TaskComponents
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@using TAKSuite.Data.ServicesTak
+@inject TaskService TaskService
+@inject MissionSuiteEntityServices MissionSuiteService
+@inject TaskTemplateService TemplateService
+@inject AttachmentService AttachmentService
+@inject ToastService ToastService
+@inject TeamService TeamService
+@inject NavigationManager Navigation
+
+<PageTitle>@(_task?.Name ?? "Dettagli Task")</PageTitle>
+
+@if (_task == null)
+{
+    <p>Caricamento...</p>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-0">@_task.Name</h2>
+            @if (!string.IsNullOrEmpty(_task.Sottotitolo))
+            {
+                <p class="text-muted mb-0">@_task.Sottotitolo</p>
+            }
+        </div>
+        <div class="d-flex gap-2">
+            @if (_mission != null)
+            {
+                <Button Color="ButtonColor.Secondary" Outline="true"
+                        @onclick='() => Navigation.NavigateTo($"/missiontak/{_mission.Id}")'>
+                    <Icon Name="IconName.ArrowLeft" /> @_mission.Name
+                </Button>
+            }
+            @if (!string.IsNullOrEmpty(_task.PoiUid) && !string.IsNullOrEmpty(_mission?.TakMissionUid))
+            {
+                <Button Color="ButtonColor.Success"
+                        @onclick="PushToTak"
+                        Loading="_pushing"
+                        LoadingText="Invio...">
+                    <Icon Name="IconName.CloudUploadFill" /> Invia a TAK
+                </Button>
+            }
+            <Button Color="ButtonColor.Primary"
+                    @onclick='() => Navigation.NavigateTo($"/objeditor/{_task.Id}")'>
+                <Icon Name="IconName.PencilFill" /> Editor
+            </Button>
+        </div>
+    </div>
+
+    <div class="row g-3">
+
+        <!-- Cambio stato -->
+        @if (ConnectedAtakUser?.Team != null)
+        {
+            <div class="col-12">
+                <div class="card shadow-sm">
+                    <div class="card-body py-2 px-3 d-flex flex-wrap align-items-center gap-2">
+
+                        <span class="fw-semibold text-muted small text-uppercase me-1">Stato</span>
+
+                        <Dropdown Color="DropdownColor.Secondary">
+                            <DropdownToggleButton>@_task.Status.GetDisplayName()</DropdownToggleButton>
+                            <DropdownMenu Class="p-0 text-muted" Style="width: 320px;">
+                                <div class="px-2 py-2">
+                                    <TAKSuite.Components.Pages.Components.TaskProgress TaskEntity="_task" />
+                                </div>
+                                @if (_task.Logs.Any())
+                                {
+                                    <div class="border-top">
+                                        @foreach (var log in _task.Logs.OrderBy(l => l.Timestamp))
+                                        {
+                                            var statusName = log.NewStatus.GetDisplayName();
+                                            <div class="border-bottom px-3 py-2">
+                                                <div class="fw-semibold small">@statusName</div>
+                                                <div class="small text-secondary"><Icon Name="IconName.PeopleFill" /> @(log.Team?.Name ?? "—")</div>
+                                                <div class="small text-secondary"><Icon Name="IconName.Person" /> @(log.User?.Nick ?? "—")</div>
+                                                <div class="small text-muted"><Icon Name="IconName.ClockFill" /> @log.Timestamp.ToString("dd/MM/yyyy HH:mm")</div>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </DropdownMenu>
+                        </Dropdown>
+
+                        <div class="vr mx-1 align-self-stretch"></div>
+
+                        <TaskButtons Team="ConnectedAtakUser.Team"
+                                     TaskEnt="_task"
+                                     Subteams="_subteams"
+                                     ShowButtonTitle="true"
+                                     User="ConnectedAtakUser"
+                                     OnChanged="OnStatusChanged" />
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- Info generali -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header fw-bold">Informazioni generali</div>
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span class="text-muted">Stato</span>
+                        <Badge Color="BadgeColor.Primary">@_task.Status.GetDisplayName()</Badge>
+                    </li>
+                    @if (_task.Priority != null)
+                    {
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span class="text-muted">Priorità</span>
+                            <strong>@_task.Priority.Name</strong>
+                        </li>
+                    }
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span class="text-muted">Team Assegnato</span>
+                        <span>@(_task.AssignedTeam?.Name ?? "N/D")</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span class="text-muted">Team Esecutivo</span>
+                        <span>@(_task.ExecutingTeam?.Name ?? "N/D")</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span class="text-muted">Creato il</span>
+                        <span>@_task.CreationDate.ToString("dd/MM/yyyy HH:mm")</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span class="text-muted">Ultima modifica</span>
+                        <span>@_task.LastModified.ToString("dd/MM/yyyy HH:mm")</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Riferimenti TAK -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header fw-bold">Riferimenti TAK</div>
+                <ul class="list-group list-group-flush">
+                    @if (!string.IsNullOrEmpty(_task.PoiName) || !string.IsNullOrEmpty(_task.PoiUid))
+                    {
+                        <li class="list-group-item">
+                            <div class="text-muted small mb-1">POI Riferimento</div>
+                            @if (!string.IsNullOrEmpty(_task.PoiName))
+                            {
+                                <div><Icon Name="IconName.GeoAltFill" /> <strong>@_task.PoiName</strong></div>
+                            }
+                            @if (!string.IsNullOrEmpty(_task.PoiUid))
+                            {
+                                <div class="text-muted small font-monospace">@_task.PoiUid</div>
+                            }
+                        </li>
+                    }
+                    @if (_task.RadioChannel != null)
+                    {
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span class="text-muted">Canale Radio</span>
+                            <span>@_task.RadioChannel.Name</span>
+                        </li>
+                    }
+                    @if (!string.IsNullOrEmpty(_task.MissionUid))
+                    {
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span class="text-muted">Missione TAK</span>
+                            <span class="font-monospace small">@_task.MissionUid</span>
+                        </li>
+                    }
+                    @if (_mission != null)
+                    {
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span class="text-muted">Missione Suite</span>
+                            <NavLink href="@($"/missiontak/{_mission.Id}")" class="btn btn-sm btn-outline-secondary">
+                                @_mission.Name
+                            </NavLink>
+                        </li>
+                    }
+                </ul>
+            </div>
+        </div>
+
+        <!-- Descrizione -->
+        @if (!string.IsNullOrWhiteSpace(_task.Description))
+        {
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header fw-bold">Descrizione</div>
+                    <div class="card-body">
+                        <Markdown>@_task.Description</Markdown>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- Items: Info, Note, Azioni -->
+        @{
+            var infoItems    = _task.Items.Where(i => i.Type == TaskStringItemType.Info).OrderBy(i => i.Order).ToList();
+            var noteItems    = _task.Items.Where(i => i.Type == TaskStringItemType.Note).OrderBy(i => i.Order).ToList();
+            var actionItems  = _task.Items.Where(i => i.Type == TaskStringItemType.Action).OrderBy(i => i.Order).ToList();
+        }
+
+        @if (infoItems.Any())
+        {
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header fw-bold">Info</div>
+                    <ul class="list-group list-group-flush">
+                        @foreach (var item in infoItems)
+                        {
+                            <li class="list-group-item">@item.Value</li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        }
+
+        @if (noteItems.Any())
+        {
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header fw-bold">Note</div>
+                    <ul class="list-group list-group-flush">
+                        @foreach (var item in noteItems)
+                        {
+                            <li class="list-group-item">@item.Value</li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        }
+
+        @if (actionItems.Any())
+        {
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header fw-bold">Azioni</div>
+                    <ul class="list-group list-group-flush">
+                        @foreach (var item in actionItems)
+                        {
+                            <li class="list-group-item">@item.Value</li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        }
+
+    </div>
+}
+
+@code {
+    [Parameter] public Guid TaskId { get; set; }
+
+    private TaskEntity? _task;
+    private MissionSuite? _mission;
+    private List<Team> _subteams = new();
+    private bool _pushing;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        _task = await TaskService.GetAsync(TaskId);
+        if (_task == null) return;
+
+        if (_task.MissionTAKSuiteId.HasValue)
+            _mission = await MissionSuiteService.GetAsync(_task.MissionTAKSuiteId.Value);
+
+        if (ConnectedAtakUser?.Team != null)
+            _subteams = await TeamService.GetSubTeamsAsync(ConnectedAtakUser.Team);
+    }
+
+    private async Task OnStatusChanged()
+    {
+        _task = await TaskService.GetAsync(TaskId);
+        StateHasChanged();
+    }
+
+    private async Task PushToTak()
+    {
+        if (_task == null || _mission == null) return;
+        _pushing = true;
+        try
+        {
+            var ok = await TemplateService.PushHtmlToTakAsync(_task, _mission.TakMissionUid!, AttachmentService);
+            if (ok)
+                ToastService.Notify(new(ToastType.Success, "TAK", $"HTML allegato al POI \"{_task.PoiName ?? _task.PoiUid}\""));
+            else
+                ToastService.Notify(new(ToastType.Danger, "TAK", "Errore durante l'invio. Controlla log server."));
+        }
+        finally
+        {
+            _pushing = false;
+        }
+    }
+}

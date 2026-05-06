@@ -180,13 +180,12 @@
                 if (response.IsSuccessStatusCode)
                 {
                     AtakAttachment atc = new AtakAttachment();
-                    atc.Name = response.Content.Headers.ContentDisposition.FileName.Trim('"');
-                    atc.MediaType = response.Content.Headers.ContentType?.MediaType.Trim('"');
+                    var cd = response.Content.Headers.ContentDisposition;
+                    atc.Name = (cd?.FileName ?? cd?.FileNameStar ?? fileHash).Trim('"');
+                    atc.MediaType = response.Content.Headers.ContentType?.MediaType?.Trim('"');
 
-                    // Leggi il contenuto binario
                     byte[] fileBytes = await response.Content.ReadAsByteArrayAsync();
                     atc.FileBytes = fileBytes;
-
 
                     return atc;
                 }
@@ -416,6 +415,40 @@
             {
                 Console.WriteLine($"Eccezione nella richiesta: {ex.Message}");
                 return false;
+            }
+        }
+
+        public async Task<string?> UploadFileAsync(byte[] content, string filename, string contentType = "text/html")
+        {
+            try
+            {
+                var url = $"Marti/sync/upload?name={Uri.EscapeDataString(filename)}";
+
+                using var form = new MultipartFormDataContent();
+                var fileContent = new ByteArrayContent(content);
+                fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+                form.Add(fileContent, "assetfile", filename);
+
+                var response = await client.PostAsync(url, form);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var body = (await response.Content.ReadAsStringAsync()).Trim();
+                    // Server returns a JSON Resource object with a "hash" field
+                    using var doc = JsonDocument.Parse(body);
+                    if (doc.RootElement.TryGetProperty("hash", out var hashEl))
+                        return hashEl.GetString()?.Trim('"').Trim();
+                    // Fallback: plain hash string
+                    return body.Trim('"');
+                }
+
+                Console.WriteLine($"Errore HTTP upload file: {response.StatusCode} - {await response.Content.ReadAsStringAsync()}");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Eccezione upload file: {ex.Message}");
+                return null;
             }
         }
 

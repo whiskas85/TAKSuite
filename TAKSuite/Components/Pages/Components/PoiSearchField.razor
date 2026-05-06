@@ -1,0 +1,117 @@
+@using TAKSuite.TAK.CoT
+@inject MartiApiClient MartiApiClient
+
+<div class="input-group">
+    <InputText class="form-control"
+               Value="@Value"
+               ValueChanged="OnValueChanged"
+               ValueExpression="() => Value"
+               placeholder="UID del POI di riferimento" />
+    <Button Color="ButtonColor.Secondary"
+            @onclick="ShowModal"
+            Disabled="@(string.IsNullOrEmpty(MissionTakName))">
+        <Icon Name="IconName.Search" />
+    </Button>
+</div>
+@if (!string.IsNullOrEmpty(NameValue))
+{
+    <div class="mt-1 text-info">
+        <Icon Name="IconName.GeoAltFill" /> <strong>@NameValue</strong>
+    </div>
+}
+@if (string.IsNullOrEmpty(MissionTakName))
+{
+    <small class="form-text text-muted">La ricerca è disponibile solo per task associati a una missione TAK</small>
+}
+else
+{
+    <small class="form-text text-muted">Cerca il POI dalla missione <strong>@MissionTakName</strong></small>
+}
+
+<Modal @ref="_modal" Title="Seleziona POI" Size="ModalSize.Large">
+    <BodyTemplate>
+        <div class="mb-3">
+            <input class="form-control"
+                   type="text"
+                   value="@_searchText"
+                   @oninput="e => OnSearchChanged(e.Value?.ToString() ?? string.Empty)"
+                   placeholder="Cerca per nome o tipo..." />
+        </div>
+        <Grid TItem="UidEntry"
+              Class="table table-hover border-top"
+              Data="_filteredItems"
+              HeaderRowCssClass="bg-success text-white border-bottom-0 h5"
+              AllowSorting="true"
+              AllowPaging="false"
+              AllowSelection="false"
+              AllowRowClick="true"
+              OnRowDoubleClick="OnRowDoubleClick"
+              Responsive="true">
+            <GridColumns>
+                <GridColumn TItem="UidEntry" HeaderText="Nome" SortKeySelector="item => item.Details.Callsign">
+                    @context.Details?.Callsign
+                </GridColumn>
+                <GridColumn TItem="UidEntry" HeaderText="Tipo" SortKeySelector="item => item.Details.Type">
+                    @context.Details?.Type
+                </GridColumn>
+                <GridColumn TItem="UidEntry" HeaderText="UID">
+                    @context.Data
+                </GridColumn>
+            </GridColumns>
+        </Grid>
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Secondary" @onclick="() => _modal.HideAsync()">Chiudi</Button>
+    </FooterTemplate>
+</Modal>
+
+@code {
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public string? NameValue { get; set; }
+    [Parameter] public EventCallback<string?> NameValueChanged { get; set; }
+    [Parameter] public string? MissionTakName { get; set; }
+
+    private Modal _modal = default!;
+    private List<UidEntry> _allItems = new();
+    private List<UidEntry> _filteredItems = new();
+    private string _searchText = "";
+
+    private async Task ShowModal()
+    {
+        _searchText = "";
+        _allItems = string.IsNullOrEmpty(MissionTakName)
+            ? new()
+            : await MartiApiClient.GetAllMissionsUidAsync(MissionTakName);
+        _filteredItems = _allItems;
+        await _modal.ShowAsync();
+    }
+
+    private void OnSearchChanged(string value)
+    {
+        _searchText = value;
+        var filter = _searchText.Trim().ToLower();
+        _filteredItems = string.IsNullOrEmpty(filter)
+            ? _allItems
+            : _allItems
+                .Where(u =>
+                    (u.Details?.Callsign?.ToLower().Contains(filter) == true) ||
+                    (u.Details?.Type?.ToLower().Contains(filter) == true))
+                .ToList();
+    }
+
+    private async Task OnRowDoubleClick(GridRowEventArgs<UidEntry> args)
+    {
+        if (args.Item == null || string.IsNullOrEmpty(args.Item.Data)) return;
+        await ValueChanged.InvokeAsync(args.Item.Data);
+        await NameValueChanged.InvokeAsync(args.Item.Details?.Callsign);
+        await _modal.HideAsync();
+    }
+
+    private async Task OnValueChanged(string? value)
+    {
+        await ValueChanged.InvokeAsync(value);
+        if (string.IsNullOrEmpty(value))
+            await NameValueChanged.InvokeAsync(null);
+    }
+}

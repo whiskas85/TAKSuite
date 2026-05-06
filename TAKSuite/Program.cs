@@ -5,6 +5,7 @@ using TAKSuite.Components;
 using TAKSuite.Components.Account;
 using TAKSuite.Data;
 using TAKSuite.TAK.CoT;
+using TAKSuite.TAK.MartiApi;
 using Microsoft.AspNetCore.Components;
 using System.Threading.Tasks;
 using TAKSuite.TAK.Helper;
@@ -54,6 +55,14 @@ builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSe
 // TAK Connectivity
 builder.Services.AddSingleton<CoTApiClient>(); // Singleton per la connessione persistente
 builder.Services.AddSingleton<MartiApiClient>();
+builder.Services.AddSingleton<MartiHttpClientProvider>();
+builder.Services.AddSingleton(sp => new MissionApiClient(sp.GetRequiredService<MartiHttpClientProvider>().HttpClient));
+builder.Services.AddSingleton(sp => new SubscriptionApiClient(sp.GetRequiredService<MartiHttpClientProvider>().HttpClient));
+builder.Services.AddSingleton(sp => new TAKSuite.TAK.MartiApi.CotApiClient(sp.GetRequiredService<MartiHttpClientProvider>().HttpClient));
+builder.Services.AddSingleton(sp => new FileManagerApiClient(sp.GetRequiredService<MartiHttpClientProvider>().HttpClient));
+builder.Services.AddSingleton(sp => new GroupsApiClient(sp.GetRequiredService<MartiHttpClientProvider>().HttpClient));
+builder.Services.AddSingleton(sp => new VideoConnectionManagerV2Client(sp.GetRequiredService<MartiHttpClientProvider>().HttpClient));
+builder.Services.AddSingleton(sp => new DataFeedApiClient(sp.GetRequiredService<MartiHttpClientProvider>().HttpClient));
 builder.Services.AddSingleton<CachedDataService>();      // Cached Data Service
 builder.Services.AddSingleton<CoTManager>();      // CoTManager
 builder.Services.AddTransient<WebSocketManagerCustom>();

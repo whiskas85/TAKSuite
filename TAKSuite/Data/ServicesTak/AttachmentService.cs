@@ -164,6 +164,26 @@ namespace TAKSuite.Data.ServicesTak
 
 
 
+        public async Task<bool> AttachHtmlAsync(string missionUid, string poiUid, byte[] htmlBytes, string filename)
+        {
+            // 1. Carica il file sul server TAK → ottieni hash
+            var hash = await _client.UploadFileAsync(htmlBytes, filename);
+            if (string.IsNullOrEmpty(hash)) return false;
+
+            // 2. Recupera il CoT XML corrente per il UID
+            var cotXml = await _client.GetInfoAsync(poiUid);
+            if (cotXml == null) return false;
+
+            // 3. Aggiunge l'hash all'attachment_list nel CoT
+            var doc = new XmlDocument();
+            doc.LoadXml(cotXml);
+            AddAttachment(doc, hash);
+
+            // 4. Invia il CoT aggiornato e aggiorna la missione
+            await _cotManager.UpdateCoTMission(missionUid, poiUid, doc);
+            return true;
+        }
+
         public async Task<bool> DeleteAsync(AtakAttachment itemAttachment)
         {
             var response = await _client.GetInfoAsync(itemAttachment.Uid);

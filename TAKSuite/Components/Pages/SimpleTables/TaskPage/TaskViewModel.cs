@@ -51,6 +51,22 @@ public class TaskViewModel : BaseEntityViewModel<TaskEntity>, IFormModel<TaskEnt
         set => Model.PriorityId = value;
     }
 
+    [Show(false)]
+    [DisplayName("POI Riferimento")]
+    public string? PoiUid
+    {
+        get => Model.PoiUid;
+        set => Model.PoiUid = value;
+    }
+
+    [Show(false)]
+    [DisplayName("POI Nome")]
+    public string? PoiName
+    {
+        get => Model.PoiName;
+        set => Model.PoiName = value;
+    }
+
     public static async Task<IEnumerable<KeyValuePair<Guid, string>>> GetValuesForAssignedTeam(DataServiceAbstract<Team> service)
     {
         var list = await service.GetAllAsync();

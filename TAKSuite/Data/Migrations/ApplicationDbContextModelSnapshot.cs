@@ -259,7 +259,7 @@ namespace TAKSuite.Migrations
 
                     b.HasIndex("TaskEntityId");
 
-                    b.ToTable("Documents");
+                    b.ToTable("Documents", (string)null);
                 });
 
             modelBuilder.Entity("TAKSuite.Data.Models.DocumentationOwner", b =>
@@ -278,7 +278,7 @@ namespace TAKSuite.Migrations
 
                     b.HasKey("DocumentationId", "OwnerId", "OwnerType");
 
-                    b.ToTable("DocumentationOwners");
+                    b.ToTable("DocumentationOwners", (string)null);
                 });
 
             modelBuilder.Entity("TAKSuite.Data.Models.EventEntity", b =>
@@ -304,7 +304,7 @@ namespace TAKSuite.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("EventEntities");
+                    b.ToTable("EventEntities", (string)null);
                 });
 
             modelBuilder.Entity("TAKSuite.Data.Models.MissionSuite", b =>
@@ -338,7 +338,7 @@ namespace TAKSuite.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("MissionsTakSuite");
+                    b.ToTable("MissionsTakSuite", (string)null);
                 });
 
             modelBuilder.Entity("TAKSuite.Data.Models.RadioChannel", b =>
@@ -361,7 +361,7 @@ namespace TAKSuite.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("RadioChannels");
+                    b.ToTable("RadioChannels", (string)null);
                 });
 
             modelBuilder.Entity("TAKSuite.Data.Models.RegistrationCode", b =>
@@ -387,7 +387,7 @@ namespace TAKSuite.Migrations
 
                     b.HasIndex("TeamId");
 
-                    b.ToTable("RegistrationCodes");
+                    b.ToTable("RegistrationCodes", (string)null);
                 });
 
             modelBuilder.Entity("TAKSuite.Data.Models.TaskEntity", b =>
@@ -429,6 +429,12 @@ namespace TAKSuite.Migrations
                     b.Property<int>("Points")
                         .HasColumnType("int");
 
+                    b.Property<string>("PoiName")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("PoiUid")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<Guid?>("PriorityId")
                         .HasColumnType("uniqueidentifier");
 
@@ -462,7 +468,7 @@ namespace TAKSuite.Migrations
 
                     b.HasIndex("RadioChannelId");
 
-                    b.ToTable("Tasks");
+                    b.ToTable("Tasks", (string)null);
                 });
 
             modelBuilder.Entity("TAKSuite.Data.Models.TaskHierarchy", b =>
@@ -486,7 +492,7 @@ namespace TAKSuite.Migrations
 
                     b.HasIndex("TeamId");
 
-                    b.ToTable("TaskHierarchy");
+                    b.ToTable("TaskHierarchy", (string)null);
                 });
 
             modelBuilder.Entity("TAKSuite.Data.Models.TaskLog", b =>
@@ -525,7 +531,7 @@ namespace TAKSuite.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("TaskLogs");
+                    b.ToTable("TaskLogs", (string)null);
                 });
 
             modelBuilder.Entity("TAKSuite.Data.Models.TaskPriority", b =>
@@ -537,6 +543,9 @@ namespace TAKSuite.Migrations
                     b.Property<int>("CardColor")
                         .HasColumnType("int");
 
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("bit");
+
                     b.Property<int>("Level")
                         .HasColumnType("int");
 
@@ -546,7 +555,7 @@ namespace TAKSuite.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("TaskPriorities");
+                    b.ToTable("TaskPriorities", (string)null);
                 });
 
             modelBuilder.Entity("TAKSuite.Data.Models.Team", b =>
@@ -587,7 +596,7 @@ namespace TAKSuite.Migrations
                         .IsUnique()
                         .HasFilter("[TeamLeaderId] IS NOT NULL");
 
-                    b.ToTable("Teams");
+                    b.ToTable("Teams", (string)null);
                 });
 
             modelBuilder.Entity("TAKSuite.Data.Models.TeamRadioChannel", b =>
@@ -626,7 +635,7 @@ namespace TAKSuite.Migrations
 
                     b.HasIndex("TeamId");
 
-                    b.ToTable("TeamRadioChannels");
+                    b.ToTable("TeamRadioChannels", (string)null);
                 });
 
             modelBuilder.Entity("TAKSuite.Data.Models.UserAtak", b =>
@@ -662,7 +671,7 @@ namespace TAKSuite.Migrations
 
                     b.HasIndex("TeamId");
 
-                    b.ToTable("UsersAtak");
+                    b.ToTable("UsersAtak", (string)null);
                 });
 
             modelBuilder.Entity("TaskStringItem", b =>
@@ -688,7 +697,7 @@ namespace TAKSuite.Migrations
 
                     b.HasIndex("TaskEntityId");
 
-                    b.ToTable("TaskStringItems");
+                    b.ToTable("TaskStringItems", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>

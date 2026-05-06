@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Web;
 using TAKSuite.Data.Models;
+using TAKSuite.Data.ServicesTak;
 
 namespace TAKSuite.Data.Services;
 
@@ -84,9 +85,43 @@ public class TaskTemplateService
         return ms.ToArray();
     }
 
+    public async Task<bool> PushHtmlToTakAsync(TaskEntity task, string missionUid, AttachmentService attachmentService)
+    {
+        if (string.IsNullOrEmpty(task.PoiUid)) return false;
+        var html = await CompileAsync(task);
+        var bytes = Encoding.UTF8.GetBytes(html);
+        var filename = $"{SanitizeFilename(task.Name)}.html";
+        return await attachmentService.AttachHtmlAsync(missionUid, task.PoiUid, bytes, filename);
+    }
+
+    public async Task<PushToTakResult> PushAllHtmlToTakAsync(
+        IEnumerable<TaskEntity> tasks, string missionUid, AttachmentService attachmentService)
+    {
+        var template = await LoadTemplateAsync();
+        int succeeded = 0, skipped = 0, failed = 0;
+
+        foreach (var task in tasks)
+        {
+            if (string.IsNullOrEmpty(task.PoiUid)) { skipped++; continue; }
+            var html = Compile(template, task);
+            var bytes = Encoding.UTF8.GetBytes(html);
+            var filename = $"{SanitizeFilename(task.Name)}.html";
+            var ok = await attachmentService.AttachHtmlAsync(missionUid, task.PoiUid, bytes, filename);
+            if (ok) succeeded++; else failed++;
+        }
+
+        return new PushToTakResult(succeeded, skipped, failed);
+    }
+
     private static string SanitizeFilename(string name)
     {
         var invalid = Path.GetInvalidFileNameChars();
         return string.Concat(name.Select(c => invalid.Contains(c) ? '_' : c));
     }
+}
+
+public record PushToTakResult(int Succeeded, int Skipped, int Failed)
+{
+    public override string ToString() =>
+        $"Completati: {Succeeded} | Saltati (no UID): {Skipped} | Falliti: {Failed}";
 }

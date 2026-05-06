@@ -15,14 +15,15 @@
     {
         <div class="input-group mb-2 align-items-center item-row @(_dragOver == item ? "drag-over" : "")"
              @key="item.Id"
-             draggable="true"
-             @ondragstart="() => OnDragStart(item)"
              @ondragover="() => OnDragOver(item)"
              @ondragover:preventDefault="true"
              @ondrop="() => OnDrop(item)"
              @ondragend="OnDragEnd">
 
-            <span class="drag-handle" title="Trascina per riordinare">
+            <span class="drag-handle" title="Trascina per riordinare"
+                  draggable="true"
+                  @ondragstart="() => OnDragStart(item)"
+                  @ondragend="OnDragEnd">
                 <Icon Name="IconName.GripVertical" />
             </span>
 

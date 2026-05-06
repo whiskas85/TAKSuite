@@ -1,0 +1,53 @@
+@page "/priorities"
+@attribute [Authorize]
+
+@using Microsoft.AspNetCore.Authorization
+@using BlazorBootstrap
+@using TAKSuite.Components.Pages.Components
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+
+@inject TaskPrioritiesService service
+
+<PageTitle>Priorità Task</PageTitle>
+<h3>Gestione Priorità</h3>
+
+<GenericDataTable TItem="TaskPriority"
+                  TModel="TaskPriorityModel"
+                  Service="service"
+                  LoadItems="LoadData"
+                  PrepareBeforeSave="@OnBeforeSave"
+                  Rights="BlazorReflection.Data.GridRightsType.Delete">
+    <Columns>
+        <GridColumn TItem="TaskPriority" HeaderText="Nome" IsDefaultSortColumn="true" SortDirection="SortDirection.Ascending" SortKeySelector="item => item.Name">
+            @context.Name
+        </GridColumn>
+        <GridColumn TItem="TaskPriority" HeaderText="Livello" SortKeySelector="item => item.Level">
+            @context.Level
+        </GridColumn>
+        <GridColumn TItem="TaskPriority" HeaderText="Colore">
+            <Badge Color="@((BadgeColor)(int)context.CardColor)">@context.CardColor</Badge>
+        </GridColumn>
+        <GridColumn TItem="TaskPriority" HeaderText="Predefinita">
+            @if (context.IsDefault)
+            {
+                <Icon Name="IconName.CheckCircleFill" Color="IconColor.Success" />
+            }
+        </GridColumn>
+    </Columns>
+</GenericDataTable>
+
+@code {
+    private async Task<List<TaskPriority>> LoadData()
+    {
+        return (await service.GetAllAsync()).OrderBy(x => x.Level).ToList();
+    }
+
+    private async Task OnBeforeSave(TaskPriorityModel model)
+    {
+        if (model.IsDefault)
+        {
+            await service.ClearDefaultsExceptAsync(model.Model.Id);
+        }
+    }
+}

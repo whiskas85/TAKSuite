@@ -1,0 +1,104 @@
+@page "/missiontak/{MissionTakId:guid}/parking"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.ModelsTak
+@using TAKSuite.Data.Services
+@using TAKSuite.Data.ServicesTak
+@using TAKSuite.Helper
+@inject MissionSuiteEntityServices MissionSuiteService
+@inject ParckingService ParckingService
+@inject NavigationManager Navigation
+@inject TAKSuite.Helpers.JsInteropHelper JsHelper
+
+<PageTitle>Parking — @(_mission?.Name ?? "Missione")</PageTitle>
+
+@if (_mission == null)
+{
+    <p>Caricamento...</p>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-0">Parking TAK</h2>
+            <p class="text-muted mb-0">@_mission.Name</p>
+        </div>
+        <Button Color="ButtonColor.Secondary" Outline="true"
+                @onclick='() => Navigation.NavigateTo($"/missiontak/{MissionTakId}")'>
+            <Icon Name="IconName.ArrowLeft" /> Dettagli missione
+        </Button>
+    </div>
+
+    @if (string.IsNullOrEmpty(_mission.TakMissionUid))
+    {
+        <div class="alert alert-warning">
+            Nessuna missione TAK collegata. Collega un TAK Mission UID dalla pagina dei dettagli.
+        </div>
+    }
+    else
+    {
+        <Grid TItem="Parking"
+              Class="table table-hover"
+              HeaderRowCssClass="bg-success text-white border-bottom-0 h5"
+              DataProvider="ParkingDataProvider"
+              AllowFiltering="false"
+              AllowPaging="false"
+              AllowSorting="true"
+              Responsive="true">
+            <GridColumns>
+                <GridColumn TItem="Parking" HeaderText="" TextAlignment="Alignment.Center">
+                    @if (context.Color.HasValue)
+                    {
+                        <div style="width: 18px; height: 18px; border-radius: 50%; background-color: @ColorConverterHelper.ArgbToHex(context.Color.Value); border: 1px solid #888; margin: auto;"></div>
+                    }
+                </GridColumn>
+                <GridColumn TItem="Parking" HeaderText="Callsign" SortKeySelector="x => x.Callsign">
+                    @context.Callsign
+                </GridColumn>
+                <GridColumn TItem="Parking" HeaderText="Lat">
+                    @context.Lat
+                </GridColumn>
+                <GridColumn TItem="Parking" HeaderText="Lon">
+                    @context.Lon
+                </GridColumn>
+                <GridColumn TItem="Parking" HeaderText="">
+                    <Button Size="ButtonSize.Small" Color="ButtonColor.Primary"
+                            @onclick="() => OpenMaps(context.Lat, context.Lon)">
+                        <Icon Name="IconName.GeoAltFill" /> Maps
+                    </Button>
+                </GridColumn>
+            </GridColumns>
+        </Grid>
+    }
+}
+
+@code {
+    [Parameter] public Guid MissionTakId { get; set; }
+
+    private MissionSuite? _mission;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _mission = await MissionSuiteService.GetAsync(MissionTakId);
+    }
+
+    private async Task<GridDataProviderResult<Parking>> ParkingDataProvider(GridDataProviderRequest<Parking> request)
+    {
+        var missionUid = _mission?.TakMissionUid ?? string.Empty;
+        var list = string.IsNullOrEmpty(missionUid)
+            ? new List<Parking>()
+            : (await ParckingService.GetAllAsync(missionUid))
+                .OrderBy(p => p.Color ?? 0)
+                .ThenBy(p => p.Callsign)
+                .ToList();
+        return request.ApplyTo(list);
+    }
+
+    private async Task OpenMaps(double? lat, double? lon)
+    {
+        if (lat == null || lon == null) return;
+        var url = $"https://www.google.com/maps?q={lat.ToString()!.Replace(",", ".")},{lon.ToString()!.Replace(",", ".")}";
+        await JsHelper.OpenInNewTab(url);
+    }
+}

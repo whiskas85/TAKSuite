@@ -147,21 +147,16 @@
     }
     else if (PropertyType == typeof(Guid?))
     {
-        <div class="form-group row mb-3">
-            <label class="col-sm-2 col-form-label">@Property.Name</label>
-            <div class="col-sm-10">
-                <InputSelect class="form-control"
-                Value="@(PropertyValue as Guid?)"
-                ValueExpression="ValueExpression<Guid?>()"
-                ValueChanged="(Guid? val) => Property.SetValue(Entity, val)">
-                    <option value="">Seleziona un'opzione</option>
-                    @foreach (var opt in options)
-                    {
-                        <option value="@opt.Key">@opt.Value</option>
-                    }
-                </InputSelect>
-            </div>
-        </div> 
+        <InputSelect class="form-control"
+        Value="@(PropertyValue as Guid?)"
+        ValueExpression="ValueExpression<Guid?>()"
+        ValueChanged="(Guid? val) => Property.SetValue(Entity, val)">
+            <option value="">Seleziona un'opzione</option>
+            @foreach (var opt in options)
+            {
+                <option value="@opt.Key">@opt.Value</option>
+            }
+        </InputSelect>
     }
 
 
@@ -188,21 +183,18 @@
         return Expression.Lambda<Func<PropertyType>>(exp);
     }
 
-    private IEnumerable<KeyValuePair<Guid, string>>? options = new List< KeyValuePair<Guid, string>>();
+    private IEnumerable<KeyValuePair<Guid, string>>? options = new List<KeyValuePair<Guid, string>>();
+    private PropertyInfo? _loadedProperty;
 
     protected override async Task OnParametersSetAsync()
     {
         await base.OnParametersSetAsync();
 
-        if (Property != null) 
+        if (Property != null && Property != _loadedProperty)
+        {
+            _loadedProperty = Property;
             options = await GetDropdownOptions(Property);
-
-    }
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        await base.OnAfterRenderAsync(firstRender);
-
-
+        }
     }
 
 

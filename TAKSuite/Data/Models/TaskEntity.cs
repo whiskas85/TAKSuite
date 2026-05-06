@@ -17,6 +17,8 @@ namespace TAKSuite.Data.Models
         // ATAK Link
         public List<string> Uids { get; set; } = new(); // Lista di UID (ATAK) allegati al task
         public string MissionUid { get; set; } = "";    // Missione dalla quale attingere
+        public string? PoiUid { get; set; }             // UID del POI di riferimento TAK
+        public string? PoiName { get; set; }            // Nome (callsign) del POI di riferimento TAK
 
 
         public Guid? MissionTAKSuiteId { get; set; }       // FK esplicita
