@@ -44,11 +44,11 @@ namespace TAKSuite.Data.Services.BaseDataManagement
                 if (!property.CanWrite)
                     continue;
 
-                // Aggiorniamo la proprietà solo se diversa
+                // Aggiorniamo la proprietà solo se diversa (incluso il caso null → valore cancellato)
                 var sourceValue = property.GetValue(source);
                 var targetValue = property.GetValue(target);
 
-                if (sourceValue != null && !sourceValue.Equals(targetValue))
+                if (!Equals(sourceValue, targetValue))
                 {
                     property.SetValue(target, sourceValue);
                 }

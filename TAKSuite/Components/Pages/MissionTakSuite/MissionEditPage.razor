@@ -1,0 +1,305 @@
+@page "/missionedit/{MissionId:guid}"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using BlazorReflection.Attributes
+@using TAKSuite.Components.Pages.Components
+@using TAKSuite.Components.Pages.SimpleTables.TaskPage
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@using TAKSuite.Data.ServicesTak
+@using TAKSuite.TAK.CoT
+@inject MissionSuiteEntityServices EntityService
+@inject TaskService service
+@inject TaskTemplateService templateService
+@inject AttachmentService AttachmentService
+@inject MartiApiClient MartiApiClient
+@inject TeamService TeamService
+@inject NavigationManager Navigation
+@inject ToastService ToastService
+@inject IJSRuntime JS
+
+<PageTitle>@(_mission != null ? $"Configura — {_mission.Name}" : "Configura Missione")</PageTitle>
+
+@if (_mission == null)
+{
+    <p>Caricamento...</p>
+}
+else
+{
+    <ImportTaskModal @ref="_importModal" MissionId="MissionId" OnTaskCreated="OnTaskCreated" />
+
+    <div style="position: fixed; top: 0; left: 300px; right: 0; z-index: 100;
+                background: var(--bs-body-bg); border-bottom: 1px solid var(--bs-border-color);
+                padding: 0.5rem 1.5rem;">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h2 class="mb-0 fs-4">Configura Missione</h2>
+                <p class="text-muted mb-0 small">@_mission.Name</p>
+            </div>
+            <div class="d-flex gap-2">
+                <Button Color="ButtonColor.Info" Outline="true"
+                        @onclick='() => Navigation.NavigateTo($"/missiontak/{MissionId}")'>
+                    <Icon Name="IconName.Activity" /> Operativo
+                </Button>
+                <Button Color="ButtonColor.Success" @onclick="Save" Loading="_saving" LoadingText="Salvataggio...">
+                    <Icon Name="IconName.Save" /> Salva Missione
+                </Button>
+            </div>
+        </div>
+    </div>
+    <div style="height: 72px;"></div>
+
+    <!-- Informazioni Base -->
+    <div class="card mb-3">
+        <div class="card-header fw-bold">Informazioni Base</div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Nome</label>
+                    <input class="form-control" @bind="_mission.Name" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Descrizione</label>
+                    <input class="form-control" @bind="_mission.Descrizione" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Collegamento TAK -->
+    <div class="card mb-3">
+        <div class="card-header fw-bold">Collegamento TAK</div>
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-8">
+                    <label class="form-label">TAK Mission UID</label>
+                    <Dropdown Color="DropdownColor.Secondary">
+                        <DropdownToggleButton>@(_mission.TakMissionUid ?? "Seleziona missione TAK")</DropdownToggleButton>
+                        <DropdownMenu>
+                            <DropdownItem Type="DropdownItemType.Button" @onclick='() => _mission.TakMissionUid = null'>
+                                — nessuna —
+                            </DropdownItem>
+                            @foreach (var m in _takMissions)
+                            {
+                                <DropdownItem Type="DropdownItemType.Button" @onclick="@(() => _mission.TakMissionUid = m.Name)">
+                                    @m.Name
+                                </DropdownItem>
+                            }
+                        </DropdownMenu>
+                    </Dropdown>
+                </div>
+                <div class="col-md-4">
+                    <span class="font-monospace small text-muted">@(_mission.TakMissionUid ?? "—")</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configurazione Operativa -->
+    <div class="card mb-3">
+        <div class="card-header fw-bold">Configurazione Operativa</div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Team responsabile</label>
+                    <select class="form-select" @bind="_mission.TeamId">
+                        <option value="">— nessun team —</option>
+                        @foreach (var t in _teams)
+                        {
+                            <option value="@t.Id">@t.Name</option>
+                        }
+                    </select>
+                    <small class="text-muted">I nuovi task erediteranno questo team</small>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Inizio missione (ora locale)</label>
+                    <input type="datetime-local" class="form-control"
+                           value="@ToLocalInput(_mission.StartDateTime)"
+                           @onchange="e => _mission.StartDateTime = ParseLocalDt(e.Value?.ToString())" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Fine missione (ora locale)</label>
+                    <input type="datetime-local" class="form-control"
+                           value="@ToLocalInput(_mission.EndDateTime)"
+                           @onchange="e => _mission.EndDateTime = ParseLocalDt(e.Value?.ToString())" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Automazioni task -->
+    <div class="card mb-3">
+        <div class="card-header fw-bold">Automazioni task</div>
+        <div class="card-body">
+            <p class="text-muted small mb-3">
+                Flag in cascata applicati alla <strong>creazione</strong> di ogni nuovo task in questa missione.
+                Richiedono che il <em>Team Assegnato</em> sia impostato sul task.
+            </p>
+            <div class="d-flex flex-column gap-2">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="chkAutoSchedule"
+                           @bind="_mission.AutoScheduleTeam" />
+                    <label class="form-check-label" for="chkAutoSchedule">
+                        <strong>Autoschedula team</strong>
+                        <span class="text-muted ms-1 small">— alla creazione → Schedulato</span>
+                    </label>
+                </div>
+                <div class="form-check @(!_mission.AutoScheduleTeam ? "opacity-50" : "")">
+                    <input class="form-check-input" type="checkbox" id="chkAutoAssign"
+                           disabled="@(!_mission.AutoScheduleTeam)"
+                           @bind="_mission.AutoAssignTeam" />
+                    <label class="form-check-label" for="chkAutoAssign">
+                        <strong>Auto assegna team</strong>
+                        <span class="text-muted ms-1 small">— quando schedulato → Accettato</span>
+                    </label>
+                </div>
+                <div class="form-check @(!_mission.AutoAssignTeam ? "opacity-50" : "")">
+                    <input class="form-check-input" type="checkbox" id="chkAutoAccept"
+                           disabled="@(!_mission.AutoAssignTeam)"
+                           @bind="_mission.AutoAcceptTask" />
+                    <label class="form-check-label" for="chkAutoAccept">
+                        <strong>Auto accetta task</strong>
+                        <span class="text-muted ms-1 small">— quando accettato → Assegnato (team exec = team assegnato)</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Task -->
+    <div class="card mb-3">
+        <div class="card-header fw-bold d-flex justify-content-between align-items-center">
+            <span>Task</span>
+            <div class="d-flex gap-2">
+                <Button Color="ButtonColor.Warning" Size="ButtonSize.Small" @onclick="ExportAll"
+                        Loading="_exporting" LoadingText="...">
+                    <Icon Name="IconName.Download" /> Esporta ZIP
+                </Button>
+                <Button Color="ButtonColor.Info" Size="ButtonSize.Small"
+                        @onclick="() => _importModal.ShowAsync()">
+                    <Icon Name="IconName.Magic" /> Importa AI
+                </Button>
+            </div>
+        </div>
+        <div class="card-body">
+            <GenericDataTable @ref="_dataTable"
+                              TItem="TaskEntity"
+                              TModel="TaskViewModel"
+                              Service="service"
+                              LoadItems="LoadData"
+                              PrepareBeforeSave="PrepareBeforeSave"
+                              RowHref='t => $"/taskedit/{t.Id}"'
+                              Rights="BlazorReflection.Data.GridRightsType.Delete">
+                <Columns>
+                    <GridColumn TItem="TaskEntity" HeaderText="Attività" SortKeySelector="x => x.Name">
+                        @context.Name
+                    </GridColumn>
+                    <GridColumn TItem="TaskEntity" HeaderText="Stato" SortKeySelector="x => x.Status">
+                        @context.Status.GetDisplayName()
+                    </GridColumn>
+                    <GridColumn TItem="TaskEntity" HeaderText="Team assegnato">
+                        @context.AssignedTeam?.Name
+                    </GridColumn>
+                    <GridColumn TItem="TaskEntity" HeaderText="Priorità">
+                        @context.Priority?.Name
+                    </GridColumn>
+                    <GridColumn TItem="TaskEntity" HeaderText="Luce Verde">
+                        @(context.GreenLightDateTime.HasValue ? ToLocalDisplay(context.GreenLightDateTime.Value) : "—")
+                    </GridColumn>
+                    <GridColumn TItem="TaskEntity" HeaderText="Ultima modifica" SortKeySelector="x => x.LastModified">
+                        @context.LastModified.ToString("dd/MM HH:mm")
+                    </GridColumn>
+                    <GridColumn TItem="TaskEntity" HeaderText="">
+                        <NavLink class="btn btn-sm btn-outline-primary" href="@($"/taskedit/{context.Id}")">
+                            <Icon Name="IconName.GearFill" />
+                        </NavLink>
+                    </GridColumn>
+                </Columns>
+            </GenericDataTable>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid MissionId { get; set; }
+
+    private MissionSuite? _mission;
+    private List<MissionAtak> _takMissions = new();
+    private List<Team> _teams = new();
+    private bool _saving;
+    private bool _exporting;
+
+    private ImportTaskModal _importModal = default!;
+    private GenericDataTable<TaskEntity, TaskViewModel> _dataTable = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _mission = await EntityService.GetAsync(MissionId);
+        _takMissions = await MartiApiClient.GetAllMissionsDataAsync();
+        _teams = (await TeamService.GetAllAsync()).OrderBy(t => t.Name).ToList();
+    }
+
+    private async Task Save()
+    {
+        if (_mission == null) return;
+        _saving = true;
+        try
+        {
+            _mission.LastModified = DateTime.UtcNow;
+            await EntityService.UpdateAsync(_mission);
+            ToastService.Notify(new(ToastType.Success, "Missione", "Configurazione salvata"));
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task<List<TaskEntity>> LoadData()
+    {
+        var all = await service.GetAllAsync();
+        return all
+            .Where(t => t.MissionTAKSuiteId == MissionId)
+            .OrderByDescending(x => x.CreationDate)
+            .ToList();
+    }
+
+    private Task PrepareBeforeSave(TaskViewModel model)
+    {
+        model.Model.MissionTAKSuiteId = MissionId;
+        if (!model.Model.AssignedTeamId.HasValue)
+            model.Model.AssignedTeamId = _mission?.TeamId;
+        model.Model.LastModified = DateTime.UtcNow;
+        if (model.Model.CreationDate == default)
+            model.Model.CreationDate = DateTime.UtcNow;
+        return Task.CompletedTask;
+    }
+
+    private async Task OnTaskCreated()
+    {
+        await _dataTable.RefreshAsync();
+    }
+
+    private async Task ExportAll()
+    {
+        _exporting = true;
+        StateHasChanged();
+        try
+        {
+            var tasks = await LoadData();
+            var zipBytes = await templateService.ExportAllAsZipAsync(tasks);
+            await JS.InvokeVoidAsync("downloadBytesAsFile", $"tasks_{DateTime.Now:yyyyMMdd_HHmm}.zip", zipBytes);
+        }
+        finally { _exporting = false; }
+    }
+
+    private static string ToLocalDisplay(DateTime utc, string format = "dd/MM HH:mm")
+        => DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToLocalTime().ToString(format);
+
+    private static string ToLocalInput(DateTime? utc)
+        => utc.HasValue ? DateTime.SpecifyKind(utc.Value, DateTimeKind.Utc).ToLocalTime().ToString("yyyy-MM-ddTHH:mm") : "";
+
+    private static DateTime? ParseLocalDt(string? s)
+        => string.IsNullOrWhiteSpace(s) ? null
+           : DateTime.SpecifyKind(DateTime.Parse(s), DateTimeKind.Local).ToUniversalTime();
+}

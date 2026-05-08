@@ -1,5 +1,6 @@
 @page "/taskdetail/{TaskId:guid}"
 @attribute [Authorize]
+@implements IDisposable
 @inherits ConnectedUserInfo
 @using Microsoft.AspNetCore.Authorization
 @using TAKSuite.Components.Layout
@@ -23,7 +24,8 @@
 }
 else
 {
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 py-2 px-1"
+         style="position: sticky; top: 0; z-index: 10; background: var(--bs-body-bg);">
         <div>
             <h2 class="mb-0">@_task.Name</h2>
             @if (!string.IsNullOrEmpty(_task.Sottotitolo))
@@ -31,7 +33,22 @@ else
                 <p class="text-muted mb-0">@_task.Sottotitolo</p>
             }
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 align-items-center">
+            @if (_task.GreenLightDateTime.HasValue)
+            {
+                <span class="text-success small fw-semibold text-end lh-1 me-1">
+                    <Icon Name="IconName.CircleFill" />
+                    @DateTime.SpecifyKind(_task.GreenLightDateTime.Value, DateTimeKind.Utc).ToLocalTime().ToString("HH:mm")
+                    <br /><span class="text-muted fw-normal" style="font-size:.8em;">@DateTime.SpecifyKind(_task.GreenLightDateTime.Value, DateTimeKind.Utc).ToLocalTime().ToString("dd/MM")</span>
+                </span>
+            }
+            else if (_task.StartDateTime.HasValue)
+            {
+                <span class="text-muted small text-end lh-1 me-1">
+                    @DateTime.SpecifyKind(_task.StartDateTime.Value, DateTimeKind.Utc).ToLocalTime().ToString("HH:mm")
+                    <br /><span style="font-size:.8em;">@DateTime.SpecifyKind(_task.StartDateTime.Value, DateTimeKind.Utc).ToLocalTime().ToString("dd/MM")</span>
+                </span>
+            }
             @if (_mission != null)
             {
                 <Button Color="ButtonColor.Secondary" Outline="true"
@@ -54,6 +71,38 @@ else
             </Button>
         </div>
     </div>
+
+    <!-- Timeline grafica (mostrata solo se ci sono le date della missione) -->
+    @if (_mission?.StartDateTime.HasValue == true && _mission.EndDateTime.HasValue)
+    {
+        <div class="card mb-3">
+            <div class="card-header fw-bold d-flex justify-content-between align-items-center">
+                <span>Timeline Missione</span>
+                <small class="text-muted">ora locale</small>
+            </div>
+            <div class="card-body">
+                <MissionTimelineBar MissionStart="_mission.StartDateTime!.Value"
+                                    MissionEnd="_mission.EndDateTime!.Value"
+                                    TaskStart="_task.StartDateTime"
+                                    TaskEnd="_task.EndDateTime"
+                                    GreenLight="_task.GreenLightDateTime"
+                                    GreenLightEnd="@(_task.GreenLightDateTime.HasValue && _task.Durata.HasValue
+                                        ? _task.GreenLightDateTime.Value.AddMinutes(_task.Durata.Value)
+                                        : (DateTime?)null)"
+                                    PlannedStart="_task.PlannedStartDateTime"
+                                    PlannedEnd="_task.PlannedEndDateTime" />
+            </div>
+        </div>
+    }
+
+    <!-- Countdown obiettivo -->
+    @if (!string.IsNullOrEmpty(GetCountdownLabel()))
+    {
+        <div class="alert @GetCountdownClass() d-flex align-items-center gap-2 mb-3 py-2">
+            <Icon Name="IconName.AlarmFill" />
+            <strong style="font-size:1.05rem; letter-spacing:.03em;">@GetCountdownLabel()</strong>
+        </div>
+    }
 
     <div class="row g-3">
 
@@ -103,6 +152,40 @@ else
             </div>
         }
 
+        <!-- Luce Verde -->
+        <div class="col-md-6">
+            <div class="card h-100 border-success">
+                <div class="card-header fw-bold text-success d-flex align-items-center gap-2">
+                    <Icon Name="IconName.CircleFill" /> Luce Verde
+                </div>
+                <div class="card-body">
+                    <div class="row g-2 align-items-end">
+                        <div class="col">
+                            <label class="form-label small mb-1">Data/Ora (ora locale)</label>
+                            <input type="datetime-local" class="form-control form-control-sm"
+                                   value="@ToLocalInput(_task.GreenLightDateTime)"
+                                   @onchange="e => _task.GreenLightDateTime = ParseLocalDt(e.Value?.ToString())" />
+                        </div>
+                        <div class="col-auto">
+                            <Button Color="ButtonColor.Secondary" Size="ButtonSize.Small" @onclick="SetGlNow">Ora</Button>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2 mt-2">
+                        <Button Color="ButtonColor.Success" Size="ButtonSize.Small" @onclick="SaveGreenLight"
+                                Loading="_savingGl" LoadingText="...">
+                            <Icon Name="IconName.Save" /> Salva
+                        </Button>
+                        @if (_task.GreenLightDateTime.HasValue)
+                        {
+                            <Button Color="ButtonColor.Danger" Size="ButtonSize.Small" @onclick="ClearGreenLight">
+                                <Icon Name="IconName.XCircle" /> Rimuovi
+                            </Button>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Info generali -->
         <div class="col-md-6">
             <div class="card h-100">
@@ -139,7 +222,7 @@ else
             </div>
         </div>
 
-        <!-- Riferimenti TAK -->
+        <!-- Riferimenti TAK + finestra temporale -->
         <div class="col-md-6">
             <div class="card h-100">
                 <div class="card-header fw-bold">Riferimenti TAK</div>
@@ -181,6 +264,30 @@ else
                             </NavLink>
                         </li>
                     }
+                    @if (_task.StartDateTime.HasValue)
+                    {
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span class="text-muted">Inizio finestra obj</span>
+                            <span>@ToLocal(_task.StartDateTime.Value)</span>
+                        </li>
+                    }
+                    @if (_task.EndDateTime.HasValue)
+                    {
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span class="text-muted">Fine finestra obj</span>
+                            <span>@ToLocal(_task.EndDateTime.Value)</span>
+                        </li>
+                    }
+                    @if (_task.GreenLightDateTime.HasValue)
+                    {
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span class="text-muted">Luce verde</span>
+                            <span class="text-success fw-semibold">
+                                <Icon Name="IconName.CircleFill" class="me-1" />
+                                @ToLocal(_task.GreenLightDateTime.Value)
+                            </span>
+                        </li>
+                    }
                 </ul>
             </div>
         </div>
@@ -200,9 +307,9 @@ else
 
         <!-- Items: Info, Note, Azioni -->
         @{
-            var infoItems    = _task.Items.Where(i => i.Type == TaskStringItemType.Info).OrderBy(i => i.Order).ToList();
-            var noteItems    = _task.Items.Where(i => i.Type == TaskStringItemType.Note).OrderBy(i => i.Order).ToList();
-            var actionItems  = _task.Items.Where(i => i.Type == TaskStringItemType.Action).OrderBy(i => i.Order).ToList();
+            var infoItems   = _task.Items.Where(i => i.Type == TaskStringItemType.Info).OrderBy(i => i.Order).ToList();
+            var noteItems   = _task.Items.Where(i => i.Type == TaskStringItemType.Note).OrderBy(i => i.Order).ToList();
+            var actionItems = _task.Items.Where(i => i.Type == TaskStringItemType.Action).OrderBy(i => i.Order).ToList();
         }
 
         @if (infoItems.Any())
@@ -261,6 +368,8 @@ else
     private List<Team> _subteams = new();
     private bool _pushing;
 
+    private System.Timers.Timer? _timer;
+
     protected override async Task OnInitializedAsync()
     {
         await base.OnInitializedAsync();
@@ -272,12 +381,130 @@ else
 
         if (ConnectedAtakUser?.Team != null)
             _subteams = await TeamService.GetSubTeamsAsync(ConnectedAtakUser.Team);
+
+        StartTimerIfNeeded();
+    }
+
+    private void StartTimerIfNeeded()
+    {
+        bool hasDates = _task?.GreenLightDateTime.HasValue == true || _task?.EndDateTime.HasValue == true;
+        if (hasDates && _timer == null)
+        {
+            _timer = new System.Timers.Timer(1000);
+            _timer.Elapsed += async (_, _) => await InvokeAsync(StateHasChanged);
+            _timer.AutoReset = true;
+            _timer.Start();
+        }
     }
 
     private async Task OnStatusChanged()
     {
         _task = await TaskService.GetAsync(TaskId);
         StateHasChanged();
+    }
+
+    private string GetCountdownLabel()
+    {
+        if (_task == null) return "";
+        var now = DateTime.UtcNow;
+
+        if (_task.GreenLightDateTime.HasValue)
+        {
+            var greenStart = _task.GreenLightDateTime.Value;
+            DateTime? greenEnd = _task.Durata.HasValue
+                ? greenStart.AddMinutes(_task.Durata.Value)
+                : null;
+
+            if (now < greenStart)
+                return $"Luce verde tra {FormatTs(greenStart - now)}";
+
+            if (greenEnd.HasValue && now < greenEnd.Value)
+                return $"LUCE VERDE — Fine tra {FormatTs(greenEnd.Value - now)}";
+
+            if (!greenEnd.HasValue)
+                return "LUCE VERDE";
+
+            return "Luce verde terminata";
+        }
+
+        if (_task.EndDateTime.HasValue)
+        {
+            if (now < _task.EndDateTime.Value)
+                return $"Fine obiettivo tra {FormatTs(_task.EndDateTime.Value - now)}";
+            return "Finestra obiettivo scaduta";
+        }
+
+        return "";
+    }
+
+    private string GetCountdownClass()
+    {
+        if (_task == null) return "alert-secondary";
+        var now = DateTime.UtcNow;
+
+        if (_task.GreenLightDateTime.HasValue)
+        {
+            var greenStart = _task.GreenLightDateTime.Value;
+            DateTime? greenEnd = _task.Durata.HasValue
+                ? greenStart.AddMinutes(_task.Durata.Value)
+                : null;
+
+            if (now >= greenStart && (!greenEnd.HasValue || now < greenEnd.Value))
+                return "alert-success";
+
+            if (greenEnd.HasValue && now >= greenEnd.Value)
+                return "alert-secondary";
+
+            return "alert-warning";
+        }
+
+        if (_task.EndDateTime.HasValue && now >= _task.EndDateTime.Value)
+            return "alert-secondary";
+
+        return "alert-warning";
+    }
+
+    private bool _savingGl;
+
+    private void SetGlNow() => _task!.GreenLightDateTime = DateTime.UtcNow;
+
+    private async Task SaveGreenLight()
+    {
+        if (_task == null) return;
+        _savingGl = true;
+        try
+        {
+            _task.LastModified = DateTime.UtcNow;
+            await TaskService.UpdateAsync(_task);
+            ToastService.Notify(new(ToastType.Success, "Task", "Luce verde salvata"));
+            StartTimerIfNeeded();
+        }
+        finally { _savingGl = false; }
+    }
+
+    private async Task ClearGreenLight()
+    {
+        _task!.GreenLightDateTime = null;
+        await SaveGreenLight();
+    }
+
+    private static string ToLocalInput(DateTime? utc)
+        => utc.HasValue ? DateTime.SpecifyKind(utc.Value, DateTimeKind.Utc).ToLocalTime().ToString("yyyy-MM-ddTHH:mm") : "";
+
+    private static DateTime? ParseLocalDt(string? s)
+        => string.IsNullOrWhiteSpace(s) ? null
+           : DateTime.SpecifyKind(DateTime.Parse(s), DateTimeKind.Local).ToUniversalTime();
+
+    private static string ToLocal(DateTime utc)
+        => DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToLocalTime().ToString("dd/MM/yyyy HH:mm");
+
+    private static string FormatTs(TimeSpan ts)
+    {
+        if (ts.TotalDays >= 1)
+            return $"{(int)ts.TotalDays}g {ts.Hours:00}h {ts.Minutes:00}m {ts.Seconds:00}s";
+        if (ts.TotalHours >= 1)
+            return $"{(int)ts.TotalHours:00}h {ts.Minutes:00}m {ts.Seconds:00}s";
+        return $"{ts.Minutes:00}m {ts.Seconds:00}s";
     }
 
     private async Task PushToTak()
@@ -296,5 +523,11 @@ else
         {
             _pushing = false;
         }
+    }
+
+    public void Dispose()
+    {
+        _timer?.Stop();
+        _timer?.Dispose();
     }
 }

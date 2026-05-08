@@ -1,21 +1,15 @@
 @page "/missiontak/{MissionTakId:guid}"
 @attribute [Authorize]
+@implements IDisposable
 @using Microsoft.AspNetCore.Authorization
 @using TAKSuite.Components.Pages.Components
-@using TAKSuite.Components.Pages.SimpleTables.TaskPage
-@using BlazorReflection.Attributes
+@using TAKSuite.Components.Pages.Tasks.TaskComponents
 @using TAKSuite.Data.Models
 @using TAKSuite.Data.Services
-@using TAKSuite.Data.ServicesTak
-@using TAKSuite.TAK.CoT
 @inject MissionSuiteEntityServices entityService
-@inject MartiApiClient MartiApiClient
-@inject NavigationManager Navigation
 @inject TaskService service
-@inject TaskTemplateService templateService
-@inject AttachmentService AttachmentService
+@inject NavigationManager Navigation
 @inject ToastService ToastService
-@inject IJSRuntime JS
 
 <PageTitle>@missionTak?.Name</PageTitle>
 @if (missionTak == null)
@@ -24,49 +18,85 @@
 }
 else
 {
-    <ImportTaskModal @ref="_importModal"
-                     MissionId="MissionTakId"
-                     OnTaskCreated="OnTaskCreated" />
+    <!-- GL Modal -->
+    <Modal @ref="_glModal" Title="@($"Luce Verde — {_editingGlTask?.Name}")">
+        <BodyTemplate>
+            <div class="d-flex gap-2 align-items-end flex-wrap">
+                <div>
+                    <label class="form-label small mb-1">Data/ora (ora locale)</label>
+                    <input type="datetime-local" class="form-control"
+                           value="@ToLocalInput(_editingGlValue)"
+                           @onchange="e => _editingGlValue = ParseLocalDt(e.Value?.ToString())" />
+                </div>
+                <Button Color="ButtonColor.Secondary" @onclick="SetEditingGlNow">Ora</Button>
+            </div>
+        </BodyTemplate>
+        <FooterTemplate>
+            <Button Color="ButtonColor.Success" @onclick="SaveEditingGl"
+                    Loading="_savingGl" LoadingText="Salvataggio...">
+                <Icon Name="IconName.Save" /> Salva
+            </Button>
+            @if (_editingGlTask?.GreenLightDateTime.HasValue == true)
+            {
+                <Button Color="ButtonColor.Danger" @onclick="ClearEditingGl">
+                    <Icon Name="IconName.XCircle" /> Rimuovi
+                </Button>
+            }
+            <Button Color="ButtonColor.Secondary" @onclick='async () => await _glModal.HideAsync()'>Annulla</Button>
+        </FooterTemplate>
+    </Modal>
 
-    <div class="d-flex justify-content-between">
-
-        <div class="d-flex flex-column">
-            <h1>@missionTak?.Name</h1>
-            <p>@missionTak?.Descrizione</p>
-        </div>
-
-        @{var currentStatus = missionTak.Status.GetDisplayName();}
-        <div class="d-flex gap-2">
-            <div class="d-flex gap-2">
-                <Dropdown Color="DropdownColor.Secondary">
-                    <DropdownToggleButton>@currentStatus</DropdownToggleButton>
-                    <DropdownMenu Class="p-0 text-muted" Style="width: 320px;">
-                        <div class="px-2 py-1 d-flex flex-column">
-                            <TAKSuite.Components.Pages.Components.MissionProgress MissionEntity="missionTak" />
-                        </div>
-                    </DropdownMenu>
-                </Dropdown>
+    <!-- Header fisso -->
+    <div style="position: fixed; top: 0; left: 300px; right: 0; z-index: 100;
+                background: var(--bs-body-bg); border-bottom: 1px solid var(--bs-border-color);
+                padding: 0.5rem 1.5rem;">
+        <div class="d-flex justify-content-between align-items-center">
+            <!-- Sinistra: nome + descrizione -->
+            <div>
+                <h1 class="mb-0 fs-3">@missionTak.Name</h1>
+                @if (!string.IsNullOrEmpty(missionTak.Descrizione))
+                {
+                    <p class="text-muted mb-0 small">@missionTak.Descrizione</p>
+                }
+            </div>
+            <!-- Destra: pulsanti + separatore + orologio -->
+            <div class="d-flex align-items-center gap-3">
+                <div class="d-flex gap-2">
+                    <Dropdown Color="DropdownColor.Secondary">
+                        <DropdownToggleButton>@missionTak.Status.GetDisplayName()</DropdownToggleButton>
+                        <DropdownMenu Class="p-0 text-muted" Style="width: 320px;">
+                            <div class="px-2 py-1 d-flex flex-column">
+                                <TAKSuite.Components.Pages.Components.MissionProgress MissionEntity="missionTak" />
+                            </div>
+                        </DropdownMenu>
+                    </Dropdown>
+                    <Button Color="ButtonColor.Secondary" Outline="true"
+                            @onclick='() => Navigation.NavigateTo($"/missionedit/{MissionTakId}")'>
+                        <Icon Name="IconName.GearFill" /> Configura
+                    </Button>
+                </div>
+                <div class="vr align-self-stretch"></div>
+                <div class="text-end lh-1">
+                    <div style="font-size: 1.9rem; font-weight: 700; letter-spacing: .05em; font-variant-numeric: tabular-nums;">
+                        @DateTime.Now.ToString("HH:mm:ss")
+                    </div>
+                    <div class="text-muted" style="font-size: .75rem;">@DateTime.Now.ToString("dd/MM/yyyy")</div>
+                </div>
             </div>
         </div>
-
+        <!-- Countdown missione -->
+        @if (!string.IsNullOrEmpty(GetMissionCountdown()))
+        {
+            <div class="alert @GetMissionCountdownClass() d-flex align-items-center gap-2 mb-0 mt-2 py-1">
+                <Icon Name="IconName.ClockFill" />
+                <strong>@GetMissionCountdown()</strong>
+            </div>
+        }
     </div>
+    <!-- Spacer per compensare l'header fisso -->
+    <div style="height: @(string.IsNullOrEmpty(GetMissionCountdown()) ? "80px" : "130px");"></div>
 
-    <div class="d-flex align-items-center gap-2 flex-wrap">
-        <label class="form-label mb-0">TAK Mission UID</label>
-        <Dropdown Color="DropdownColor.Secondary" @bind-Value="@missionTak.TakMissionUid" @bind-Value:after="DebouncedRefresh">
-            <DropdownToggleButton>@(missionTak.TakMissionUid ?? "Seleziona missione TAK")</DropdownToggleButton>
-            <DropdownMenu>
-                @foreach (var item in MissionsList)
-                {
-                    <DropdownItem @onclick="() => SaveMissionUid(missionTak, item)" Type="DropdownItemType.Button">@item.Name</DropdownItem>
-                }
-            </DropdownMenu>
-        </Dropdown>
-        <Button Color="ButtonColor.Success" @onclick="Save">
-            <Icon Name="IconName.Save" /> Salva Missione
-        </Button>
-    </div>
-
+    <!-- Dettagli + Grafico -->
     <div class="row g-3 mb-4">
         <div class="col-md-6">
             <div class="card h-100">
@@ -77,12 +107,16 @@ else
                         <Badge Color="BadgeColor.Primary">@missionTak.Status.GetDisplayName()</Badge>
                     </li>
                     <li class="list-group-item d-flex justify-content-between">
+                        <span class="text-muted">Team responsabile</span>
+                        <span>@(missionTak.Team?.Name ?? "—")</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between">
                         <span class="text-muted">Creata il</span>
-                        <span>@missionTak.CreationDate.ToString("dd/MM/yyyy HH:mm")</span>
+                        <span>@ToLocalDisplay(missionTak.CreationDate)</span>
                     </li>
                     <li class="list-group-item d-flex justify-content-between">
                         <span class="text-muted">Ultima modifica</span>
-                        <span>@missionTak.LastModified.ToString("dd/MM/yyyy HH:mm")</span>
+                        <span>@ToLocalDisplay(missionTak.LastModified)</span>
                     </li>
                     <li class="list-group-item d-flex justify-content-between">
                         <span class="text-muted">Task totali</span>
@@ -92,6 +126,20 @@ else
                         <span class="text-muted">TAK Mission UID</span>
                         <span class="font-monospace small">@(missionTak.TakMissionUid ?? "N/D")</span>
                     </li>
+                    @if (missionTak.StartDateTime.HasValue)
+                    {
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span class="text-muted">Inizio</span>
+                            <span>@ToLocalDisplay(missionTak.StartDateTime.Value)</span>
+                        </li>
+                    }
+                    @if (missionTak.EndDateTime.HasValue)
+                    {
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span class="text-muted">Fine</span>
+                            <span>@ToLocalDisplay(missionTak.EndDateTime.Value)</span>
+                        </li>
+                    }
                 </ul>
             </div>
         </div>
@@ -112,123 +160,227 @@ else
         </div>
     </div>
 
-    <GenericDataTable @ref="_dataTable"
-                      TItem="TaskEntity"
-                      TModel="TaskViewModel"
-                      Service="service"
-                      LoadItems="LoadData"
-                      PrepareBeforeSave="PrepareBeforeSave"
-                      RowHref="@(t => $"/taskdetail/{t.Id}")"
-                      Rights="BlazorReflection.Data.GridRightsType.Delete">
-
-        <AdditionalToolbarContent>
-            <Button Color="ButtonColor.Warning" @onclick="ExportAll" Loading="_exporting" LoadingText="Esportazione...">
-                <Icon Name="IconName.Download" /> Esporta tutti (ZIP)
-            </Button>
-            @if (!string.IsNullOrEmpty(missionTak?.TakMissionUid))
+    <!-- Obiettivi attivi -->
+    <div class="card mb-4">
+        <div class="card-header fw-bold">
+            Obiettivi attivi (@_activeObjectives.Count)
+        </div>
+        <div class="card-body p-2">
+            @if (!_activeObjectives.Any())
             {
-                <Button Color="ButtonColor.Success" @onclick="PushAllToTak" Loading="_pushing" LoadingText="Invio...">
-                    <Icon Name="IconName.CloudUploadFill" /> Invia tutto a TAK
-                </Button>
+                <p class="text-muted text-center py-3 mb-0">
+                    Nessun obiettivo attivo. Aggiungili dalla pagina
+                    <NavLink href="@($"/missionedit/{MissionTakId}")">Configura</NavLink>.
+                </p>
             }
-            <Button Color="ButtonColor.Info" @onclick="() => _importModal.ShowAsync()">
-                <Icon Name="IconName.Magic" /> Importa da testo
-            </Button>
-        </AdditionalToolbarContent>
+            @for (int i = 0; i < _activeObjectives.Count; i++)
+            {
+                var task = _activeObjectives[i];
+                var glEnd = task.GreenLightDateTime.HasValue && task.Durata.HasValue
+                    ? task.GreenLightDateTime.Value.AddMinutes(task.Durata.Value)
+                    : (DateTime?)null;
+                var nowUtc = DateTime.UtcNow;
+                var inGlWindow = task.GreenLightDateTime.HasValue
+                    && nowUtc >= task.GreenLightDateTime.Value
+                    && (glEnd == null || nowUtc < glEnd.Value);
+                var glRemaining = (inGlWindow && glEnd.HasValue) ? glEnd.Value - nowUtc : (TimeSpan?)null;
 
-        <AdditionalFormContent Context="model">
-            <div class="form-group mt-3">
-                <label>POI Riferimento</label>
-                <PoiSearchField Value="@model.PoiUid"
-                                ValueChanged="@(v => model.PoiUid = v)"
-                                NameValue="@model.PoiName"
-                                NameValueChanged="@(v => model.PoiName = v)"
-                                MissionTakName="@missionTak?.TakMissionUid" />
+                @if (i > 0)
+                {
+                    var prev = _activeObjectives[i - 1];
+                    if (prev.GreenLightDateTime.HasValue && task.GreenLightDateTime.HasValue)
+                    {
+                        var prevGlEnd = prev.Durata.HasValue
+                            ? prev.GreenLightDateTime.Value.AddMinutes(prev.Durata.Value)
+                            : prev.GreenLightDateTime.Value;
+                        var gap = task.GreenLightDateTime.Value - prevGlEnd;
+                        var timeToNext = task.GreenLightDateTime.Value - nowUtc;
+                        if (gap.TotalSeconds > 0 && timeToNext.TotalSeconds > 0)
+                        {
+                            <div class="text-center text-muted small py-1" style="letter-spacing:.03em;">
+                                <span>↕ @FormatTs(timeToNext)</span>
+                            </div>
+                        }
+                    }
+                }
+
+                <div class="border rounded mb-1 @(inGlWindow ? "border-success border-2" : "")">
+                    <div class="d-flex justify-content-between align-items-center px-3 py-2"
+                         style="position: sticky; top: 0; z-index: 5; background: var(--bs-body-bg); border-radius: inherit;">
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <NavLink href="@($"/taskdetail/{task.Id}")"
+                                     class="fw-semibold text-decoration-none text-body">
+                                @task.Name
+                            </NavLink>
+                            @if (!string.IsNullOrEmpty(task.Sottotitolo))
+                            {
+                                <span class="text-muted small">@task.Sottotitolo</span>
+                            }
+                            @if (task.Priority != null)
+                            {
+                                <span class="badge bg-secondary">@task.Priority.Name</span>
+                            }
+                            @if (inGlWindow)
+                            {
+                                <span class="badge bg-success px-2">
+                                    IN FINESTRA
+                                    @if (glRemaining.HasValue)
+                                    {
+                                        <span class="ms-1 fw-normal">@FormatTs(glRemaining.Value)</span>
+                                    }
+                                </span>
+                            }
+                        </div>
+                        <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                            @if (task.GreenLightDateTime.HasValue)
+                            {
+                                <span class="text-success small fw-semibold text-end lh-1">
+                                    <Icon Name="IconName.CircleFill" />
+                                    @ToLocalDisplay(task.GreenLightDateTime.Value, "HH:mm")
+                                    <br /><span class="text-muted fw-normal" style="font-size:.8em;">@ToLocalDisplay(task.GreenLightDateTime.Value, "dd/MM")</span>
+                                </span>
+                            }
+                            else if (task.StartDateTime.HasValue)
+                            {
+                                <span class="text-muted small text-end lh-1">
+                                    @ToLocalDisplay(task.StartDateTime.Value, "HH:mm")
+                                    <br /><span style="font-size:.8em;">@ToLocalDisplay(task.StartDateTime.Value, "dd/MM")</span>
+                                </span>
+                            }
+                            <Button Size="ButtonSize.Small"
+                                    Color="@(task.GreenLightDateTime.HasValue ? ButtonColor.Success : ButtonColor.Secondary)"
+                                    Outline="true"
+                                    @onclick="() => OpenGlModal(task)">
+                                <Icon Name="IconName.CircleFill" /> GL
+                            </Button>
+                            <NavLink class="btn btn-sm btn-outline-primary" href="@($"/taskdetail/{task.Id}")">
+                                <Icon Name="IconName.Eye" />
+                            </NavLink>
+                        </div>
+                    </div>
+
+                    @if (_hasMissionWindow)
+                    {
+                        <div class="px-3 pb-2">
+                            <MissionTimelineBar
+                                MissionStart="missionTak.StartDateTime!.Value"
+                                MissionEnd="missionTak.EndDateTime!.Value"
+                                TaskStart="task.StartDateTime"
+                                TaskEnd="task.EndDateTime"
+                                GreenLight="task.GreenLightDateTime"
+                                GreenLightEnd="glEnd"
+                                PlannedStart="task.PlannedStartDateTime"
+                                PlannedEnd="task.PlannedEndDateTime" />
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Obiettivi completati -->
+    <div class="card">
+        <div class="card-header fw-bold">Obiettivi completati (@_completedObjectives.Count)</div>
+        @if (_completedObjectives.Any())
+        {
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Obiettivo</th>
+                            <th>Stato</th>
+                            <th>Team assegnato</th>
+                            <th>Ultima modifica</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var task in _completedObjectives)
+                        {
+                            <tr>
+                                <td>
+                                    <NavLink href="@($"/taskdetail/{task.Id}")"
+                                             class="text-decoration-none text-body fw-semibold">
+                                        @task.Name
+                                    </NavLink>
+                                    @if (!string.IsNullOrEmpty(task.Sottotitolo))
+                                    {
+                                        <span class="text-muted small ms-1">@task.Sottotitolo</span>
+                                    }
+                                </td>
+                                <td>
+                                    <span class="badge @GetCompletedBadgeClass(task.Status)">
+                                        @task.Status.GetDisplayName()
+                                    </span>
+                                </td>
+                                <td>@(task.AssignedTeam?.Name ?? "—")</td>
+                                <td class="text-muted small">@ToLocalDisplay(task.LastModified, "dd/MM HH:mm")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
             </div>
-        </AdditionalFormContent>
-
-        <Columns>
-            <GridColumn TItem="TaskEntity" HeaderText="Attività" SortKeySelector="x => x.Name">
-                @context.Name
-            </GridColumn>
-            <GridColumn TItem="TaskEntity" HeaderText="Stato" SortKeySelector="x => x.Status">
-                @context.Status.GetDisplayName()
-            </GridColumn>
-            <GridColumn TItem="TaskEntity" HeaderText="Team assegnato" SortKeySelector="x => x.AssignedTeam.Name">
-                @context.AssignedTeam?.Name
-            </GridColumn>
-            <GridColumn TItem="TaskEntity" HeaderText="Team exec" SortKeySelector="x => x.ExecutingTeam.Name">
-                @context.ExecutingTeam?.Name
-            </GridColumn>
-            <GridColumn TItem="TaskEntity" HeaderText="Priorità" SortKeySelector="x => x.Priority.Name">
-                @context.Priority?.Name
-            </GridColumn>
-            <GridColumn TItem="TaskEntity" HeaderText="Ultima modifica" SortKeySelector="x => x.LastModified">
-                @context.LastModified.ToString("dd/MM HH:mm")
-            </GridColumn>
-            <GridColumn TItem="TaskEntity" HeaderText="Editor">
-                <NavLink class="btn btn-sm btn-primary" href="@($"/objeditor/{context.Id}")">
-                    <Icon Name="IconName.Pencil" />
-                </NavLink>
-            </GridColumn>
-        </Columns>
-    </GenericDataTable>
+        }
+        else
+        {
+            <div class="card-body text-center text-muted">Nessun obiettivo completato.</div>
+        }
+    </div>
 }
 
 @code {
     [Parameter] public Guid MissionTakId { get; set; }
 
     private MissionSuite? missionTak;
-    private List<MissionAtak> MissionsList = new();
     private List<TaskEntity> _tasks = new();
-    private bool _exporting;
-    private bool _pushing;
-
-    private ImportTaskModal _importModal = default!;
-    private GenericDataTable<TaskEntity, TaskViewModel> _dataTable = default!;
 
     private PieChart _pieChart = default!;
     private ChartData? _chartData;
     private PieChartOptions _chartOptions = new() { Responsive = true, Plugins = new() { Legend = new() { Position = "bottom" } } };
     private bool _chartInitialized;
 
-    private Task PrepareBeforeSave(TaskViewModel model)
-    {
-        model.Model.MissionTAKSuiteId = MissionTakId;
-        return Task.CompletedTask;
-    }
+    private System.Timers.Timer? _timer;
 
-    private async Task OnTaskCreated()
-    {
-        await _dataTable.RefreshAsync();
-        await RefreshChartAsync();
-    }
+    // GL modal
+    private Modal _glModal = default!;
+    private TaskEntity? _editingGlTask;
+    private DateTime? _editingGlValue;
+    private bool _savingGl;
 
-    private async Task<MissionSuite?> Load()
+    private static readonly HashSet<TaskStatusTak> _completedStatuses = new()
     {
-        return await entityService.GetAsync(MissionTakId);
-    }
+        TaskStatusTak.Completed,
+        TaskStatusTak.Aborted,
+        TaskStatusTak.Failed,
+        TaskStatusTak.Canceled
+    };
 
-    protected async Task Save()
+    private List<TaskEntity> _activeObjectives = new();
+    private List<TaskEntity> _completedObjectives = new();
+    private bool _hasMissionWindow;
+
+    private void ComputeView()
     {
-        await entityService.UpdateAsync(missionTak);
+        _activeObjectives = _tasks
+            .Where(t => !_completedStatuses.Contains(t.Status))
+            .OrderBy(t => t.GreenLightDateTime.HasValue ? 0 : 1)
+            .ThenBy(t => t.GreenLightDateTime ?? DateTime.MaxValue)
+            .ThenBy(t => t.Name)
+            .ToList();
+        _completedObjectives = _tasks
+            .Where(t => _completedStatuses.Contains(t.Status))
+            .OrderByDescending(t => t.LastModified)
+            .ToList();
+        _hasMissionWindow = missionTak?.StartDateTime.HasValue == true && missionTak.EndDateTime.HasValue;
     }
-
-    protected async Task SaveMissionUid(MissionSuite suite, MissionAtak mission)
-    {
-        suite.TakMissionUid = mission.Name;
-        StateHasChanged();
-    }
-
-    protected async Task DebouncedRefresh() { }
 
     protected override async Task OnInitializedAsync()
     {
         await base.OnInitializedAsync();
-        missionTak = await Load();
-        MissionsList = await MartiApiClient.GetAllMissionsDataAsync();
+        missionTak = await entityService.GetAsync(MissionTakId);
         _tasks = await LoadData();
+        ComputeView();
         BuildChartData();
+        StartTimerIfNeeded();
         StateHasChanged();
     }
 
@@ -241,46 +393,113 @@ else
         }
     }
 
-    private void BuildChartData()
+    // --- Timer ---
+
+    private void StartTimerIfNeeded()
     {
-        if (_tasks.Count == 0) { _chartData = null; return; }
-
-        var grouped = _tasks
-            .GroupBy(t => t.Status)
-            .OrderBy(g => g.Key)
-            .ToList();
-
-        var colors = new[]
+        if (_timer == null)
         {
-            "rgba(108,117,125,0.8)", "rgba(13,202,240,0.8)", "rgba(255,193,7,0.8)",
-            "rgba(13,110,253,0.8)", "rgba(111,66,193,0.8)", "rgba(25,135,84,0.8)",
-            "rgba(220,53,69,0.8)", "rgba(253,126,20,0.8)", "rgba(102,16,242,0.8)",
-            "rgba(32,201,151,0.8)", "rgba(214,51,132,0.8)", "rgba(23,162,184,0.8)"
-        };
-
-        var dataset = new PieChartDataset
-        {
-            Data = grouped.Select(g => (double?)g.Count()).ToList(),
-            BackgroundColor = grouped.Select((_, i) => colors[i % colors.Length]).ToList()
-        };
-
-        _chartData = new ChartData
-        {
-            Labels = grouped.Select(g => g.Key.GetDisplayName()).ToList(),
-            Datasets = new List<IChartDataset> { dataset }
-        };
-    }
-
-    private async Task RefreshChartAsync()
-    {
-        _tasks = await LoadData();
-        BuildChartData();
-        if (_chartData != null)
-        {
-            _chartInitialized = false;
-            StateHasChanged();
+            _timer = new System.Timers.Timer(1000);
+            _timer.Elapsed += async (_, _) => await InvokeAsync(StateHasChanged);
+            _timer.AutoReset = true;
+            _timer.Start();
         }
     }
+
+    // --- Mission countdown ---
+
+    private string GetMissionCountdown()
+    {
+        if (missionTak?.StartDateTime == null || missionTak.EndDateTime == null) return "";
+        var now = DateTime.UtcNow;
+        if (now < missionTak.StartDateTime.Value)
+            return $"Inizio tra {FormatTs(missionTak.StartDateTime.Value - now)}";
+        if (now <= missionTak.EndDateTime.Value)
+            return $"Fine missione tra {FormatTs(missionTak.EndDateTime.Value - now)}";
+        return "Missione terminata";
+    }
+
+    private string GetMissionCountdownClass()
+    {
+        if (missionTak?.StartDateTime == null || missionTak.EndDateTime == null) return "alert-secondary";
+        var now = DateTime.UtcNow;
+        if (now < missionTak.StartDateTime.Value) return "alert-info";
+        if (now <= missionTak.EndDateTime.Value) return "alert-warning";
+        return "alert-secondary";
+    }
+
+    // --- Task countdown ---
+
+    private string GetTaskCountdownLabel(TaskEntity task)
+    {
+        var now = DateTime.UtcNow;
+        if (task.GreenLightDateTime.HasValue)
+        {
+            var gs = task.GreenLightDateTime.Value;
+            DateTime? ge = task.Durata.HasValue ? gs.AddMinutes(task.Durata.Value) : null;
+            if (now < gs) return $"GL tra {FormatTs(gs - now)}";
+            if (ge.HasValue && now < ge.Value) return $"GL — {FormatTs(ge.Value - now)}";
+            if (!ge.HasValue) return "LUCE VERDE";
+            return "GL terminata";
+        }
+        if (task.EndDateTime.HasValue)
+        {
+            if (now < task.EndDateTime.Value) return $"Fine tra {FormatTs(task.EndDateTime.Value - now)}";
+            return "Scaduto";
+        }
+        return "";
+    }
+
+    private string GetTaskCountdownBadgeClass(TaskEntity task)
+    {
+        var now = DateTime.UtcNow;
+        if (task.GreenLightDateTime.HasValue)
+        {
+            var gs = task.GreenLightDateTime.Value;
+            DateTime? ge = task.Durata.HasValue ? gs.AddMinutes(task.Durata.Value) : null;
+            if (now >= gs && (!ge.HasValue || now < ge.Value)) return "bg-success";
+            if (ge.HasValue && now >= ge.Value) return "bg-secondary";
+            return "bg-warning text-dark";
+        }
+        if (task.EndDateTime.HasValue && now >= task.EndDateTime.Value) return "bg-secondary";
+        return "bg-warning text-dark";
+    }
+
+    // --- GL modal ---
+
+    private async Task OpenGlModal(TaskEntity task)
+    {
+        _editingGlTask = task;
+        _editingGlValue = task.GreenLightDateTime;
+        await _glModal.ShowAsync();
+    }
+
+    private void SetEditingGlNow() => _editingGlValue = DateTime.UtcNow;
+
+    private async Task SaveEditingGl()
+    {
+        if (_editingGlTask == null) return;
+        _savingGl = true;
+        try
+        {
+            _editingGlTask.GreenLightDateTime = _editingGlValue;
+            _editingGlTask.LastModified = DateTime.UtcNow;
+            await service.UpdateAsync(_editingGlTask);
+            _tasks = await LoadData();
+            ComputeView();
+            await _glModal.HideAsync();
+            ToastService.Notify(new(ToastType.Success, "Task", "Luce verde aggiornata"));
+        }
+        finally { _savingGl = false; }
+    }
+
+    private async Task ClearEditingGl()
+    {
+        _editingGlValue = null;
+        await SaveEditingGl();
+    }
+
+    // --- Data ---
 
     private async Task<List<TaskEntity>> LoadData()
     {
@@ -291,39 +510,59 @@ else
             .ToList();
     }
 
-    private async Task PushAllToTak()
+    // --- Helpers ---
+
+    private static string GetCompletedBadgeClass(TaskStatusTak status) => status switch
     {
-        if (missionTak?.TakMissionUid == null) return;
-        _pushing = true;
-        try
-        {
-            var tasks = await LoadData();
-            var result = await templateService.PushAllHtmlToTakAsync(tasks, missionTak.TakMissionUid, AttachmentService);
-            ToastService.Notify(new(ToastType.Success, "TAK", result.ToString()));
-        }
-        catch (Exception ex)
-        {
-            ToastService.Notify(new(ToastType.Danger, "TAK", $"Errore: {ex.Message}"));
-        }
-        finally
-        {
-            _pushing = false;
-        }
+        TaskStatusTak.Completed => "bg-success",
+        TaskStatusTak.Failed    => "bg-danger",
+        TaskStatusTak.Aborted   => "bg-warning text-dark",
+        _                       => "bg-secondary"
+    };
+
+    private static string FormatTs(TimeSpan ts)
+    {
+        if (ts.TotalDays >= 1) return $"{(int)ts.TotalDays}g {ts.Hours:00}h {ts.Minutes:00}m {ts.Seconds:00}s";
+        if (ts.TotalHours >= 1) return $"{(int)ts.TotalHours:00}h {ts.Minutes:00}m {ts.Seconds:00}s";
+        return $"{ts.Minutes:00}m {ts.Seconds:00}s";
     }
 
-    private async Task ExportAll()
+    private static string ToLocalDisplay(DateTime utc, string format = "dd/MM/yyyy HH:mm")
+        => DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToLocalTime().ToString(format);
+
+    private static string ToLocalInput(DateTime? utc)
+        => utc.HasValue ? DateTime.SpecifyKind(utc.Value, DateTimeKind.Utc).ToLocalTime().ToString("yyyy-MM-ddTHH:mm") : "";
+
+    private static DateTime? ParseLocalDt(string? s)
+        => string.IsNullOrWhiteSpace(s) ? null
+           : DateTime.SpecifyKind(DateTime.Parse(s), DateTimeKind.Local).ToUniversalTime();
+
+    private void BuildChartData()
     {
-        _exporting = true;
-        StateHasChanged();
-        try
+        if (_tasks.Count == 0) { _chartData = null; return; }
+        var grouped = _tasks.GroupBy(t => t.Status).OrderBy(g => g.Key).ToList();
+        var colors = new[]
         {
-            var tasks = await LoadData();
-            var zipBytes = await templateService.ExportAllAsZipAsync(tasks);
-            await JS.InvokeVoidAsync("downloadBytesAsFile", $"tasks_{DateTime.Now:yyyyMMdd_HHmm}.zip", zipBytes);
-        }
-        finally
+            "rgba(108,117,125,0.8)", "rgba(13,202,240,0.8)", "rgba(255,193,7,0.8)",
+            "rgba(13,110,253,0.8)", "rgba(111,66,193,0.8)", "rgba(25,135,84,0.8)",
+            "rgba(220,53,69,0.8)", "rgba(253,126,20,0.8)", "rgba(102,16,242,0.8)",
+            "rgba(32,201,151,0.8)", "rgba(214,51,132,0.8)", "rgba(23,162,184,0.8)"
+        };
+        var dataset = new PieChartDataset
         {
-            _exporting = false;
-        }
+            Data = grouped.Select(g => (double?)g.Count()).ToList(),
+            BackgroundColor = grouped.Select((_, i) => colors[i % colors.Length]).ToList()
+        };
+        _chartData = new ChartData
+        {
+            Labels = grouped.Select(g => g.Key.GetDisplayName()).ToList(),
+            Datasets = new List<IChartDataset> { dataset }
+        };
+    }
+
+    public void Dispose()
+    {
+        _timer?.Stop();
+        _timer?.Dispose();
     }
 }

@@ -49,9 +49,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                                                 // Relazione uno-a-uno tra Team e il suo Leader
         modelBuilder.Entity<Team>()
             .HasOne(t => t.TeamLeader)
-            .WithOne(u => u.LedTeam) // Un utente può essere leader di un solo team
+            .WithOne(u => u.LedTeam) // Un utente puï¿½ essere leader di un solo team
             .HasForeignKey<Team>(t => t.TeamLeaderId)
-            .IsRequired(false); // Il leader può essere opzionale
+            .IsRequired(false); // Il leader puï¿½ essere opzionale
 
         // Relazione uno-a-molti tra Team e i suoi membri
         modelBuilder.Entity<Team>()
@@ -60,10 +60,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasForeignKey(u => u.TeamId)
             .IsRequired(false); // Gli utenti possono essere senza team
 
-        // Definizione della relazione gerarchica: un team può avere un team padre e più sotto-team
+        // Definizione della relazione gerarchica: un team puï¿½ avere un team padre e piï¿½ sotto-team
         modelBuilder.Entity<Team>()
             .HasOne(t => t.ParentTeam)   // Un team ha un team padre (opzionale)
-            .WithMany(t => t.SubTeams)   // Un team può avere più sotto-team
+            .WithMany(t => t.SubTeams)   // Un team puï¿½ avere piï¿½ sotto-team
             .HasForeignKey(t => t.ParentTeamId)  // Chiave esterna per la relazione
             .OnDelete(DeleteBehavior.Restrict);  // Evita la cancellazione a cascata
 
@@ -78,6 +78,14 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasForeignKey(_ => _.DocumentationId);
 
 
+
+        // MissionSuite â†’ Team (responsabile)
+        modelBuilder.Entity<MissionSuite>()
+            .HasOne(m => m.Team)
+            .WithMany()
+            .HasForeignKey(m => m.TeamId)
+            .OnDelete(DeleteBehavior.SetNull)
+            .IsRequired(false);
 
         // model builder for TaskEntity
         modelBuilder.Entity<TaskEntity>()

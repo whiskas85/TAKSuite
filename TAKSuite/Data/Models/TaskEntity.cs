@@ -49,6 +49,15 @@ namespace TAKSuite.Data.Models
         public string TipologiaObiettivo { get; set; } = string.Empty;
         public int? Durata { get; set; }
 
+        // Finestra temporale obiettivo
+        public DateTime? StartDateTime { get; set; }
+        public DateTime? EndDateTime { get; set; }
+        public DateTime? GreenLightDateTime { get; set; }
+
+        // Forchetta pianificata (neutrale, non operativa)
+        public DateTime? PlannedStartDateTime { get; set; }
+        public DateTime? PlannedEndDateTime { get; set; }
+
 
 
 

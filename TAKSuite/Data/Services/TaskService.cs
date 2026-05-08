@@ -24,6 +24,41 @@ namespace TAKSuite.Data.Services
        
 
 
+        public override async Task<TaskEntity> AddAsync(TaskEntity element)
+        {
+            if (element == null) return null;
+
+            element.Status = TaskStatusTak.Created;
+
+            if (element.MissionTAKSuiteId.HasValue)
+            {
+                var mission = await _context.MissionsTakSuite.FindAsync(element.MissionTAKSuiteId.Value);
+                if (mission != null)
+                {
+                    element.StartDateTime ??= mission.StartDateTime;
+                    element.EndDateTime ??= mission.EndDateTime;
+
+                    if (element.AssignedTeamId.HasValue && mission.AutoScheduleTeam)
+                    {
+                        element.Status = TaskStatusTak.Scheduled;
+
+                        if (mission.AutoAssignTeam)
+                        {
+                            element.Status = TaskStatusTak.Accepted;
+
+                            if (mission.AutoAcceptTask)
+                            {
+                                element.ExecutingTeamId ??= element.AssignedTeamId;
+                                element.Status = TaskStatusTak.Assigned;
+                            }
+                        }
+                    }
+                }
+            }
+
+            return await base.AddAsync(element);
+        }
+
         public override async Task<TaskEntity> UpdateAsync(TaskEntity element)
         {
             if (element == null) return null;

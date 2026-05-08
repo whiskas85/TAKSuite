@@ -10,7 +10,7 @@
 <Sidebar2 Href="/"
 ImageSrc="images/tak trasp.png"
 Title="TAK Suite"
-BadgeText="v2.1.8"
+BadgeText="v2.6.2"
 DataProvider="Sidebar2DataProvider"
 WidthUnit="Unit.Px"
 Width="300"/>
@@ -135,10 +135,18 @@ Width="300"/>
             });
             navItems.Add(new NavItem
             {
-                Id = $"{missionMenuId}.det",
+                Id = $"{missionMenuId}.ops",
                 Href = $"/missiontak/{mission.Id}",
-                IconName = IconName.InfoCircleFill,
-                Text = "Dettagli",
+                IconName = IconName.Activity,
+                Text = "Operativo",
+                ParentId = missionMenuId
+            });
+            navItems.Add(new NavItem
+            {
+                Id = $"{missionMenuId}.cfg",
+                Href = $"/missionedit/{mission.Id}",
+                IconName = IconName.GearFill,
+                Text = "Configura",
                 ParentId = missionMenuId
             });
             navItems.Add(new NavItem
@@ -182,18 +190,26 @@ Width="300"/>
                     });
                     navItems.Add(new NavItem
                     {
-                        Id = $"{taskMenuId}.det",
+                        Id = $"{taskMenuId}.ops",
                         Href = $"/taskdetail/{task.Id}",
-                        IconName = IconName.InfoCircleFill,
-                        Text = "Dettagli",
+                        IconName = IconName.Activity,
+                        Text = "Operativo",
+                        ParentId = taskMenuId
+                    });
+                    navItems.Add(new NavItem
+                    {
+                        Id = $"{taskMenuId}.cfg",
+                        Href = $"/taskedit/{task.Id}",
+                        IconName = IconName.GearFill,
+                        Text = "Configura",
                         ParentId = taskMenuId
                     });
                     navItems.Add(new NavItem
                     {
                         Id = $"{taskMenuId}.edi",
                         Href = $"/objeditor/{task.Id}",
-                        IconName = IconName.PencilFill,
-                        Text = "Editor",
+                        IconName = IconName.FileEarmarkCode,
+                        Text = "Editor HTML",
                         ParentId = taskMenuId
                     });
                 }

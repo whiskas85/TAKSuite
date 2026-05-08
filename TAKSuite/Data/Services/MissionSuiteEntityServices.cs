@@ -10,7 +10,7 @@ namespace TAKSuite.Data.Services
     {
         public MissionSuiteEntityServices(ApplicationDbContext context, IMemoryCache cache) : base(context.MissionsTakSuite, context, cache)
         {
-           
+            Includes = [_ => _.Team];
         }
 
         public Type ProvidedItem => typeof(MissionSuite);

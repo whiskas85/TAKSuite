@@ -1,0 +1,139 @@
+@using System.Globalization
+
+@{
+    var total = (MissionEnd - MissionStart).TotalMinutes;
+    Func<DateTime, double> pct = dt =>
+        total > 0 ? Math.Clamp((dt - MissionStart).TotalMinutes / total * 100, 0, 100) : 0;
+
+    var nowPct      = pct(DateTime.UtcNow);
+    var tStartPct   = TaskStart.HasValue       ? (double?)pct(TaskStart.Value)       : null;
+    var tEndPct     = TaskEnd.HasValue         ? (double?)pct(TaskEnd.Value)         : null;
+    var glPct       = GreenLight.HasValue      ? (double?)pct(GreenLight.Value)      : null;
+    var glEndPct    = GreenLightEnd.HasValue   ? (double?)pct(GreenLightEnd.Value)   : null;
+    var plStartPct  = PlannedStart.HasValue    ? (double?)pct(PlannedStart.Value)    : null;
+    var plEndPct    = PlannedEnd.HasValue      ? (double?)pct(PlannedEnd.Value)      : null;
+
+    // mezzanotti locali tra start e end
+    var localStart = DateTime.SpecifyKind(MissionStart, DateTimeKind.Utc).ToLocalTime();
+    var localEnd   = DateTime.SpecifyKind(MissionEnd,   DateTimeKind.Utc).ToLocalTime();
+    var midnights  = new List<(double Pct, string Label)>();
+    for (var md = localStart.Date.AddDays(1); md < localEnd; md = md.AddDays(1))
+    {
+        var utcMd = DateTime.SpecifyKind(md, DateTimeKind.Local).ToUniversalTime();
+        midnights.Add((pct(utcMd), md.ToString("dd/MM")));
+    }
+
+    string F(double v) => v.ToString("F1", CultureInfo.InvariantCulture);
+}
+
+<div class="mission-timeline-wrap" style="user-select:none;">
+    <div style="position:relative; height:38px; background:#dee2e6; border-radius:6px; overflow:hidden;">
+
+        @if (plStartPct.HasValue && plEndPct.HasValue)
+        {
+            <div title="Forchetta pianificata"
+                 style="position:absolute; left:@F(plStartPct.Value)%; width:@F(plEndPct.Value - plStartPct.Value)%;
+                        height:100%; background:rgba(108,117,125,0.18);
+                        border-left:2px dashed rgba(108,117,125,0.6); border-right:2px dashed rgba(108,117,125,0.6);">
+            </div>
+        }
+
+        @if (tStartPct.HasValue && tEndPct.HasValue)
+        {
+            <div title="Finestra obiettivo"
+                 style="position:absolute; left:@F(tStartPct.Value)%; width:@F(tEndPct.Value - tStartPct.Value)%;
+                        height:100%; background:rgba(13,110,253,0.22); border-left:2px solid #0d6efd; border-right:2px solid #0d6efd;">
+            </div>
+        }
+
+        @if (glPct.HasValue && glEndPct.HasValue)
+        {
+            <div title="Finestra luce verde"
+                 style="position:absolute; left:@F(glPct.Value)%; width:@F(glEndPct.Value - glPct.Value)%;
+                        height:100%; background:rgba(25,135,84,0.30); border-right:2px solid #198754;">
+            </div>
+        }
+
+        @if (glPct.HasValue)
+        {
+            <div title="Luce verde @(GreenLight!.Value.ToString("HH:mm"))"
+                 style="position:absolute; left:@F(glPct.Value)%; top:0; width:3px; height:100%;
+                        background:#198754; transform:translateX(-1px);">
+                <span style="position:absolute; top:1px; left:4px; font-size:9px; font-weight:700;
+                             color:#198754; white-space:nowrap; line-height:1;">GL</span>
+            </div>
+        }
+
+        @foreach (var mn in midnights)
+        {
+            <div title="Mezzanotte @mn.Label"
+                 style="position:absolute; left:@F(mn.Pct)%; top:0; width:2px; height:100%;
+                        background:rgba(0,0,0,0.85); transform:translateX(-1px); box-shadow:0 0 3px rgba(0,0,0,0.5);">
+                <span style="position:absolute; top:1px; left:4px; font-size:9px;
+                             color:#000; white-space:nowrap; line-height:1; font-weight:700;
+                             text-shadow:0 0 2px rgba(255,255,255,0.6);">@mn.Label</span>
+            </div>
+        }
+
+        <div title="Ora corrente"
+             style="position:absolute; left:@F(nowPct)%; top:0; width:2px; height:100%;
+                    background:#dc3545; transform:translateX(-1px);">
+        </div>
+    </div>
+
+    <div style="position: relative; height: 1.3em; margin-top: 3px; overflow: visible;" class="small">
+        <span style="position:absolute; left:0; white-space:nowrap;" class="text-muted">
+            @MissionStart.ToString("HH:mm")
+        </span>
+        @if (plStartPct.HasValue && plStartPct > 4 && plStartPct < 96)
+        {
+            <span style="position:absolute; left:@F(plStartPct.Value)%; transform:translateX(-50%); white-space:nowrap; opacity:.6;" class="text-secondary">
+                @PlannedStart!.Value.ToString("HH:mm")
+            </span>
+        }
+        @if (tStartPct.HasValue && tStartPct > 4 && tStartPct < 96)
+        {
+            <span style="position:absolute; left:@F(tStartPct.Value)%; transform:translateX(-50%); white-space:nowrap;" class="text-primary">
+                @TaskStart!.Value.ToString("HH:mm")
+            </span>
+        }
+        @if (glPct.HasValue && glPct > 2 && glPct < 98)
+        {
+            <span style="position:absolute; left:@F(glPct.Value)%; transform:translateX(-50%); white-space:nowrap;" class="text-success fw-semibold">
+                @GreenLight!.Value.ToString("HH:mm")
+            </span>
+        }
+        @if (glEndPct.HasValue && glEndPct > 2 && glEndPct < 98)
+        {
+            <span style="position:absolute; left:@F(glEndPct.Value)%; transform:translateX(-50%); white-space:nowrap;" class="text-success">
+                @GreenLightEnd!.Value.ToString("HH:mm")
+            </span>
+        }
+        @if (tEndPct.HasValue && tEndPct > 4 && tEndPct < 96)
+        {
+            <span style="position:absolute; left:@F(tEndPct.Value)%; transform:translateX(-50%); white-space:nowrap;" class="text-primary">
+                @TaskEnd!.Value.ToString("HH:mm")
+            </span>
+        }
+        @if (plEndPct.HasValue && plEndPct > 4 && plEndPct < 96)
+        {
+            <span style="position:absolute; left:@F(plEndPct.Value)%; transform:translateX(-50%); white-space:nowrap; opacity:.6;" class="text-secondary">
+                @PlannedEnd!.Value.ToString("HH:mm")
+            </span>
+        }
+        <span style="position:absolute; right:0; white-space:nowrap;" class="text-muted">
+            @MissionEnd.ToString("HH:mm")
+        </span>
+    </div>
+</div>
+
+@code {
+    [Parameter] public DateTime  MissionStart   { get; set; }
+    [Parameter] public DateTime  MissionEnd     { get; set; }
+    [Parameter] public DateTime? TaskStart      { get; set; }
+    [Parameter] public DateTime? TaskEnd        { get; set; }
+    [Parameter] public DateTime? GreenLight     { get; set; }
+    [Parameter] public DateTime? GreenLightEnd  { get; set; }
+    [Parameter] public DateTime? PlannedStart   { get; set; }
+    [Parameter] public DateTime? PlannedEnd     { get; set; }
+}

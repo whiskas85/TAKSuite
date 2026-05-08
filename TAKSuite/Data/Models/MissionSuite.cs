@@ -18,6 +18,14 @@ namespace TAKSuite.Data.Models
 
 
 
+        // Team responsabile della missione
+        public Guid? TeamId { get; set; }
+        public Team? Team { get; set; }
+
+        // Finestra temporale missione
+        public DateTime? StartDateTime { get; set; }
+        public DateTime? EndDateTime { get; set; }
+
         // Sotto task e gerarchia (per ora non sviluppati)
         public List<TaskEntity> Tasks { get; set; } = new();
 
@@ -26,6 +34,11 @@ namespace TAKSuite.Data.Models
         public List<Team> Teams { get; set; } = new();
 
 
+
+        // Automazioni task
+        public bool AutoScheduleTeam { get; set; } = false;
+        public bool AutoAssignTeam { get; set; } = false;
+        public bool AutoAcceptTask { get; set; } = false;
 
         // Controllo date
         public DateTime CreationDate { get; set; } = DateTime.UtcNow;

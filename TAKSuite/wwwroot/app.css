@@ -1,17 +1,49 @@
 
 
+/* === ZDT Theme: NVG Phosphor Green === */
+:root {
+    --bs-primary:          #39FF14;
+    --bs-primary-rgb:      57, 255, 20;
+    --bs-link-color:       #39FF14;
+    --bs-link-color-rgb:   57, 255, 20;
+    --bs-link-hover-color: #2bcc0f;
+    --bs-focus-ring-color: rgba(57, 255, 20, 0.30);
+}
+
 a, .btn-link {
-    color: #006bb7;
+    color: #39FF14;
 }
 
 .btn-primary {
-    color: #fff;
-    background-color: #1b6ec2;
-    border-color: #1861ac;
+    --bs-btn-bg:               #39FF14;
+    --bs-btn-border-color:     #39FF14;
+    --bs-btn-hover-bg:         #2bcc0f;
+    --bs-btn-hover-border-color: #2bcc0f;
+    --bs-btn-active-bg:        #25b30c;
+    --bs-btn-active-border-color: #25b30c;
+    --bs-btn-color:            #000;
+    --bs-btn-hover-color:      #000;
+    --bs-btn-active-color:     #000;
+    --bs-btn-disabled-color:   #000;
+    color: #000;
+    background-color: #39FF14;
+    border-color: #39FF14;
+}
+
+.btn-outline-primary {
+    --bs-btn-color:            #39FF14;
+    --bs-btn-border-color:     #39FF14;
+    --bs-btn-hover-bg:         #39FF14;
+    --bs-btn-hover-border-color: #39FF14;
+    --bs-btn-hover-color:      #000;
+    --bs-btn-active-bg:        #39FF14;
+    --bs-btn-active-color:     #000;
+    color: #39FF14;
+    border-color: #39FF14;
 }
 
 .btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
-    box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
+    box-shadow: 0 0 0 0.1rem #000, 0 0 0 0.25rem rgba(57, 255, 20, 0.5);
 }
 
 .content {

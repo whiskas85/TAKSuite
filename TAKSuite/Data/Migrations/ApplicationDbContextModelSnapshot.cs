@@ -313,11 +313,23 @@ namespace TAKSuite.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<bool>("AutoScheduleTeam")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("AutoAssignTeam")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("AutoAcceptTask")
+                        .HasColumnType("bit");
+
                     b.Property<DateTime>("CreationDate")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("Descrizione")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("EndDateTime")
+                        .HasColumnType("datetime2");
 
                     b.Property<DateTime>("LastModified")
                         .HasColumnType("datetime2");
@@ -330,13 +342,21 @@ namespace TAKSuite.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<DateTime?>("StartDateTime")
+                        .HasColumnType("datetime2");
+
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
                     b.Property<string>("TakMissionUid")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<Guid?>("TeamId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("TeamId");
 
                     b.ToTable("MissionsTakSuite", (string)null);
                 });
@@ -455,6 +475,21 @@ namespace TAKSuite.Migrations
                     b.PrimitiveCollection<string>("Uids")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("StartDateTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("EndDateTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("GreenLightDateTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("PlannedStartDateTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("PlannedEndDateTime")
+                        .HasColumnType("datetime2");
 
                     b.HasKey("Id");
 
@@ -778,6 +813,16 @@ namespace TAKSuite.Migrations
                         .IsRequired();
 
                     b.Navigation("Documentation");
+                });
+
+            modelBuilder.Entity("TAKSuite.Data.Models.MissionSuite", b =>
+                {
+                    b.HasOne("TAKSuite.Data.Models.Team", "Team")
+                        .WithMany()
+                        .HasForeignKey("TeamId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Team");
                 });
 
             modelBuilder.Entity("TAKSuite.Data.Models.RegistrationCode", b =>

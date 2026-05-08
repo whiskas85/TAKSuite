@@ -1,0 +1,266 @@
+@page "/taskedit/{TaskId:guid}"
+@attribute [Authorize]
+@* @inherits ConnectedUserInfo *@
+@implements IDisposable
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Components.Pages.Components
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@inject TaskService TaskService
+@inject TaskPrioritiesService PrioritiesService
+@inject RadioChannelService RadioChannelService
+@inject TeamService TeamService
+@inject MissionSuiteEntityServices MissionSuiteService
+@inject NavigationManager Navigation
+@inject ToastService ToastService
+
+<PageTitle>@(_task != null ? $"Configura — {_task.Name}" : "Configura Task")</PageTitle>
+
+@if (_task == null)
+{
+    <p>Caricamento...</p>
+}
+else
+{
+    <div style="position: fixed; top: 0; left: 300px; right: 0; z-index: 100;
+                background: var(--bs-body-bg); border-bottom: 1px solid var(--bs-border-color);
+                padding: 0.5rem 1.5rem;">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h2 class="mb-0 fs-4">Configura Task</h2>
+                <p class="text-muted mb-0 small">@_task.Name</p>
+            </div>
+            <div class="d-flex gap-2">
+                @if (_mission != null)
+                {
+                    <Button Color="ButtonColor.Secondary" Outline="true"
+                            @onclick='() => Navigation.NavigateTo($"/missiontak/{_mission.Id}")'>
+                        <Icon Name="IconName.ArrowLeft" /> @_mission.Name
+                    </Button>
+                }
+                <Button Color="ButtonColor.Info" Outline="true"
+                        @onclick='() => Navigation.NavigateTo($"/taskdetail/{_task.Id}")'>
+                    <Icon Name="IconName.Eye" /> Operativo
+                </Button>
+                <Button Color="ButtonColor.Secondary" Outline="true"
+                        @onclick='() => Navigation.NavigateTo($"/objeditor/{_task.Id}")'>
+                    <Icon Name="IconName.FileEarmarkCode" /> Editor HTML
+                </Button>
+                <Button Color="ButtonColor.Success" @onclick="Save" Loading="_saving" LoadingText="Salvataggio...">
+                    <Icon Name="IconName.Save" /> Salva Task
+                </Button>
+            </div>
+        </div>
+    </div>
+    <div style="height: 72px;"></div>
+
+    <!-- Informazioni Base -->
+    <div class="card mb-3">
+        <div class="card-header fw-bold">Informazioni Base</div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Nome</label>
+                    <input class="form-control" @bind="_task.Name" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Sottotitolo</label>
+                    <input class="form-control" @bind="_task.Sottotitolo" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Priorità</label>
+                    <select class="form-select" @bind="_task.PriorityId">
+                        <option value="">— nessuna —</option>
+                        @foreach (var p in _priorities)
+                        {
+                            <option value="@p.Id">@p.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Tipologia Obiettivo</label>
+                    <input class="form-control" @bind="_task.TipologiaObiettivo" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Punti</label>
+                    <input type="number" class="form-control" @bind="_task.Points" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Durata (min)</label>
+                    <input type="number" class="form-control" @bind="_task.Durata" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Teams -->
+    <div class="card mb-3">
+        <div class="card-header fw-bold">Assegnazioni Team</div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Team Assegnato</label>
+                    <select class="form-select" @bind="_task.AssignedTeamId">
+                        <option value="">— nessuno —</option>
+                        @foreach (var t in _teams)
+                        {
+                            <option value="@t.Id">@t.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Team Esecutivo</label>
+                    <select class="form-select" @bind="_task.ExecutingTeamId">
+                        <option value="">— nessuno —</option>
+                        @foreach (var t in _teams)
+                        {
+                            <option value="@t.Id">@t.Name</option>
+                        }
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Finestra Temporale -->
+    <div class="card mb-3">
+        <div class="card-header fw-bold">Finestra Temporale</div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Inizio (ora locale)</label>
+                    <input type="datetime-local" class="form-control"
+                           value="@ToLocalInput(_task.StartDateTime)"
+                           @onchange="e => _task.StartDateTime = ParseLocalDt(e.Value?.ToString())" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Fine (ora locale)</label>
+                    <input type="datetime-local" class="form-control"
+                           value="@ToLocalInput(_task.EndDateTime)"
+                           @onchange="e => _task.EndDateTime = ParseLocalDt(e.Value?.ToString())" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Luce Verde (ora locale)</label>
+                    <input type="datetime-local" class="form-control"
+                           value="@ToLocalInput(_task.GreenLightDateTime)"
+                           @onchange="e => _task.GreenLightDateTime = ParseLocalDt(e.Value?.ToString())" />
+                </div>
+                <div class="col-12"><hr class="my-1" /><small class="text-muted">Forchetta pianificata (opzionale, colore neutro nella timeline)</small></div>
+                <div class="col-md-4">
+                    <label class="form-label text-secondary">Inizio pianificato (ora locale)</label>
+                    <input type="datetime-local" class="form-control"
+                           value="@ToLocalInput(_task.PlannedStartDateTime)"
+                           @onchange="e => _task.PlannedStartDateTime = ParseLocalDt(e.Value?.ToString())" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label text-secondary">Fine pianificata (ora locale)</label>
+                    <input type="datetime-local" class="form-control"
+                           value="@ToLocalInput(_task.PlannedEndDateTime)"
+                           @onchange="e => _task.PlannedEndDateTime = ParseLocalDt(e.Value?.ToString())" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configurazione Operativa -->
+    <div class="card mb-3">
+        <div class="card-header fw-bold">Configurazione Operativa</div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Canale Radio</label>
+                    <select class="form-select" @bind="_task.RadioChannelId">
+                        <option value="">— nessuno —</option>
+                        @foreach (var r in _radioChannels)
+                        {
+                            <option value="@r.Id">@r.Name (@r.Frequency @r.FrequencyType)</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Missione</label>
+                    @if (_mission != null)
+                    {
+                        <div>
+                            <NavLink href="@($"/missiontak/{_mission.Id}")" class="btn btn-sm btn-outline-secondary">
+                                <Icon Name="IconName.MapFill" /> @_mission.Name
+                            </NavLink>
+                        </div>
+                    }
+                    else
+                    {
+                        <span class="form-control-plaintext text-muted">— non assegnato a nessuna missione —</span>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Riferimenti TAK -->
+    <div class="card mb-3">
+        <div class="card-header fw-bold">POI Riferimento TAK</div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">POI</label>
+                    <PoiSearchField Value="@_task.PoiUid"
+                                    ValueChanged="@(v => _task.PoiUid = v)"
+                                    NameValue="@_task.PoiName"
+                                    NameValueChanged="@(v => _task.PoiName = v)"
+                                    MissionTakName="@(_mission?.TakMissionUid)" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+}
+
+@code {
+    [Parameter] public Guid TaskId { get; set; }
+
+    private TaskEntity? _task;
+    private MissionSuite? _mission;
+    private List<Team> _teams = new();
+    private List<TaskPriority> _priorities = new();
+    private List<RadioChannel> _radioChannels = new();
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        _task = await TaskService.GetAsync(TaskId);
+        if (_task == null) return;
+
+        if (_task.MissionTAKSuiteId.HasValue)
+            _mission = await MissionSuiteService.GetAsync(_task.MissionTAKSuiteId.Value);
+
+        _teams = (await TeamService.GetAllAsync()).OrderBy(t => t.Name).ToList();
+        _priorities = (await PrioritiesService.GetAllAsync()).OrderBy(p => p.Level).ToList();
+        _radioChannels = (await RadioChannelService.GetAllAsync()).OrderBy(r => r.Name).ToList();
+    }
+
+    private async Task Save()
+    {
+        if (_task == null) return;
+        _saving = true;
+        try
+        {
+            _task.LastModified = DateTime.UtcNow;
+            await TaskService.UpdateAsync(_task);
+            ToastService.Notify(new(ToastType.Success, "Task", "Configurazione salvata"));
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static string ToLocalInput(DateTime? utc)
+        => utc.HasValue ? DateTime.SpecifyKind(utc.Value, DateTimeKind.Utc).ToLocalTime().ToString("yyyy-MM-ddTHH:mm") : "";
+
+    private static DateTime? ParseLocalDt(string? s)
+        => string.IsNullOrWhiteSpace(s) ? null
+           : DateTime.SpecifyKind(DateTime.Parse(s), DateTimeKind.Local).ToUniversalTime();
+
+    public void Dispose() { }
+}
