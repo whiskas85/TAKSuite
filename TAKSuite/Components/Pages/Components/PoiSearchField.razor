@@ -1,5 +1,12 @@
 @using TAKSuite.TAK.CoT
+@using TAKSuite.TAK.Helper
+@using TAKSuite.Components.Pages.MissionTakSuite
 @inject MartiApiClient MartiApiClient
+@inject CoTManager CoTManager
+
+<ModalAddPoi @ref="_addPoiModal"
+             MissionTakUid="@MissionTakName"
+             OnPoiCreated="OnNewPoiCreated" />
 
 <div class="input-group">
     <InputText class="form-control"
@@ -11,6 +18,11 @@
             @onclick="ShowModal"
             Disabled="@(string.IsNullOrEmpty(MissionTakName))">
         <Icon Name="IconName.Search" />
+    </Button>
+    <Button Color="ButtonColor.Primary"
+            title="Crea nuovo POI su TAK"
+            @onclick="async () => await _addPoiModal.ShowAsync()">
+        <Icon Name="IconName.GeoFill" />
     </Button>
 </div>
 @if (!string.IsNullOrEmpty(NameValue))
@@ -71,8 +83,10 @@ else
     [Parameter] public string? NameValue { get; set; }
     [Parameter] public EventCallback<string?> NameValueChanged { get; set; }
     [Parameter] public string? MissionTakName { get; set; }
+    [Parameter] public EventCallback OnPoiCreated { get; set; }
 
     private Modal _modal = default!;
+    private ModalAddPoi _addPoiModal = default!;
     private List<UidEntry> _allItems = new();
     private List<UidEntry> _filteredItems = new();
     private string _searchText = "";
@@ -106,6 +120,13 @@ else
         await ValueChanged.InvokeAsync(args.Item.Data);
         await NameValueChanged.InvokeAsync(args.Item.Details?.Callsign);
         await _modal.HideAsync();
+    }
+
+    private async Task OnNewPoiCreated(ModalAddPoi.PoiResult result)
+    {
+        await ValueChanged.InvokeAsync(result.Uid);
+        await NameValueChanged.InvokeAsync(result.Callsign);
+        await OnPoiCreated.InvokeAsync();
     }
 
     private async Task OnValueChanged(string? value)

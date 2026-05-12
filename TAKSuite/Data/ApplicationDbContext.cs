@@ -26,6 +26,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<MissionSuite> MissionsTakSuite { get; set; }
 
+    public DbSet<TakSettings>     TakSettings     { get; set; }
+    public DbSet<TakSubscription> TakSubscriptions { get; set; }
+
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -78,6 +81,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasForeignKey(_ => _.DocumentationId);
 
 
+
+        // TakSettings: singleton row, Id is always 1 — never auto-generated
+        modelBuilder.Entity<TakSettings>()
+            .Property(t => t.Id)
+            .ValueGeneratedNever();
 
         // MissionSuite → Team (responsabile)
         modelBuilder.Entity<MissionSuite>()

@@ -1,0 +1,189 @@
+@using TAKSuite.TAK.CoT
+@using TAKSuite.TAK.Helper
+@using TAKSuite.Helper
+@inject CoTManager CoTManager
+@inject ToastService ToastService
+
+<Modal @ref="_modal" Title="Aggiungi POI TAK" Size="ModalSize.Large" OnHidden="OnHidden">
+    <BodyTemplate>
+        <div class="row g-3">
+            <!-- Callsign -->
+            <div class="col-12">
+                <label class="form-label fw-semibold">Nome (Callsign) <span class="text-danger">*</span></label>
+                <input class="form-control" @bind="_callsign" placeholder="Es. ALFA-1, OBJ RED..." maxlength="80" />
+            </div>
+
+            <!-- Tipo POI -->
+            <div class="col-md-6">
+                <label class="form-label fw-semibold">Tipo POI</label>
+                <select class="form-select" @bind="_poiType">
+                    <option value="@PoiType.Spotmap">Spotmap (punto colorato)</option>
+                    <option value="@PoiType.Obiettivo">Obiettivo (GOTO)</option>
+                    <option value="@PoiType.PuntoGenerico">Punto generico</option>
+                </select>
+            </div>
+
+            <!-- Colore — visibile solo per Spotmap -->
+            @if (_poiType == PoiType.Spotmap)
+            {
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">Colore</label>
+                    <select class="form-select" @bind="_selectedArgb">
+                        @foreach (var c in ATAKHelper.ATAKPredefinedColors)
+                        {
+                            <option value="@c.Argb">@c.Name</option>
+                        }
+                    </select>
+                    <div class="mt-1 d-flex align-items-center gap-2">
+                        <div style="width:24px;height:24px;border-radius:4px;border:1px solid #888;
+                                    background-color:@ColorConverterHelper.ArgbToHex(_selectedArgb);"></div>
+                        <small class="text-muted">@ATAKHelper.ATAKPredefinedColors.FirstOrDefault(c => c.Argb == _selectedArgb)?.Name</small>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="col-md-6"></div>
+            }
+
+            <!-- Latitudine -->
+            <div class="col-md-6">
+                <label class="form-label fw-semibold">Latitudine <span class="text-danger">*</span></label>
+                <input class="form-control" type="number" step="0.000001"
+                       @bind="_lat" placeholder="Es. 45.123456" />
+            </div>
+
+            <!-- Longitudine -->
+            <div class="col-md-6">
+                <label class="form-label fw-semibold">Longitudine <span class="text-danger">*</span></label>
+                <input class="form-control" type="number" step="0.000001"
+                       @bind="_lon" placeholder="Es. 9.654321" />
+            </div>
+
+            <!-- Note -->
+            <div class="col-12">
+                <label class="form-label fw-semibold">Note / Remarks</label>
+                <textarea class="form-control" rows="3" @bind="_remarks"
+                          placeholder="Informazioni aggiuntive sul punto..."></textarea>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_lastCreatedUid))
+            {
+                <div class="col-12">
+                    <div class="alert alert-success py-2 mb-0">
+                        <strong>POI creato!</strong> UID: <code>@_lastCreatedUid</code>
+                    </div>
+                </div>
+            }
+
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <div class="col-12">
+                    <div class="alert alert-danger py-2 mb-0">@_errorMessage</div>
+                </div>
+            }
+        </div>
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Success" @onclick="SubmitAsync"
+                Loading="_saving" LoadingText="Pubblicazione...">
+            <Icon Name="IconName.GeoFill" /> Crea POI
+        </Button>
+        <Button Color="ButtonColor.Secondary" @onclick="HideAsync">Chiudi</Button>
+    </FooterTemplate>
+</Modal>
+
+@code {
+    public record PoiResult(string Uid, string Callsign);
+
+    [Parameter] public string? MissionTakUid { get; set; }
+    [Parameter] public EventCallback<PoiResult> OnPoiCreated { get; set; }
+    [Parameter] public EventCallback OnModalHidden { get; set; }
+
+    private Modal _modal = default!;
+
+    private string _callsign = string.Empty;
+    private PoiType _poiType = PoiType.Spotmap;
+    private int _selectedArgb = -65536; // Red di default
+    private double _lat = 45.061119;
+    private double _lon = 7.399362;
+    private string _remarks = string.Empty;
+
+    private bool _saving;
+    private string? _lastCreatedUid;
+    private string? _errorMessage;
+
+    public async Task ShowAsync()
+    {
+        _callsign = string.Empty;
+        _poiType = PoiType.Spotmap;
+        _selectedArgb = -65536;
+        _lat = 45.061119;
+        _lon = 7.399362;
+        _remarks = string.Empty;
+        _lastCreatedUid = null;
+        _errorMessage = null;
+        await _modal.ShowAsync();
+    }
+
+    public async Task HideAsync() => await _modal.HideAsync();
+
+    private async Task SubmitAsync()
+    {
+        _errorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(_callsign))
+        {
+            _errorMessage = "Il nome (callsign) è obbligatorio.";
+            return;
+        }
+        if (_lat == 0 && _lon == 0)
+        {
+            _errorMessage = "Inserisci coordinate valide (lat/lon diversi da zero).";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(MissionTakUid))
+        {
+            _errorMessage = "Nessuna missione TAK collegata.";
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            int? color = _poiType == PoiType.Spotmap ? _selectedArgb : null;
+
+            var uid = await CoTManager.CreateAndPublishPoiAsync(
+                MissionTakUid,
+                _callsign.Trim(),
+                _poiType,
+                _lat, _lon,
+                string.IsNullOrWhiteSpace(_remarks) ? null : _remarks.Trim(),
+                color);
+
+            if (uid != null)
+            {
+                _lastCreatedUid = uid;
+                await OnPoiCreated.InvokeAsync(new PoiResult(uid, _callsign.Trim()));
+                ToastService.Notify(new ToastMessage(ToastType.Success, $"POI «{_callsign}» creato e aggiunto alla missione."));
+            }
+            else
+            {
+                _errorMessage = "Errore durante la pubblicazione del POI su TAK.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Errore: {ex.Message}";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async void OnHidden()
+    {
+        await OnModalHidden.InvokeAsync();
+    }
+}

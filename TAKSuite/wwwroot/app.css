@@ -8,6 +8,34 @@
     --bs-link-color-rgb:   57, 255, 20;
     --bs-link-hover-color: #2bcc0f;
     --bs-focus-ring-color: rgba(57, 255, 20, 0.30);
+
+    /* BlazorBootstrap sidebar: sostituisce il viola con ZDT green */
+    --bb-violet:            #39FF14;
+    --bb-violet-bg:         #111111;
+    --bb-violet-bg-rgb:     57, 255, 20;
+
+    /* Sidebar2 light-mode overrides */
+    --bb-sidebar2-top-row-background-color:             #111111;
+    --bb-sidebar2-top-row-border-color:                 #111111;
+    --bb-sidebar2-title-text-color:                     #39FF14;
+    --bb-sidebar2-brand-icon-color:                     #39FF14;
+    --bb-sidebar2-title-badge-text-color:               #000;
+    --bb-sidebar2-title-badge-background-color:         #39FF14;
+    --bb-sidebar2-navbar-toggler-icon-color:            #39FF14;
+    --bb-sidebar2-navbar-toggler-background-color:      #111111;
+    --bb-sidebar2-nav-item-text-active-color-rgb:       57, 255, 20;
+    --bb-sidebar2-nav-item-text-hover-color:            rgba(57, 255, 20, 0.9);
+    --bb-sidebar2-nav-item-text-active-color:           rgba(57, 255, 20, 0.9);
+    --bb-sidebar2-nav-item-background-hover-color:      rgba(57, 255, 20, 0.12);
+    --bb-sidebar2-nav-item-group-background-color:      rgba(57, 255, 20, 0.08);
+}
+
+/* Sidebar2 dark-mode overrides */
+[data-bs-theme=dark] {
+    --bb-sidebar2-nav-item-background-hover-color:      rgba(57, 255, 20, 0.30);
+    --bb-sidebar2-nav-item-group-background-color:      rgba(57, 255, 20, 0.10);
+    --bb-sidebar2-nav-item-text-hover-color:            #39FF14;
+    --bb-sidebar2-nav-item-text-active-color:           #39FF14;
 }
 
 a, .btn-link {

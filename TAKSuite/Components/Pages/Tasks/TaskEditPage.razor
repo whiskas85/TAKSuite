@@ -122,39 +122,82 @@ else
         </div>
     </div>
 
-    <!-- Finestra Temporale -->
+    <!-- Finestre Temporali -->
     <div class="card mb-3">
-        <div class="card-header fw-bold">Finestra Temporale</div>
+        <div class="card-header fw-bold d-flex justify-content-between align-items-center">
+            <span>Finestre Temporali</span>
+            <Button Color="ButtonColor.Primary" Size="ButtonSize.Small"
+                    Disabled="_visibleCount >= 10"
+                    @onclick="AddWindow">
+                <Icon Name="IconName.PlusCircle" /> Aggiungi Finestra
+            </Button>
+        </div>
         <div class="card-body">
-            <div class="row g-3">
-                <div class="col-md-4">
-                    <label class="form-label">Inizio (ora locale)</label>
-                    <input type="datetime-local" class="form-control"
-                           value="@ToLocalInput(_task.StartDateTime)"
-                           @onchange="e => _task.StartDateTime = ParseLocalDt(e.Value?.ToString())" />
+            @for (int wi = 0; wi < _visibleCount; wi++)
+            {
+                var idx = wi; // cattura per closure
+                var w   = _windows[idx];
+                <div class="border rounded p-3 mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="fw-semibold small text-muted">
+                            Finestra @(idx + 1)
+                        </span>
+                        @if (_visibleCount > 1)
+                        {
+                            <Button Color="ButtonColor.Danger" Size="ButtonSize.Small" Outline="true"
+                                    @onclick="() => RemoveWindow(idx)">
+                                <Icon Name="IconName.Trash" />
+                            </Button>
+                        }
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <label class="form-label small mb-1">Inizio (ora locale)</label>
+                            <input type="datetime-local" class="form-control form-control-sm"
+                                   value="@ToLocalInput(w.StartDateTime)"
+                                   @onchange="e => { _windows[idx].StartDateTime = ParseLocalDt(e.Value?.ToString()); }" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small mb-1">Fine (ora locale)</label>
+                            <input type="datetime-local" class="form-control form-control-sm"
+                                   value="@ToLocalInput(w.EndDateTime)"
+                                   @onchange="e => { _windows[idx].EndDateTime = ParseLocalDt(e.Value?.ToString()); }" />
+                        </div>
+                    </div>
+                    @if (_mission?.StartDateTime.HasValue == true && _mission.EndDateTime.HasValue &&
+                         ((w.StartDateTime.HasValue && (w.StartDateTime.Value < _mission.StartDateTime.Value || w.StartDateTime.Value > _mission.EndDateTime.Value)) ||
+                          (w.EndDateTime.HasValue   && (w.EndDateTime.Value   < _mission.StartDateTime.Value || w.EndDateTime.Value   > _mission.EndDateTime.Value))))
+                    {
+                        <div class="alert alert-warning py-1 px-2 mt-2 small mb-0">
+                            ⚠️ Data fuori dal range della missione (@DateTime.SpecifyKind(_mission.StartDateTime.Value, DateTimeKind.Utc).ToLocalTime().ToString("dd/MM HH:mm") – @DateTime.SpecifyKind(_mission.EndDateTime.Value, DateTimeKind.Utc).ToLocalTime().ToString("dd/MM HH:mm"))
+                        </div>
+                    }
                 </div>
+            }
+
+            <hr class="my-2" />
+            <div class="row g-2">
+                @if (_task.Durata is > 0)
+                {
                 <div class="col-md-4">
-                    <label class="form-label">Fine (ora locale)</label>
-                    <input type="datetime-local" class="form-control"
-                           value="@ToLocalInput(_task.EndDateTime)"
-                           @onchange="e => _task.EndDateTime = ParseLocalDt(e.Value?.ToString())" />
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label">Luce Verde (ora locale)</label>
-                    <input type="datetime-local" class="form-control"
+                    <label class="form-label small mb-1 text-success fw-semibold">
+                        <Icon Name="IconName.CircleFill" /> Luce Verde (ora locale)
+                    </label>
+                    <input type="datetime-local" class="form-control form-control-sm"
                            value="@ToLocalInput(_task.GreenLightDateTime)"
                            @onchange="e => _task.GreenLightDateTime = ParseLocalDt(e.Value?.ToString())" />
+                    <small class="text-muted">Unica per il task — indipendente dalle finestre</small>
                 </div>
-                <div class="col-12"><hr class="my-1" /><small class="text-muted">Forchetta pianificata (opzionale, colore neutro nella timeline)</small></div>
+                }
                 <div class="col-md-4">
-                    <label class="form-label text-secondary">Inizio pianificato (ora locale)</label>
-                    <input type="datetime-local" class="form-control"
+                    <label class="form-label small mb-1 text-secondary">Inizio finestra schedulata</label>
+                    <input type="datetime-local" class="form-control form-control-sm"
                            value="@ToLocalInput(_task.PlannedStartDateTime)"
                            @onchange="e => _task.PlannedStartDateTime = ParseLocalDt(e.Value?.ToString())" />
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label text-secondary">Fine pianificata (ora locale)</label>
-                    <input type="datetime-local" class="form-control"
+                    <label class="form-label small mb-1 text-secondary">Fine finestra schedulata</label>
+                    <input type="datetime-local" class="form-control form-control-sm"
                            value="@ToLocalInput(_task.PlannedEndDateTime)"
                            @onchange="e => _task.PlannedEndDateTime = ParseLocalDt(e.Value?.ToString())" />
                 </div>
@@ -207,7 +250,8 @@ else
                                     ValueChanged="@(v => _task.PoiUid = v)"
                                     NameValue="@_task.PoiName"
                                     NameValueChanged="@(v => _task.PoiName = v)"
-                                    MissionTakName="@(_mission?.TakMissionUid)" />
+                                    MissionTakName="@(_mission?.TakMissionUid)"
+                                    OnPoiCreated="Save" />
                 </div>
             </div>
         </div>
@@ -225,6 +269,10 @@ else
     private List<RadioChannel> _radioChannels = new();
     private bool _saving;
 
+    // Finestre temporali: 10 slot pre-allocati
+    private List<TaskTimeWindow> _windows = Enumerable.Range(0, 10).Select(_ => new TaskTimeWindow()).ToList();
+    private int _visibleCount = 1;
+
     protected override async Task OnInitializedAsync()
     {
         await base.OnInitializedAsync();
@@ -237,6 +285,41 @@ else
         _teams = (await TeamService.GetAllAsync()).OrderBy(t => t.Name).ToList();
         _priorities = (await PrioritiesService.GetAllAsync()).OrderBy(p => p.Level).ToList();
         _radioChannels = (await RadioChannelService.GetAllAsync()).OrderBy(r => r.Name).ToList();
+
+        InitWindows();
+    }
+
+    private void InitWindows()
+    {
+        if (_task == null) return;
+        var saved = _task.TimeWindows;
+
+        // Se non ci sono finestre salvate ma esistono i vecchi campi, migra (solo Start/End, GL resta separata)
+        if (saved.Count == 0 && (_task.StartDateTime.HasValue || _task.EndDateTime.HasValue))
+        {
+            saved = new List<TaskTimeWindow>
+            {
+                new() { StartDateTime = _task.StartDateTime, EndDateTime = _task.EndDateTime }
+            };
+        }
+
+        for (int i = 0; i < Math.Min(saved.Count, 10); i++)
+            _windows[i] = saved[i];
+
+        _visibleCount = Math.Max(1, saved.Count(w => !w.IsEmpty));
+    }
+
+    private void AddWindow()
+    {
+        if (_visibleCount < 10) _visibleCount++;
+    }
+
+    private void RemoveWindow(int index)
+    {
+        // Rimuove e compatta
+        _windows.RemoveAt(index);
+        _windows.Add(new TaskTimeWindow());
+        _visibleCount = Math.Max(1, _windows.Take(10).Count(w => !w.IsEmpty));
     }
 
     private async Task Save()
@@ -245,6 +328,16 @@ else
         _saving = true;
         try
         {
+            // Salva solo le finestre non vuote tra quelle visibili
+            var toSave = _windows.Take(_visibleCount).Where(w => !w.IsEmpty).ToList();
+            _task.TimeWindows = toSave;
+
+            // Sincronizza la finestra principale (0) con i vecchi campi legacy
+            var w0 = toSave.FirstOrDefault();
+            _task.StartDateTime = w0?.StartDateTime;
+            _task.EndDateTime   = w0?.EndDateTime;
+            // GreenLightDateTime è indipendente dalle finestre, non va sovrascritto
+
             _task.LastModified = DateTime.UtcNow;
             await TaskService.UpdateAsync(_task);
             ToastService.Notify(new(ToastType.Success, "Task", "Configurazione salvata"));

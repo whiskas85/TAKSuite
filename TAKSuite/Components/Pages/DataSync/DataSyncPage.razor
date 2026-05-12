@@ -1,0 +1,227 @@
+@page "/datasync"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@implements IDisposable
+
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@using TAKSuite.TAK.CoT
+
+@inject MartiApiClient MartiClient
+@inject TakSubscriptionService SubscriptionService
+@inject CoTManager CoTManager
+
+<PageTitle>DataSync Mission</PageTitle>
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3><Icon Name="IconName.ArrowRepeat" /> DataSync Mission</h3>
+        <Button Color="ButtonColor.Secondary" @onclick="RefreshAsync" Loading="_loading" LoadingText="Aggiornamento...">
+            <Icon Name="IconName.ArrowClockwise" /> Aggiorna
+        </Button>
+    </div>
+
+    @if (_errorMessage != null)
+    {
+        <Alert Color="AlertColor.Danger" Dismissable="true">@_errorMessage</Alert>
+    }
+
+    @if (_loading)
+    {
+        <div class="text-center py-5">
+            <Spinner Color="SpinnerColor.Primary" />
+            <div class="mt-2 text-muted">Caricamento missioni TAK...</div>
+        </div>
+    }
+    else if (_missions == null || _missions.Count == 0)
+    {
+        <div class="alert alert-info">
+            <Icon Name="IconName.InfoCircle" />
+            Nessuna missione trovata sul server TAK.
+            Verificare la connessione nelle <a href="/settings/tak">impostazioni TAK</a>.
+        </div>
+    }
+    else
+    {
+        <div class="mb-2 text-muted small">
+            @_missions.Count missioni — @_subscribedNames.Count sottoscritte
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th style="width:2.5rem"></th>
+                        <th>Missione</th>
+                        <th>Descrizione</th>
+                        <th>Tool</th>
+                        <th>Elementi</th>
+                        <th>Creata</th>
+                        <th style="width:8rem">Stato</th>
+                        <th style="width:8rem"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var mission in _missions)
+                    {
+                        var isSubscribed = _subscribedNames.Contains(mission.Name);
+                        var isBusy       = _busy.Contains(mission.Name);
+
+                        <tr class="@(isSubscribed ? "table-success" : "")">
+                            <td class="text-center">
+                                @if (isSubscribed)
+                                {
+                                    <Icon Name="IconName.CheckCircleFill" class="text-success" />
+                                }
+                                else
+                                {
+                                    <Icon Name="IconName.CircleFill" class="text-secondary opacity-25" />
+                                }
+                            </td>
+                            <td class="fw-semibold">@mission.Name</td>
+                            <td class="text-muted small">@mission.Description</td>
+                            <td class="small">@mission.Tool</td>
+                            <td class="text-center small">@(mission.Uids?.Count ?? 0)</td>
+                            <td class="small text-nowrap">
+                                @(mission.CreateTime.HasValue
+                                    ? mission.CreateTime.Value.ToString("dd/MM/yy HH:mm")
+                                    : "—")
+                            </td>
+                            <td>
+                                @if (isSubscribed)
+                                {
+                                    <Badge Color="BadgeColor.Success">Sottoscritto</Badge>
+                                }
+                                else
+                                {
+                                    <Badge Color="BadgeColor.Secondary">Non sottoscritto</Badge>
+                                }
+                            </td>
+                            <td>
+                                @if (isSubscribed)
+                                {
+                                    <Button Color="ButtonColor.Danger" Size="ButtonSize.ExtraSmall"
+                                            @onclick="() => UnsubscribeAsync(mission.Name)"
+                                            Disabled="isBusy" Loading="isBusy" LoadingText="...">
+                                        <Icon Name="IconName.BellSlashFill" /> Rimuovi
+                                    </Button>
+                                }
+                                else
+                                {
+                                    <Button Color="ButtonColor.Success" Size="ButtonSize.ExtraSmall"
+                                            @onclick="() => SubscribeAsync(mission.Name)"
+                                            Disabled="isBusy" Loading="isBusy" LoadingText="...">
+                                        <Icon Name="IconName.BellFill" /> Sottoscrivi
+                                    </Button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    private List<MissionAtak>? _missions;
+    private HashSet<string> _subscribedNames = new();
+    private HashSet<string> _busy = new();
+    private bool _loading;
+    private string? _errorMessage;
+    private DateTime _lastRefresh = DateTime.MinValue;
+
+    protected override async Task OnInitializedAsync()
+    {
+        CoTManager.CoTMessageReceived += OnCoTMessage;
+        await RefreshAsync();
+    }
+
+    private void OnCoTMessage(CoTManager.CoTMessageEventArgs e)
+    {
+        try
+        {
+            var doc = System.Xml.Linq.XDocument.Parse(e.Message);
+            var type = (string?)doc.Root?.Attribute("type") ?? "";
+            if (!type.StartsWith("t-x-m-")) return;
+            if (DateTime.UtcNow - _lastRefresh < TimeSpan.FromSeconds(3)) return;
+            _lastRefresh = DateTime.UtcNow;
+            _ = InvokeAsync(async () => await RefreshAsync());
+        }
+        catch { }
+    }
+
+    public void Dispose()
+    {
+        CoTManager.CoTMessageReceived -= OnCoTMessage;
+    }
+
+    private async Task RefreshAsync()
+    {
+        _loading = true;
+        _errorMessage = null;
+        StateHasChanged();
+        try
+        {
+            var missionsTask = MartiClient.GetAllMissionsDataAsync();
+            var subsTask     = SubscriptionService.GetAllAsync();
+            await Task.WhenAll(missionsTask, subsTask);
+
+            _missions        = missionsTask.Result ?? new List<MissionAtak>();
+            _subscribedNames = subsTask.Result.Select(s => s.MissionName).ToHashSet();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Errore caricamento: {ex.Message}";
+            _missions ??= new();
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SubscribeAsync(string missionName)
+    {
+        _busy.Add(missionName);
+        StateHasChanged();
+        try
+        {
+            await MartiClient.SubscribeMissionAsync(missionName);
+            await SubscriptionService.AddAsync(missionName);
+            _subscribedNames.Add(missionName);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Errore sottoscrizione '{missionName}': {ex.Message}";
+        }
+        finally
+        {
+            _busy.Remove(missionName);
+            StateHasChanged();
+        }
+    }
+
+    private async Task UnsubscribeAsync(string missionName)
+    {
+        _busy.Add(missionName);
+        StateHasChanged();
+        try
+        {
+            await MartiClient.UnsubscribeMissionAsync(missionName);
+            await SubscriptionService.RemoveAsync(missionName);
+            _subscribedNames.Remove(missionName);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Errore disiscrizione '{missionName}': {ex.Message}";
+        }
+        finally
+        {
+            _busy.Remove(missionName);
+            StateHasChanged();
+        }
+    }
+}

@@ -84,6 +84,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Extension\BlazorMarkdownEditor\PSC.Blazor.Components.MarkdownEditor\PSC.Blazor.Components.MarkdownEditor.csproj" />
+    <ProjectReference Include="..\..\..\Prova\TakLib\TakLib.csproj" />
   </ItemGroup>
 
   <ItemGroup>

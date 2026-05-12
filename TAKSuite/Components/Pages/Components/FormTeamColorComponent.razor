@@ -1,5 +1,4 @@
 @typeparam TValue
-@using BlazorColorPicker
 @using BlazorReflection.Data
 @using Microsoft.AspNetCore.Authorization
 @using System.Linq.Expressions
@@ -10,123 +9,85 @@
 @using TAKSuite.TAK.Helper
 
 <style>
-    .color-rounded-rectangle {
-    width: 100%;
-    height: 30px;
-    border-radius: 5px;
-    display: inline-block;
-    border: 1px solid #ccc;
-    }
-
     .color-button {
-    width: 38px;
-    height: 38px;
-    border: none;
-    margin: 5px;
-    border-radius: 4px;
-    cursor: pointer;
-    border: 2px solid #ccc;
+        width: 38px;
+        height: 38px;
+        border: none;
+        margin: 5px;
+        border-radius: 4px;
+        cursor: pointer;
+        border: 2px solid #ccc;
     }
 
     .color-button-active {
-    border-color:dodgerblue;
-    border-width:4px;
+        border-color: dodgerblue;
+        border-width: 4px;
     }
-
-    .custom-button {
-    display: block;
-    width: 100%;
-    margin-top: 10px;
-    padding: 5px;
-    border: none;
-    cursor: pointer;
-    text-align: center;
-    }
-
 </style>
 
-
-@* <ColorPicker Title="Seleziona Colore"
-    IsOpened="isOpened"
-    Closed = "@(color => SetPredefinedColor(color))"
-    MyColor="@color">
-</ColorPicker> *@
-@* kkkkkkkkkkk *@
-
-
-<Modal @ref="colorDialog"
-Title="ATAK Color" Size="ModalSize.Regular">
+<Modal @ref="colorDialog" Title="Seleziona colore" Size="ModalSize.Regular">
     <BodyTemplate>
-        <div id="color-popup" class="color-popup show">
+        <div class="mb-2">
             @foreach (var predefinedColor in ATAKHelper.ATAKPredefinedColors)
             {
                 var hexColor = predefinedColor.ToHex();
-                string classButton = "color-button";
-                if (predefinedColor.Argb == Value.Value)
-                {
-                    classButton += " color-button-active";
-                }
+                var isActive = predefinedColor.Argb == Value;
                 <Tooltip Color="TooltipColor.Light" Title="@predefinedColor.Name">
-                    <button type="button" class="@classButton" style="background-color:@hexColor;" @onclick="() => SetPredefinedColor(hexColor)">
+                    <button type="button"
+                            class="color-button @(isActive ? "color-button-active" : "")"
+                            style="background-color:@hexColor;"
+                            @onclick="() => SetColor(hexColor)">
                     </button>
                 </Tooltip>
-                @* <button class="color-button"
-                        style="background-color:@hexColor;"
-                        @onclick="() => SetPredefinedColor(hexColor, Team)">
-                </button> *@
             }
-            @if (Rights >= GridRightsType.Update)
-            {
-                <Button Color="ButtonColor.Secondary" class="custom-button" @onclick="() => OpenCustomColorPicker()">Custom</Button>
-            }
+        </div>
+        <hr class="my-2" />
+        <div class="d-flex align-items-center gap-2">
+            <label class="form-label mb-0 small fw-semibold">Colore custom</label>
+            <input type="color"
+                   class="form-control form-control-color"
+                   style="width:48px;height:36px;padding:2px;cursor:pointer;"
+                   @bind="_customHex"
+                   @bind:event="oninput" />
+            <span class="small text-muted font-monospace">@_customHex</span>
+            <button type="button" class="btn btn-sm btn-primary ms-auto" @onclick="ApplyCustomColor">
+                Applica
+            </button>
         </div>
     </BodyTemplate>
 </Modal>
 
-<div class="@Class color-button d-flex align-items-stretch" @onclick="ShowColorDialog"
-style="background-color: @ColorConverterHelper.ArgbToHex(Value.Value)">
+<div class="color-button d-flex align-items-stretch"
+     style="background-color: @ColorConverterHelper.ArgbToHex(Value ?? -65536); cursor:@(Rights >= GridRightsType.Update ? "pointer" : "default");"
+     @onclick="ShowColorDialog">
 </div>
 
-
-
-
-@code{
+@code {
     [Parameter] public GridRightsType Rights { get; set; } = GridRightsType.Read;
     [Parameter] public string? Class { get; set; }
     [Parameter] public Expression<Func<TValue>> ValueExpression { get; set; }
-
-    [Parameter] public int? Value{ get; set; }
+    [Parameter] public int? Value { get; set; }
     [Parameter] public EventCallback<int?> ValueChanged { get; set; }
 
-
     private Modal colorDialog = default!;
-    private string color = "";
-
-    private bool isOpened = false;
-
+    private string _customHex = "#ff0000";
 
     private async Task ShowColorDialog()
     {
-        if (Rights<GridRightsType.Update) return;
-
-        color = ColorConverterHelper.ArgbToHex(Value.Value);
+        if (Rights < GridRightsType.Update) return;
+        _customHex = ColorConverterHelper.ArgbToHex(Value ?? -65536);
         await colorDialog.ShowAsync();
     }
 
-
-    private async Task SetPredefinedColor(string color)
+    private async Task SetColor(string hex)
     {
-        var intColor = ColorConverterHelper.HexToArgb(color);
-        isOpened = false;
+        Value = ColorConverterHelper.HexToArgb(hex);
         await colorDialog.HideAsync();
-
-        Value = intColor;
         await ValueChanged.InvokeAsync(Value);
     }
-    private async Task OpenCustomColorPicker()
+
+    private async Task ApplyCustomColor()
     {
-        await colorDialog.HideAsync();
-        isOpened = true;
-        StateHasChanged();
+        await SetColor(_customHex);
     }
 }

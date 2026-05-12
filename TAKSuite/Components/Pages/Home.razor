@@ -1,47 +1,379 @@
-﻿@page "/"
+@page "/"
 @rendermode InteractiveServer
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Identity
 @using TAKSuite.Data
-@using TAKSuite.Data.Seeder
+@using TAKSuite.Data.Models
 @using TAKSuite.Data.Services
+@using BlazorBootstrap
 
-@inject RadioChannelSeeder _seeder;
 @inject IUserStore<ApplicationUser> UserStore
 @inject UserManager<ApplicationUser> UserManager
 @inject AuthenticationStateProvider AuthenticationStateProvider
-@inject UserServiceAtak _userServiceAtak;
+@inject UserServiceAtak _userServiceAtak
+@inject MissionSuiteEntityServices MissionService
+@inject TaskService TaskService
+@inject NavigationManager Navigation
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Home — TAK Suite</PageTitle>
 
-<h1>Buongiorno @nick</h1>
-<p>Questa è la tuta pagina personale</p>
+@if (_loading)
+{
+    <div class="d-flex justify-content-center align-items-center" style="height:60vh;">
+        <Spinner Type="SpinnerType.Border" Color="SpinnerColor.Success" />
+    </div>
+}
+else
+{
+    <div class="mb-4">
+        <h1 class="mb-0">Buongiorno, @(_nick ?? "operatore")</h1>
+        <p class="text-muted mb-0">
+            @DateTime.Now.ToString("dddd d MMMM yyyy", new System.Globalization.CultureInfo("it-IT"))
+            @if (_userTeam != null)
+            {
+                <span class="ms-2 badge bg-secondary">@_userTeam.Name</span>
+            }
+        </p>
+    </div>
+
+    <!-- KPI row -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="card text-center border-0 bg-body-secondary h-100">
+                <div class="card-body py-3">
+                    <div style="font-size:2rem; font-weight:700; color:var(--bs-primary);">@_missions.Count</div>
+                    <div class="text-muted small">Missioni attive</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card text-center border-0 bg-body-secondary h-100">
+                <div class="card-body py-3">
+                    <div style="font-size:2rem; font-weight:700; color:#0d6efd;">@_allTasks.Count</div>
+                    <div class="text-muted small">Task totali</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card text-center border-0 bg-body-secondary h-100">
+                <div class="card-body py-3">
+                    <div style="font-size:2rem; font-weight:700; color:#198754;">@_allTasks.Count(t => t.Status == TaskStatusTak.InProgress)</div>
+                    <div class="text-muted small">In esecuzione</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card text-center border-0 bg-body-secondary h-100">
+                <div class="card-body py-3">
+                    <div style="font-size:2rem; font-weight:700; color:#ffc107;">@_allTasks.Count(t => t.GreenLightDateTime.HasValue && DateTime.UtcNow >= t.GreenLightDateTime.Value)</div>
+                    <div class="text-muted small">Luce verde attiva</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Missioni column -->
+        <div class="col-lg-7">
+            <h5 class="mb-3 fw-semibold">Missioni del tuo team</h5>
+
+            @if (_missions.Count == 0)
+            {
+                <div class="alert alert-secondary">Nessuna missione attiva assegnata al tuo team.</div>
+            }
+            else
+            {
+                @foreach (var m in _missions.OrderBy(m => m.StartDateTime))
+                {
+                    var tasks = _tasksByMission.GetValueOrDefault(m.Id, new());
+                    var inProgress = tasks.Count(t => t.Status == TaskStatusTak.InProgress);
+                    var completed  = tasks.Count(t => t.Status == TaskStatusTak.Completed);
+                    var pending    = tasks.Count(t => t.Status is TaskStatusTak.Created or TaskStatusTak.Scheduled or TaskStatusTak.Accepted or TaskStatusTak.Assigned);
+                    var glActive   = tasks.Count(t => t.GreenLightDateTime.HasValue && DateTime.UtcNow >= t.GreenLightDateTime.Value
+                                                   && (!t.EndDateTime.HasValue || DateTime.UtcNow < t.EndDateTime.Value));
+
+                    <div class="card mb-3 @(m.Status == MissionStatusTak.InProgress ? "border-success border-2" : "")">
+                        <div class="card-body pb-2">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h6 class="mb-1 fw-bold">
+                                        <a href="/missiontak/@m.Id" class="text-decoration-none">@m.Name</a>
+                                    </h6>
+                                    @if (!string.IsNullOrWhiteSpace(m.Descrizione))
+                                    {
+                                        <p class="text-muted small mb-1">@m.Descrizione</p>
+                                    }
+                                    <span class="badge @MissionStatusBadge(m.Status) me-1">@m.Status.GetDisplayName()</span>
+                                    @if (m.StartDateTime.HasValue)
+                                    {
+                                        <span class="badge bg-secondary">
+                                            @LocalDt(m.StartDateTime.Value).ToString("dd/MM HH:mm")
+                                            @if (m.EndDateTime.HasValue)
+                                            {
+                                                <span> → @LocalDt(m.EndDateTime.Value).ToString("dd/MM HH:mm")</span>
+                                            }
+                                        </span>
+                                    }
+                                </div>
+                                <div class="d-flex gap-1 ms-2 flex-shrink-0">
+                                    <a class="btn btn-sm btn-outline-primary" href="/missiontak/@m.Id" title="Operativo">
+                                        <Icon Name="IconName.Activity" />
+                                    </a>
+                                    <a class="btn btn-sm btn-outline-secondary" href="/missionedit/@m.Id" title="Configura">
+                                        <Icon Name="IconName.GearFill" />
+                                    </a>
+                                </div>
+                            </div>
+
+                            <!-- Task progress bar -->
+                            @if (tasks.Count > 0)
+                            {
+                                var pct = tasks.Count > 0 ? (double)completed / tasks.Count * 100 : 0;
+                                <div class="mt-2 mb-1">
+                                    <div class="d-flex justify-content-between small text-muted mb-1">
+                                        <span>@tasks.Count task</span>
+                                        <span>@completed completati</span>
+                                    </div>
+                                    <div class="progress" style="height:6px;">
+                                        <div class="progress-bar bg-success" style="width:@pct.ToString("F0")%;"></div>
+                                    </div>
+                                </div>
+                                <div class="d-flex gap-2 mt-2 flex-wrap">
+                                    @if (inProgress > 0)
+                                    {
+                                        <span class="badge bg-primary text-dark">@inProgress in esec.</span>
+                                    }
+                                    @if (glActive > 0)
+                                    {
+                                        <span class="badge bg-success">🟢 @glActive GL attiva</span>
+                                    }
+                                    @if (pending > 0)
+                                    {
+                                        <span class="badge bg-secondary">@pending in attesa</span>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="text-muted small mt-2 mb-0">Nessun task assegnato.</p>
+                            }
+                        </div>
+
+                        <!-- Task list mini -->
+                        @if (tasks.Count > 0)
+                        {
+                            <div class="px-3 pb-2">
+                                <hr class="my-2" />
+                                @foreach (var t in tasks.OrderBy(x => x.GreenLightDateTime ?? x.StartDateTime ?? DateTime.MaxValue).Take(4))
+                                {
+                                    <div class="d-flex justify-content-between align-items-center py-1 border-bottom border-secondary-subtle">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <Icon Name="@TaskStatusIcon(t.Status)" style="@($"color:{TaskStatusColor(t.Status)};font-size:.9rem;")" />
+                                            <span class="small">@t.Name</span>
+                                            @if (t.GreenLightDateTime.HasValue && DateTime.UtcNow >= t.GreenLightDateTime.Value)
+                                            {
+                                                <span class="badge bg-success" style="font-size:.65rem;">GL</span>
+                                            }
+                                        </div>
+                                        <a href="/taskdetail/@t.Id" class="btn btn-sm btn-link p-0" title="Dettaglio">
+                                            <Icon Name="IconName.ArrowRight" />
+                                        </a>
+                                    </div>
+                                }
+                                @if (tasks.Count > 4)
+                                {
+                                    <div class="text-end mt-1">
+                                        <a class="small text-muted" href="/missiontak/@m.Id">+@(tasks.Count - 4) altri →</a>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        </div>
+
+        <!-- Charts column -->
+        <div class="col-lg-5">
+            <h5 class="mb-3 fw-semibold">Distribuzione task</h5>
+            <div class="card mb-4">
+                <div class="card-body d-flex justify-content-center align-items-center" style="min-height:240px;">
+                    @if (_chartData != null)
+                    {
+                        <DoughnutChart @ref="_doughnutChart" Width="280" />
+                    }
+                    else
+                    {
+                        <span class="text-muted small">Nessun task disponibile</span>
+                    }
+                </div>
+            </div>
+
+            <!-- Prossimi GL -->
+            <h5 class="mb-3 fw-semibold">Prossime luci verdi</h5>
+            <div class="card">
+                <div class="card-body p-2">
+                    @{
+                        var upcoming = _allTasks
+                            .Where(t => t.GreenLightDateTime.HasValue && t.GreenLightDateTime.Value > DateTime.UtcNow
+                                        && t.Status is not TaskStatusTak.Completed and not TaskStatusTak.Canceled and not TaskStatusTak.Aborted and not TaskStatusTak.Failed)
+                            .OrderBy(t => t.GreenLightDateTime)
+                            .Take(6)
+                            .ToList();
+                    }
+                    @if (upcoming.Count == 0)
+                    {
+                        <p class="text-muted small mb-0 p-2">Nessuna luce verde in programma.</p>
+                    }
+                    else
+                    {
+                        @foreach (var t in upcoming)
+                        {
+                            var gl = LocalDt(t.GreenLightDateTime!.Value);
+                            var diff = t.GreenLightDateTime!.Value - DateTime.UtcNow;
+                            var mName = _missions.FirstOrDefault(m => m.Id == t.MissionTAKSuiteId)?.Name ?? "—";
+                            <div class="d-flex justify-content-between align-items-center px-2 py-1 border-bottom border-secondary-subtle">
+                                <div>
+                                    <div class="small fw-semibold">@t.Name</div>
+                                    <div class="text-muted" style="font-size:.75rem;">@mName · GL @gl.ToString("dd/MM HH:mm")</div>
+                                </div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="badge @(diff.TotalHours < 1 ? "bg-danger" : diff.TotalHours < 3 ? "bg-warning text-dark" : "bg-secondary")" style="font-size:.7rem;">
+                                        @FormatCountdown(diff)
+                                    </span>
+                                    <a href="/taskdetail/@t.Id" class="btn btn-sm btn-link p-0">
+                                        <Icon Name="IconName.ArrowRight" />
+                                    </a>
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
 
 @code {
-    private string nick;
+    private bool _loading = true;
+    private string? _nick;
+    private Team? _userTeam;
 
+    private List<MissionSuite> _missions = new();
+    private List<TaskEntity> _allTasks = new();
+    private Dictionary<Guid, List<TaskEntity>> _tasksByMission = new();
+
+    private DoughnutChart _doughnutChart = default!;
+    private ChartData? _chartData;
+    private DoughnutChartOptions _chartOptions = new()
+    {
+        Responsive = true,
+        Plugins = new() { Legend = new() { Position = "bottom" } }
+    };
+    private bool _chartInitialized;
 
     protected override async Task OnInitializedAsync()
     {
-        await User();
-        StateHasChanged();
-
-    }
-    private async Task User()
-    {
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        var user = await UserManager.GetUserAsync(authState.User);
-
-        if (user != null)
+        var appUser = await UserManager.GetUserAsync(authState.User);
+        if (appUser != null)
         {
-            var id = user.UserId; // Assumendo che "Nick" sia una proprietà di ApplicationUser
-            var atakUser = await _userServiceAtak.GetAsync(id);
-            
-            if (atakUser == null) return;
-            nick = atakUser.Nick;
+            var atakUser = await _userServiceAtak.GetAsync(appUser.UserId);
+            if (atakUser != null)
+            {
+                _nick = atakUser.Nick;
+                _userTeam = atakUser.Team;
+            }
         }
-        else
+
+        var allMissions = await MissionService.GetAllAsync();
+        _missions = allMissions
+            .Where(m => m.Status is not MissionStatusTak.Completed and not MissionStatusTak.Canceled and not MissionStatusTak.Archived)
+            .Where(m => _userTeam == null || m.TeamId == _userTeam.Id)
+            .ToList();
+
+        var missionIds = _missions.Select(m => m.Id).ToHashSet();
+        var allTasks = await TaskService.GetAllAsync();
+        _allTasks = allTasks.Where(t => t.MissionTAKSuiteId.HasValue && missionIds.Contains(t.MissionTAKSuiteId.Value)).ToList();
+
+        _tasksByMission = _allTasks
+            .GroupBy(t => t.MissionTAKSuiteId!.Value)
+            .ToDictionary(g => g.Key, g => g.OrderBy(t => t.GreenLightDateTime ?? t.StartDateTime ?? DateTime.MaxValue).ToList());
+
+        BuildChartData();
+        _loading = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_chartData != null && !_chartInitialized && _doughnutChart is not null)
         {
-            Console.WriteLine("Utente non trovato.");
+            _chartInitialized = true;
+            await _doughnutChart.InitializeAsync(_chartData, _chartOptions);
         }
     }
+
+    private void BuildChartData()
+    {
+        if (_allTasks.Count == 0) { _chartData = null; return; }
+
+        var grouped = _allTasks.GroupBy(t => t.Status).OrderBy(g => g.Key).ToList();
+        var colors = new[]
+        {
+            "rgba(57,255,20,0.85)",   "rgba(13,110,253,0.85)",  "rgba(25,135,84,0.85)",
+            "rgba(255,193,7,0.85)",   "rgba(220,53,69,0.85)",   "rgba(108,117,125,0.85)",
+            "rgba(253,126,20,0.85)",  "rgba(102,16,242,0.85)"
+        };
+        _chartData = new ChartData
+        {
+            Labels = grouped.Select(g => g.Key.GetDisplayName()).ToList(),
+            Datasets = new List<IChartDataset>
+            {
+                new DoughnutChartDataset
+                {
+                    Data = grouped.Select(g => (double?)g.Count()).ToList(),
+                    BackgroundColor = grouped.Select((_, i) => colors[i % colors.Length]).ToList()
+                }
+            }
+        };
+    }
+
+    private static string MissionStatusBadge(MissionStatusTak s) => s switch
+    {
+        MissionStatusTak.InProgress => "bg-success",
+        MissionStatusTak.Assigned   => "bg-primary text-dark",
+        MissionStatusTak.Paused     => "bg-warning text-dark",
+        MissionStatusTak.Stopped    => "bg-danger",
+        _                           => "bg-secondary"
+    };
+
+    private static IconName TaskStatusIcon(TaskStatusTak s) => s switch
+    {
+        TaskStatusTak.InProgress => IconName.PlayCircleFill,
+        TaskStatusTak.Completed  => IconName.CheckCircleFill,
+        TaskStatusTak.Assigned   => IconName.PersonFill,
+        TaskStatusTak.Scheduled  => IconName.CalendarCheck,
+        TaskStatusTak.Accepted   => IconName.HandThumbsUp,
+        _                        => IconName.Circle
+    };
+
+    private static string TaskStatusColor(TaskStatusTak s) => s switch
+    {
+        TaskStatusTak.InProgress => "#198754",
+        TaskStatusTak.Completed  => "#6c757d",
+        TaskStatusTak.Assigned   => "#0d6efd",
+        TaskStatusTak.Scheduled  => "#ffc107",
+        _                        => "#adb5bd"
+    };
+
+    private static string FormatCountdown(TimeSpan t)
+    {
+        if (t.TotalDays >= 1) return $"{(int)t.TotalDays}g {t.Hours:D2}h";
+        if (t.TotalHours >= 1) return $"{(int)t.TotalHours}h {t.Minutes:D2}m";
+        return $"{t.Minutes}m";
+    }
+
+    private static DateTime LocalDt(DateTime utc)
+        => DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToLocalTime();
 }

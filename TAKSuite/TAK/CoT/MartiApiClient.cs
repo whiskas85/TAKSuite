@@ -1,112 +1,53 @@
-﻿namespace TAKSuite.TAK.CoT
+namespace TAKSuite.TAK.CoT
 {
-    using TAKSuite.TAK.Helper;
-    using System;
-    using System.Net.Http;
-    using System.Security.Cryptography.X509Certificates;
-    using System.Xml;
-    using System.Threading.Tasks;
-    using Microsoft.Extensions.Configuration;
-    using TAKSuite.Components.Pages;
-    using System.Text.Json;
     using System.Text;
-    using System.Buffers.Text;
+    using System.Text.Json;
     using TAKSuite.Data.ModelsTak;
     using TAKSuite.Data.ServicesTak;
-    using System.Security.Cryptography;
+    using TAKSuite.TAK;
+    using TAKSuite.TAK.MartiApi;
+    using TakLib;
 
     public class MartiApiClient
     {
-        private readonly HttpClient client;
+        private readonly TakClientProvider _takProvider;
+        private readonly HttpClient _http;
         private readonly CachedDataService _cache;
 
-        public MartiApiClient(IConfiguration configuration, CachedDataService cacheService)
+        private TakClient TakClient =>
+            _takProvider.Client ?? throw new InvalidOperationException("TakClient non disponibile. Configurare il certificato nelle impostazioni TAK.");
+        private string CreatorUid => _takProvider.ClientUid;
+
+        public MartiApiClient(
+            TakClientProvider takProvider,
+            MartiHttpClientProvider httpProvider,
+            CachedDataService cacheService)
         {
-            _cache = cacheService;
-
-            var martiConfig = configuration.GetSection("MartiServer");
-            string serverIp = martiConfig["Ip"] ?? throw new ArgumentNullException("IP non configurato.");
-            int serverPort = int.TryParse(martiConfig["Port"], out int port) ? port : throw new ArgumentException("Porta non valida.");
-            string certPath = martiConfig["CertPath"] ?? throw new ArgumentNullException("Percorso certificato non configurato.");
-            string certPassword = martiConfig["CertPassword"] ?? "";
-
-            try
-            {
-                // Carica il certificato client
-                var cert = new X509Certificate2(certPath, certPassword,
-                    X509KeyStorageFlags.UserKeySet | X509KeyStorageFlags.PersistKeySet | X509KeyStorageFlags.Exportable);
-
-                // Configura il gestore HTTP con il certificato client
-                var handler = new HttpClientHandler();
-                handler.ClientCertificates.Add(cert);
-                handler.ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true; // ⚠️ NON sicuro in produzione
-
-                client = new HttpClient(handler)
-                {
-                    BaseAddress = new Uri($"https://{serverIp}:{serverPort}/")
-                };
-
-                Console.WriteLine("Certificato caricato con successo!");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Errore durante il caricamento del certificato: {ex.Message}");
-                throw;
-            }
-        }
-        public async Task<string?> TestDataAsync(string missionName)
-        {
-            try
-            {
-                string url = $"Marti/api/datafeeds";
-                HttpResponseMessage response = await client.GetAsync(url);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    var res = response.Content.ReadAsStringAsync();
-                    return await res;
-                }
-
-                Console.WriteLine($"Errore HTTP: {response.StatusCode}");
-                return null;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Eccezione nella richiesta: {ex.Message}");
-                return null;
-            }
+            _takProvider = takProvider;
+            _http        = httpProvider.HttpClient;
+            _cache       = cacheService;
         }
 
+        // ── Lista missioni ────────────────────────────────────────────────────
 
         public async Task<List<MissionAtak>> GetAllMissionsDataAsync()
         {
             try
             {
-                //TestDataAsync(missionName);
-
-                string url = $"Marti/api/missions/";
-                HttpResponseMessage response = await client.GetAsync(url);
-
-                if (response.IsSuccessStatusCode)
+                var response = await _http.GetAsync("Marti/api/missions/");
+                if (!response.IsSuccessStatusCode)
                 {
-                    var res = response.Content.ReadAsStringAsync();
-                    var json = res.Result;
-                    
-                    var data = JsonSerializer.Deserialize<MissionsRoot>(json, new JsonSerializerOptions
-                    {
-                        PropertyNameCaseInsensitive = true
-                    });
-                    var missionList = data.Data.ToList();
-
-                    return missionList; 
+                    Console.WriteLine($"Errore HTTP GetAllMissions: {response.StatusCode}");
+                    return null;
                 }
-
-                Console.WriteLine($"Errore HTTP: {response.StatusCode}");
-                return null;
+                var json = await response.Content.ReadAsStringAsync();
+                var data = JsonSerializer.Deserialize<MissionsRoot>(json,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                return data?.Data?.ToList();
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Eccezione nella richiesta: {ex.Message}");
+                Console.WriteLine($"Eccezione GetAllMissions: {ex.Message}");
                 return null;
             }
         }
@@ -115,29 +56,14 @@
         {
             try
             {
-                string url = $"Marti/api/missions/{missionName}";
-                HttpResponseMessage response = await client.GetAsync(url);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    var res = response.Content.ReadAsStringAsync();
-                    var json = res.Result;
-
-                    var mission = JsonSerializer.Deserialize<MissionsRoot>(json, new JsonSerializerOptions
-                    {
-                        PropertyNameCaseInsensitive = true
-                    });
-                    var missionList = mission.Data[0].Uids.ToList();
-
-                    return missionList;
-                }
-
-                Console.WriteLine($"Errore HTTP: {response.StatusCode}");
-                return null;
+                var json    = await TakClient.GetMissionRawAsync(missionName);
+                var mission = JsonSerializer.Deserialize<MissionsRoot>(json,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                return mission?.Data?[0]?.Uids?.ToList();
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Eccezione nella richiesta: {ex.Message}");
+                Console.WriteLine($"Eccezione GetAllMissionsUid: {ex.Message}");
                 return null;
             }
         }
@@ -146,275 +72,39 @@
         {
             try
             {
-                //TestDataAsync(missionName);
-
-                string url = $"Marti/api/missions/{missionName}/";
-                HttpResponseMessage response = await client.GetAsync(url);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    var res = response.Content.ReadAsStringAsync();
-                    return await res;
-                }
-
-                Console.WriteLine($"Errore HTTP: {response.StatusCode}");
-                return null;
+                return await TakClient.GetMissionRawAsync(missionName);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Eccezione nella richiesta: {ex.Message}");
+                Console.WriteLine($"Eccezione GetMissionData: {ex.Message}");
                 return null;
             }
         }
 
+        // ── File ─────────────────────────────────────────────────────────────
 
         public async Task<AtakAttachment?> GetFileAsync(string fileHash)
         {
             try
             {
-                string url = $"Marti/api/files/{fileHash}";
-                HttpResponseMessage response = await client.GetAsync(url);
-
-
-
-                if (response.IsSuccessStatusCode)
+                var response = await _http.GetAsync($"Marti/api/files/{fileHash}");
+                if (!response.IsSuccessStatusCode)
                 {
-                    AtakAttachment atc = new AtakAttachment();
-                    var cd = response.Content.Headers.ContentDisposition;
-                    atc.Name = (cd?.FileName ?? cd?.FileNameStar ?? fileHash).Trim('"');
-                    atc.MediaType = response.Content.Headers.ContentType?.MediaType?.Trim('"');
-
-                    byte[] fileBytes = await response.Content.ReadAsByteArrayAsync();
-                    atc.FileBytes = fileBytes;
-
-                    return atc;
+                    Console.WriteLine($"Errore HTTP GetFile: {response.StatusCode}");
+                    return null;
                 }
-
-                Console.WriteLine($"Errore HTTP: {response.StatusCode}");
-                return null;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Eccezione nella richiesta: {ex.Message}");
-                return null;
-            }
-        }
-        public async Task<string?> GetInfoAsync(string uid)
-        {
-            if(_cache!=null)
-            {
-                var message = _cache.Get(uid);
-                if (message!= null)
+                var cd = response.Content.Headers.ContentDisposition;
+                return new AtakAttachment
                 {
-                    return message;
-                }
-            }
-
-            try
-            {
-                string url = $"Marti/api/cot/xml/{uid}";
-                HttpResponseMessage response = await client.GetAsync(url);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    return await response.Content.ReadAsStringAsync();
-                }
-
-                Console.WriteLine($"Errore HTTP: {response.StatusCode}");
-                return null;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Eccezione nella richiesta: {ex.Message}");
-                return null;
-            }
-        }
-        public async Task<EventData> GetInfoOblectAsync(string uid)
-        {
-            try
-            {
-                string url = $"Marti/api/cot/xml/{uid}";
-                HttpResponseMessage response = await client.GetAsync(url);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    var message = await response.Content.ReadAsStringAsync();
-                    EventData eventData = EventData.LoadFromString(message);
-
-
-                    return eventData;
-                }
-
-                Console.WriteLine($"Errore HTTP: {response.StatusCode}");
-                return null;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Eccezione nella richiesta: {ex.Message}");
-                return null;
-            }
-        }
-
-        public async Task<bool> ChangeCotColor(string uid, int newColor)
-        {
-            try
-            {
-                var response = await GetInfoAsync(uid);
-                if (response == null) return false;
-
-                XmlDocument doc = new XmlDocument();
-                doc.LoadXml(response);
-
-                ATAKHelper.ChangeSpotmapColor(doc, newColor);
-
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Eccezione nella modifica del colore: {ex.Message}");
-                return false;
-            }
-        }
-
-        internal async Task<bool> UpdateMissionUidAsync(string missionUid, IEnumerable<string> uidsList)
-        {
-
-            try
-            {
-                string url = $"Marti/api/missions/{missionUid}/contents";
-
-                string[] uids = uidsList.ToArray(); 
-                var requestBody = new
-                {
-                    uids
+                    Name      = (cd?.FileName ?? cd?.FileNameStar ?? fileHash).Trim('"'),
+                    MediaType = response.Content.Headers.ContentType?.MediaType?.Trim('"'),
+                    FileBytes = await response.Content.ReadAsByteArrayAsync()
                 };
-
-                string json = JsonSerializer.Serialize(requestBody);
-                var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-                HttpResponseMessage response = await client.PutAsync(url, content);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    return true;
-                    //return await response.Content.ReadAsStringAsync();
-                }
-
-                Console.WriteLine($"Errore HTTP: {response.StatusCode}, {response.Content}");
-                return false;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Eccezione nella richiesta: {ex.Message}");
-                return false;
-            }
-        }
-        internal async Task<bool> UpdateMissionUidAsync(string missionUid,string uid)
-        {
-
-            try
-            {
-                string url = $"Marti/api/missions/{missionUid}/contents";
-
-                var requestBody = new
-                {
-                    uids = new[] { uid } // Sostituisci "uid" con il valore corretto
-                };
-
-                string json = JsonSerializer.Serialize(requestBody);
-                var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-                HttpResponseMessage response = await client.PutAsync(url, content);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    return true;
-                    //return await response.Content.ReadAsStringAsync();
-                }
-
-                Console.WriteLine($"Errore HTTP: {response.StatusCode}, {response.Content}");
-                return false;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Eccezione nella richiesta: {ex.Message}");
-                return false;
-            }
-        }
-
-
-        internal async Task<bool> DeleteMissionContentAsync(string missionUid, string hash)
-        {
-
-            try
-            {
-                string url = $"/Marti/api/missions/{missionUid}/contents?hash={hash}";
-                HttpResponseMessage response = await client.DeleteAsync(url);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    return true;
-                    //return await response.Content.ReadAsStringAsync();
-                }
-
-                Console.WriteLine($"Errore HTTP: {response.StatusCode}, {response.Content}");
-                return false;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Eccezione nella richiesta: {ex.Message}");
-                return false;
-            }
-        }
-
-        internal async Task<bool> DeleteMissionUidAsync(string missionUid, string uid)
-        {
-
-            try
-            {
-                string url = $"/Marti/api/missions/{missionUid}/contents?uid={uid}";
-                HttpResponseMessage response = await client.DeleteAsync(url);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    return true;
-                    //return await response.Content.ReadAsStringAsync();
-                }
-
-                Console.WriteLine($"Errore HTTP: {response.StatusCode}, {response.Content}");
-                return false;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Eccezione nella richiesta: {ex.Message}");
-                return false;
-            }
-        }
-
-
-
-        internal async Task<bool> DeleteAttachmentAsync(string mission, string fileHash)
-        {
-            try
-            {
-                var res = await DeleteMissionContentAsync(mission, fileHash);
-
-
-                string url = $"Marti/api/files/{fileHash}";
-                HttpResponseMessage response = await client.DeleteAsync(url);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    return true;
-                }
-
-                Console.WriteLine($"Errore HTTP: {response.StatusCode}");
-                return false;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Eccezione nella richiesta: {ex.Message}");
-                return false;
+                Console.WriteLine($"Eccezione GetFile: {ex.Message}");
+                return null;
             }
         }
 
@@ -423,97 +113,222 @@
             try
             {
                 var url = $"Marti/sync/upload?name={Uri.EscapeDataString(filename)}";
-
                 using var form = new MultipartFormDataContent();
                 var fileContent = new ByteArrayContent(content);
-                fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+                fileContent.Headers.ContentType =
+                    new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
                 form.Add(fileContent, "assetfile", filename);
 
-                var response = await client.PostAsync(url, form);
-
-                if (response.IsSuccessStatusCode)
+                var response = await _http.PostAsync(url, form);
+                if (!response.IsSuccessStatusCode)
                 {
-                    var body = (await response.Content.ReadAsStringAsync()).Trim();
-                    // Server returns a JSON Resource object with a "hash" field
-                    using var doc = JsonDocument.Parse(body);
-                    if (doc.RootElement.TryGetProperty("hash", out var hashEl))
-                        return hashEl.GetString()?.Trim('"').Trim();
-                    // Fallback: plain hash string
-                    return body.Trim('"');
+                    Console.WriteLine($"Errore HTTP UploadFile: {response.StatusCode}");
+                    return null;
                 }
-
-                Console.WriteLine($"Errore HTTP upload file: {response.StatusCode} - {await response.Content.ReadAsStringAsync()}");
-                return null;
+                var body = (await response.Content.ReadAsStringAsync()).Trim();
+                using var doc = JsonDocument.Parse(body);
+                if (doc.RootElement.TryGetProperty("hash", out var hashEl))
+                    return hashEl.GetString()?.Trim('"').Trim();
+                return body.Trim('"');
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Eccezione upload file: {ex.Message}");
+                Console.WriteLine($"Eccezione UploadFile: {ex.Message}");
                 return null;
             }
         }
 
-        internal async Task<bool> SubscribeMissionAsync(string missionUid)
+        public async Task<bool> AddFileToMissionAsync(string missionName, string hash)
         {
             try
             {
-                string url = $"Marti/api/missions/subscriptions/add";
-
-                var requestBody = new
-                {
-                    uid = "tls:372",               // Identificativo del client
-                    protocol = "tls",     // Protocollo usato (es. "tls")
-                    subaddr = "10.147.19.211",       // Indirizzo a cui inviare i dati
-                    subport = 1234,       // Porta di destinazione
-                    //to = "",                 // Valore non specificato, puoi definirlo
-                    //xpath = "",              // Valore non specificato, puoi definirlo
-                    //filterGroups = "",       // Valore non specificato, puoi definirlo
-                    //iface = ""               // Valore non specificato, puoi definirlo
-                };
-
-                string json = JsonSerializer.Serialize(requestBody);
-                var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-                HttpResponseMessage response = await client.PostAsync(url, content);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    Console.WriteLine("✅ Sottoscrizione alla missione avvenuta con successo!");
-                    return true;
-                }
-
-                Console.WriteLine($"❌ Errore HTTP: {response.StatusCode}, {await response.Content.ReadAsStringAsync()}");
-                return false;
+                var url  = $"Marti/api/missions/{Uri.EscapeDataString(missionName)}/contents";
+                var body = JsonSerializer.Serialize(new { hashes = new[] { hash } });
+                var resp = await _http.PutAsync(url, new StringContent(body, Encoding.UTF8, "application/json"));
+                return resp.IsSuccessStatusCode;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"❌ Eccezione nella richiesta: {ex.Message}");
+                Console.WriteLine($"Eccezione AddFileToMission: {ex.Message}");
                 return false;
             }
         }
 
-        internal async Task<bool> UnsubscribeMissionAsync(string missionUid)
+        public async Task<string?> UploadFileToMissionAsync(string missionName, byte[] content, string filename, string contentType = "application/octet-stream")
         {
+            var hash = await UploadFileAsync(content, filename, contentType);
+            if (string.IsNullOrEmpty(hash)) return null;
+            await AddFileToMissionAsync(missionName, hash);
+            return hash;
+        }
+
+        // ── CoT ──────────────────────────────────────────────────────────────
+
+        public async Task<string?> GetInfoAsync(string uid)
+        {
+            if (_cache != null)
+            {
+                var cached = _cache.Get(uid);
+                if (cached != null) return cached;
+            }
             try
             {
-                string url = $"Marti/api/subscriptions/delete/TAKSuitePortalServer";
-                HttpResponseMessage response = await client.DeleteAsync(url);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    return true;
-                    //return await response.Content.ReadAsStringAsync();
-                }
-
-                Console.WriteLine($"Errore HTTP: {response.StatusCode}, {response.Content}");
-                return false;
+                return await TakClient.GetCotByUidAsync(uid);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Eccezione nella richiesta: {ex.Message}");
+                Console.WriteLine($"Eccezione GetInfo: {ex.Message}");
+                return null;
+            }
+        }
+
+        public async Task<EventData?> GetInfoOblectAsync(string uid)
+        {
+            try
+            {
+                var xml = await TakClient.GetCotByUidAsync(uid);
+                return EventData.LoadFromString(xml);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Eccezione GetInfoObject: {ex.Message}");
+                return null;
+            }
+        }
+
+        public async Task<bool> SubmitCotAsync(string xml)
+        {
+            try
+            {
+                var url      = $"Marti/sync/cot?creatorUid={CreatorUid}";
+                var content  = new StringContent(xml, Encoding.UTF8, "application/xml");
+                var response = await _http.PostAsync(url, content);
+                return response.IsSuccessStatusCode;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Eccezione SubmitCot: {ex.Message}");
+                return false;
+            }
+        }
+
+        // ── Contenuti missione ────────────────────────────────────────────────
+
+        internal async Task<bool> UpdateMissionUidAsync(string missionUid, IEnumerable<string> uidsList)
+        {
+            try
+            {
+                await TakClient.AddUidsToMissionAsync(missionUid, uidsList, CreatorUid);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Eccezione UpdateMissionUid(list): {ex.Message}");
+                return false;
+            }
+        }
+
+        internal async Task<bool> UpdateMissionUidAsync(string missionUid, string uid)
+        {
+            try
+            {
+                await TakClient.AddUidsToMissionAsync(missionUid, new[] { uid }, CreatorUid);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Eccezione UpdateMissionUid: {ex.Message}");
+                return false;
+            }
+        }
+
+        internal async Task<bool> DeleteMissionContentAsync(string missionUid, string hash)
+        {
+            try
+            {
+                var response = await _http.DeleteAsync(
+                    $"/Marti/api/missions/{missionUid}/contents?hash={hash}");
+                return response.IsSuccessStatusCode;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Eccezione DeleteMissionContent: {ex.Message}");
+                return false;
+            }
+        }
+
+        internal async Task<bool> DeleteMissionUidAsync(string missionUid, string uid)
+        {
+            try
+            {
+                await TakClient.RemoveUidFromMissionAsync(missionUid, uid, CreatorUid);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Eccezione DeleteMissionUid: {ex.Message}");
+                return false;
+            }
+        }
+
+        internal async Task<bool> DeleteAttachmentAsync(string mission, string fileHash)
+        {
+            try
+            {
+                await DeleteMissionContentAsync(mission, fileHash);
+                var response = await _http.DeleteAsync($"Marti/api/files/{fileHash}");
+                return response.IsSuccessStatusCode;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Eccezione DeleteAttachment: {ex.Message}");
+                return false;
+            }
+        }
+
+        internal async Task<bool> SendMissionAsync(string missionName)
+        {
+            try
+            {
+                var url      = $"Marti/api/missions/{Uri.EscapeDataString(missionName)}/send?creatorUid={CreatorUid}";
+                var response = await _http.PostAsync(url, null);
+                return response.IsSuccessStatusCode;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Eccezione SendMission: {ex.Message}");
+                return false;
+            }
+        }
+
+        // ── Subscription ─────────────────────────────────────────────────────
+
+        public async Task<bool> SubscribeMissionAsync(string missionName)
+        {
+            try
+            {
+                await TakClient.SubscribeAsync(missionName, CreatorUid);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Eccezione SubscribeMission: {ex.Message}");
+                return false;
+            }
+        }
+
+        public async Task<bool> UnsubscribeMissionAsync(string missionName)
+        {
+            try
+            {
+                await TakClient.UnsubscribeAsync(missionName, CreatorUid);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Eccezione UnsubscribeMission: {ex.Message}");
                 return false;
             }
         }
     }
 }
-
-

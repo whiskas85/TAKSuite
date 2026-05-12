@@ -6,10 +6,21 @@
 @using TAKSuite.Components.Pages.Tasks.TaskComponents
 @using TAKSuite.Data.Models
 @using TAKSuite.Data.Services
+@using TAKSuite.Data.ModelsTak
+@using TAKSuite.Data.ServicesTak
+@using TAKSuite.TAK.Helper
+@using TAKSuite.TAK.CoT
+@using TAKSuite.Helper
 @inject MissionSuiteEntityServices entityService
 @inject TaskService service
 @inject NavigationManager Navigation
 @inject ToastService ToastService
+@inject WaypointService WaypointService
+@inject AttachmentService AttachmentService
+@inject CoTManager CoTManager
+@inject IJSRuntime JS
+@inject TAKSuite.TAK.CoT.MartiApiClient MartiClient
+@inject TAKSuite.Data.Services.TakSubscriptionService SubscriptionService
 
 <PageTitle>@missionTak?.Name</PageTitle>
 @if (missionTak == null)
@@ -18,6 +29,56 @@
 }
 else
 {
+    <!-- Add POI modal -->
+    <ModalAddPoi @ref="_addPoiModal"
+                 MissionTakUid="@missionTak.TakMissionUid"
+                 OnPoiCreated="OnPoiCreated" />
+
+    <!-- Import from AI modal -->
+    <ModalImportFromAi @ref="_importAiModal"
+                       MissionTakSuiteId="@MissionTakId"
+                       MissionTakUid="@missionTak.TakMissionUid"
+                       OnImportCompleted="OnAiImportCompleted" />
+
+    <!-- Allegati waypoint modal -->
+    <Modal @ref="_wpAttachmentModal" Title="Allegati waypoint" Size="ModalSize.Large">
+        <BodyTemplate>
+            <Grid TItem="AtakAttachment"
+                  Class="table table-hover"
+                  HeaderRowCssClass="bg-success text-white border-bottom-0"
+                  DataProvider="WpAttachmentDataProvider"
+                  AllowFiltering="false"
+                  AllowPaging="false"
+                  AllowSorting="true"
+                  Responsive="true">
+                <GridColumns>
+                    <GridColumn TItem="AtakAttachment" HeaderText="Nome" SortKeySelector="x => x.Name">
+                        @context.Name
+                    </GridColumn>
+                    <GridColumn TItem="AtakAttachment" HeaderText="">
+                        <Button Size="ButtonSize.Small" @onclick="() => DownloadWpAttachment(context)">
+                            @if (context.MediaType?.Contains("jpeg") == true)
+                            {
+                                <Icon Name="IconName.FileEarmarkImage" Color="IconColor.Primary" />
+                            }
+                            else if (context.MediaType?.Contains("pdf") == true)
+                            {
+                                <Icon Name="IconName.FileEarmarkPdfFill" Color="IconColor.Primary" />
+                            }
+                            else
+                            {
+                                <Icon Name="IconName.FileEarmarkArrowDownFill" Color="IconColor.Primary" />
+                            }
+                        </Button>
+                    </GridColumn>
+                </GridColumns>
+            </Grid>
+        </BodyTemplate>
+        <FooterTemplate>
+            <Button Color="ButtonColor.Secondary" @onclick="() => _wpAttachmentModal.HideAsync()">Chiudi</Button>
+        </FooterTemplate>
+    </Modal>
+
     <!-- GL Modal -->
     <Modal @ref="_glModal" Title="@($"Luce Verde — {_editingGlTask?.Name}")">
         <BodyTemplate>
@@ -120,24 +181,49 @@ else
                     </li>
                     <li class="list-group-item d-flex justify-content-between">
                         <span class="text-muted">Task totali</span>
-                        <Badge Color="BadgeColor.Secondary">@_tasks.Count</Badge>
+                        <span class="d-flex gap-1 align-items-center">
+                            <Badge Color="BadgeColor.Secondary">@_tasks.Count</Badge>
+                            @if (_completedObjectives.Count > 0)
+                            {
+                                <Badge Color="BadgeColor.Success">@_completedObjectives.Count completati</Badge>
+                            }
+                        </span>
                     </li>
+                    @if (!string.IsNullOrEmpty(missionTak.TakMissionUid))
+                    {
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span class="text-muted">Waypoints</span>
+                            <span class="d-flex gap-1 align-items-center">
+                                <Badge Color="BadgeColor.Secondary">@(_activeWaypoints.Count + _completedWaypoints.Count) totali</Badge>
+                                @if (_completedWaypoints.Count > 0)
+                                {
+                                    <Badge Color="BadgeColor.Success">@_completedWaypoints.Count completati</Badge>
+                                }
+                            </span>
+                        </li>
+                    }
                     <li class="list-group-item d-flex justify-content-between">
                         <span class="text-muted">TAK Mission UID</span>
                         <span class="font-monospace small">@(missionTak.TakMissionUid ?? "N/D")</span>
                     </li>
-                    @if (missionTak.StartDateTime.HasValue)
+                    @if (missionTak.StartDateTime.HasValue || missionTak.EndDateTime.HasValue)
                     {
                         <li class="list-group-item d-flex justify-content-between">
-                            <span class="text-muted">Inizio</span>
-                            <span>@ToLocalDisplay(missionTak.StartDateTime.Value)</span>
-                        </li>
-                    }
-                    @if (missionTak.EndDateTime.HasValue)
-                    {
-                        <li class="list-group-item d-flex justify-content-between">
-                            <span class="text-muted">Fine</span>
-                            <span>@ToLocalDisplay(missionTak.EndDateTime.Value)</span>
+                            <span class="text-muted">Periodo</span>
+                            <span class="text-end lh-1">
+                                @if (missionTak.StartDateTime.HasValue)
+                                {
+                                    <span>@ToLocalDisplay(missionTak.StartDateTime.Value)</span>
+                                }
+                                @if (missionTak.StartDateTime.HasValue && missionTak.EndDateTime.HasValue)
+                                {
+                                    <span class="text-muted mx-1">→</span>
+                                }
+                                @if (missionTak.EndDateTime.HasValue)
+                                {
+                                    <span>@ToLocalDisplay(missionTak.EndDateTime.Value)</span>
+                                }
+                            </span>
                         </li>
                     }
                 </ul>
@@ -156,6 +242,25 @@ else
                         <span class="text-muted">Nessun task</span>
                     }
                 </div>
+                @{
+                    var totalItems = _tasks.Count + _activeWaypoints.Count + _completedWaypoints.Count;
+                    var completedItems = _completedObjectives.Count + _completedWaypoints.Count;
+                    var pct = totalItems > 0 ? (int)Math.Round(completedItems * 100.0 / totalItems) : 0;
+                }
+                @if (totalItems > 0)
+                {
+                    <div class="card-footer">
+                        <div class="d-flex justify-content-between small text-muted mb-1">
+                            <span>Completamento missione</span>
+                            <span>@completedItems / @totalItems (@pct%)</span>
+                        </div>
+                        <div class="progress" style="height: 10px;">
+                            <div class="progress-bar bg-success" role="progressbar"
+                                 style="width: @(pct)%;"
+                                 aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                    </div>
+                }
             </div>
         </div>
     </div>
@@ -176,13 +281,14 @@ else
             @for (int i = 0; i < _activeObjectives.Count; i++)
             {
                 var task = _activeObjectives[i];
-                var glEnd = task.GreenLightDateTime.HasValue && task.Durata.HasValue
+                var glEnd = (task.GreenLightDateTime.HasValue && task.Durata is > 0)
                     ? task.GreenLightDateTime.Value.AddMinutes(task.Durata.Value)
                     : (DateTime?)null;
                 var nowUtc = DateTime.UtcNow;
                 var inGlWindow = task.GreenLightDateTime.HasValue
+                    && task.Durata is > 0
                     && nowUtc >= task.GreenLightDateTime.Value
-                    && (glEnd == null || nowUtc < glEnd.Value);
+                    && nowUtc < glEnd!.Value;
                 var glRemaining = (inGlWindow && glEnd.HasValue) ? glEnd.Value - nowUtc : (TimeSpan?)null;
 
                 @if (i > 0)
@@ -232,6 +338,10 @@ else
                             }
                         </div>
                         <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                            @if (task.Durata is > 0)
+                            {
+                                <span class="badge bg-secondary fw-normal" style="font-size:.75em;">@task.Durata min</span>
+                            }
                             @if (task.GreenLightDateTime.HasValue)
                             {
                                 <span class="text-success small fw-semibold text-end lh-1">
@@ -265,6 +375,8 @@ else
                             <MissionTimelineBar
                                 MissionStart="missionTak.StartDateTime!.Value"
                                 MissionEnd="missionTak.EndDateTime!.Value"
+                                Windows="@(task.TimeWindows.Count > 0 ? task.TimeWindows : null)"
+                                Durata="task.Durata"
                                 TaskStart="task.StartDateTime"
                                 TaskEnd="task.EndDateTime"
                                 GreenLight="task.GreenLightDateTime"
@@ -277,6 +389,109 @@ else
             }
         </div>
     </div>
+
+    <!-- Waypoints TAK -->
+    @if (!string.IsNullOrEmpty(missionTak.TakMissionUid))
+    {
+        <div class="row g-3 mb-4">
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header fw-bold d-flex justify-content-between align-items-center">
+                        <span>Waypoints attivi (@_activeWaypoints.Count)</span>
+                        <div class="d-flex gap-1">
+                            <Button Size="ButtonSize.Small" Color="ButtonColor.Secondary" Outline="true"
+                                    @onclick="async () => await _importAiModal.ShowAsync()">
+                                <Icon Name="IconName.Stars" /> Importa da AI
+                            </Button>
+                            <Button Size="ButtonSize.Small" Color="ButtonColor.Primary"
+                                    @onclick="async () => await _addPoiModal.ShowAsync()">
+                                <Icon Name="IconName.GeoFill" /> Aggiungi POI
+                            </Button>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        @if (_activeWaypoints.Any())
+                        {
+                            <ul class="list-group list-group-flush">
+                                @foreach (var wp in _activeWaypoints)
+                                {
+                                    <li class="list-group-item d-flex align-items-center gap-2">
+                                        @if (wp.Color.HasValue)
+                                        {
+                                            <div style="width:14px;height:14px;border-radius:50%;background-color:@ColorConverterHelper.ArgbToHex(wp.Color.Value);border:1px solid #888;flex-shrink:0;"></div>
+                                        }
+                                        <span class="fw-semibold">@wp.Callsign</span>
+                                        <div class="ms-auto d-flex gap-1">
+                                            <Button Size="ButtonSize.Small" Color="ButtonColor.Secondary" Position="Position.Relative"
+                                                    @onclick="async () => await OpenWpAttachments(wp)">
+                                                <Icon Name="IconName.Paperclip" />
+                                                @if (wp.AttachmentUidList.Count > 0)
+                                                {
+                                                    <Badge Color="BadgeColor.Danger"
+                                                           Position="Position.Absolute"
+                                                           Placement="BadgePlacement.TopRight"
+                                                           IndicatorType="BadgeIndicatorType.RoundedPill">
+                                                        @wp.AttachmentUidList.Count
+                                                    </Badge>
+                                                }
+                                            </Button>
+                                            <Button Size="ButtonSize.Small" Color="ButtonColor.Success"
+                                                    @onclick="async () => await CompleteWaypointAsync(wp)">
+                                                <Icon Name="IconName.CheckLg" />
+                                            </Button>
+                                        </div>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                        else
+                        {
+                            <div class="text-center text-muted py-3">Nessun waypoint attivo</div>
+                        }
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header fw-bold text-muted">
+                        Waypoints completati (@_completedWaypoints.Count)
+                    </div>
+                    <div class="card-body p-0">
+                        @if (_completedWaypoints.Any())
+                        {
+                            <ul class="list-group list-group-flush">
+                                @foreach (var wp in _completedWaypoints)
+                                {
+                                    <li class="list-group-item d-flex align-items-center gap-2 text-muted">
+                                        <div style="width:14px;height:14px;border-radius:50%;background-color:#8c8c8c;border:1px solid #666;flex-shrink:0;"></div>
+                                        <span>@wp.Callsign</span>
+                                        @if (wp.AttachmentUidList.Count > 0)
+                                        {
+                                            <Button Size="ButtonSize.Small" Color="ButtonColor.Secondary" Position="Position.Relative"
+                                                    Class="ms-auto"
+                                                    @onclick="async () => await OpenWpAttachments(wp)">
+                                                <Icon Name="IconName.Paperclip" />
+                                                <Badge Color="BadgeColor.Danger"
+                                                       Position="Position.Absolute"
+                                                       Placement="BadgePlacement.TopRight"
+                                                       IndicatorType="BadgeIndicatorType.RoundedPill">
+                                                    @wp.AttachmentUidList.Count
+                                                </Badge>
+                                            </Button>
+                                        }
+                                    </li>
+                                }
+                            </ul>
+                        }
+                        else
+                        {
+                            <div class="text-center text-muted py-3">Nessun waypoint completato</div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
 
     <!-- Obiettivi completati -->
     <div class="card">
@@ -358,6 +573,15 @@ else
     private List<TaskEntity> _completedObjectives = new();
     private bool _hasMissionWindow;
 
+    private List<Waypoint> _activeWaypoints = new();
+    private List<Waypoint> _completedWaypoints = new();
+
+    // Waypoint attachments + POI + AI import
+    private Modal _wpAttachmentModal = default!;
+    private ModalAddPoi _addPoiModal = default!;
+    private ModalImportFromAi _importAiModal = default!;
+    private string? _selectedWpUid;
+
     private void ComputeView()
     {
         _activeObjectives = _tasks
@@ -373,13 +597,19 @@ else
         _hasMissionWindow = missionTak?.StartDateTime.HasValue == true && missionTak.EndDateTime.HasValue;
     }
 
+    private DateTime _lastCoTRefreshWp = DateTime.MinValue;
+    private DateTime _lastCoTRefreshTasks = DateTime.MinValue;
+
     protected override async Task OnInitializedAsync()
     {
         await base.OnInitializedAsync();
+        CoTManager.CoTMessageReceived += OnCoTMessage;
         missionTak = await entityService.GetAsync(MissionTakId);
+        await AutoSubscribeIfNeededAsync(missionTak?.TakMissionUid);
         _tasks = await LoadData();
         ComputeView();
         BuildChartData();
+        await LoadWaypointsAsync();
         StartTimerIfNeeded();
         StateHasChanged();
     }
@@ -436,11 +666,12 @@ else
         if (task.GreenLightDateTime.HasValue)
         {
             var gs = task.GreenLightDateTime.Value;
-            DateTime? ge = task.Durata.HasValue ? gs.AddMinutes(task.Durata.Value) : null;
+            if (task.Durata is 0 && now >= gs) return "GL terminata";
+            DateTime? ge = (task.Durata is > 0) ? gs.AddMinutes(task.Durata.Value) : null;
             if (now < gs) return $"GL tra {FormatTs(gs - now)}";
             if (ge.HasValue && now < ge.Value) return $"GL — {FormatTs(ge.Value - now)}";
-            if (!ge.HasValue) return "LUCE VERDE";
-            return "GL terminata";
+            if (ge.HasValue) return "GL terminata";
+            return "LUCE VERDE";
         }
         if (task.EndDateTime.HasValue)
         {
@@ -456,9 +687,11 @@ else
         if (task.GreenLightDateTime.HasValue)
         {
             var gs = task.GreenLightDateTime.Value;
-            DateTime? ge = task.Durata.HasValue ? gs.AddMinutes(task.Durata.Value) : null;
-            if (now >= gs && (!ge.HasValue || now < ge.Value)) return "bg-success";
+            if (task.Durata is 0 && now >= gs) return "bg-secondary";
+            DateTime? ge = (task.Durata is > 0) ? gs.AddMinutes(task.Durata.Value) : null;
+            if (ge.HasValue && now >= gs && now < ge.Value) return "bg-success";
             if (ge.HasValue && now >= ge.Value) return "bg-secondary";
+            if (now >= gs) return "bg-info";
             return "bg-warning text-dark";
         }
         if (task.EndDateTime.HasValue && now >= task.EndDateTime.Value) return "bg-secondary";
@@ -560,8 +793,133 @@ else
         };
     }
 
+    private async Task CompleteWaypointAsync(Waypoint wp)
+    {
+        await CoTManager.ChangeCotColor(missionTak!.TakMissionUid!, wp.Uid, ATAKHelper.COLOR_WAYPOINT_COMPLETED);
+        await LoadWaypointsAsync();
+        StateHasChanged();
+    }
+
+    private async Task LoadWaypointsAsync()
+    {
+        if (string.IsNullOrEmpty(missionTak?.TakMissionUid)) return;
+        try
+        {
+            var wps = await WaypointService.GetAllWaypointsAsync(missionTak.TakMissionUid);
+            _activeWaypoints = wps
+                .Where(w => w.Color != ATAKHelper.COLOR_WAYPOINT_COMPLETED)
+                .OrderBy(w => w.Callsign)
+                .ThenBy(w => w.Color)
+                .ToList();
+            _completedWaypoints = wps
+                .Where(w => w.Color == ATAKHelper.COLOR_WAYPOINT_COMPLETED)
+                .OrderBy(w => w.Callsign)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Errore caricamento waypoints: {ex.Message}");
+        }
+    }
+
+    private async Task OnPoiCreated(ModalAddPoi.PoiResult result)
+    {
+        await LoadWaypointsAsync();
+        StateHasChanged();
+    }
+
+    private async Task OnAiImportCompleted(ModalImportFromAi.ImportResult result)
+    {
+        if (result.WpCount > 0)
+            await LoadWaypointsAsync();
+        if (result.ObjCount > 0)
+        {
+            _tasks = await LoadData();
+            ComputeView();
+            BuildChartData();
+        }
+        if (result.WpCount > 0 || result.ObjCount > 0)
+        {
+            ToastService.Notify(new(ToastType.Success, "Importazione AI",
+                $"{result.WpCount} WP e {result.ObjCount} obiettivi importati."));
+        }
+        StateHasChanged();
+    }
+
+    private async Task OpenWpAttachments(Waypoint wp)
+    {
+        _selectedWpUid = wp.Uid;
+        await _wpAttachmentModal.ShowAsync();
+    }
+
+    private async Task<GridDataProviderResult<AtakAttachment>> WpAttachmentDataProvider(GridDataProviderRequest<AtakAttachment> request)
+    {
+        var list = string.IsNullOrEmpty(_selectedWpUid)
+            ? new List<AtakAttachment>()
+            : await AttachmentService.GetAllAsync(_selectedWpUid);
+        return request.ApplyTo(list);
+    }
+
+    private async Task DownloadWpAttachment(AtakAttachment attach)
+    {
+        if (attach.FileBytes == null) return;
+        var base64 = Convert.ToBase64String(attach.FileBytes);
+        var mediaType = attach.MediaType ?? "application/octet-stream";
+        await JS.InvokeVoidAsync("downloadFile", $"data:{mediaType};base64,{base64}", attach.Name);
+    }
+
+    private void OnCoTMessage(CoTManager.CoTMessageEventArgs e)
+    {
+        try
+        {
+            var doc = System.Xml.Linq.XDocument.Parse(e.Message);
+            var type = (string?)doc.Root?.Attribute("type") ?? "";
+
+            if (type.StartsWith("b-m-"))
+            {
+                if (DateTime.UtcNow - _lastCoTRefreshWp < TimeSpan.FromSeconds(2)) return;
+                _lastCoTRefreshWp = DateTime.UtcNow;
+                _ = InvokeAsync(async () =>
+                {
+                    await LoadWaypointsAsync();
+                    StateHasChanged();
+                });
+            }
+            else if (type.StartsWith("t-x-m-"))
+            {
+                if (DateTime.UtcNow - _lastCoTRefreshTasks < TimeSpan.FromSeconds(3)) return;
+                _lastCoTRefreshTasks = DateTime.UtcNow;
+                _ = InvokeAsync(async () =>
+                {
+                    _tasks = await LoadData();
+                    ComputeView();
+                    BuildChartData();
+                    await LoadWaypointsAsync();
+                    StateHasChanged();
+                });
+            }
+        }
+        catch { }
+    }
+
+    private async Task AutoSubscribeIfNeededAsync(string? takMissionUid)
+    {
+        if (string.IsNullOrEmpty(takMissionUid)) return;
+        if (await SubscriptionService.IsSubscribedAsync(takMissionUid)) return;
+        try
+        {
+            await MartiClient.SubscribeMissionAsync(takMissionUid);
+            await SubscriptionService.AddAsync(takMissionUid);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[AutoSubscribe] {takMissionUid}: {ex.Message}");
+        }
+    }
+
     public void Dispose()
     {
+        CoTManager.CoTMessageReceived -= OnCoTMessage;
         _timer?.Stop();
         _timer?.Dispose();
     }

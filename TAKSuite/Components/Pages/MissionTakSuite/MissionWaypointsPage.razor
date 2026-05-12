@@ -23,15 +23,25 @@
 }
 else
 {
+    <ModalAddPoi @ref="_addPoiModal"
+                 MissionTakUid="@_mission.TakMissionUid"
+                 OnPoiCreated="OnPoiCreated" />
+
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2 class="mb-0">Waypoints TAK</h2>
             <p class="text-muted mb-0">@_mission.Name</p>
         </div>
-        <Button Color="ButtonColor.Secondary" Outline="true"
-                @onclick='() => Navigation.NavigateTo($"/missiontak/{MissionTakId}")'>
-            <Icon Name="IconName.ArrowLeft" /> Dettagli missione
-        </Button>
+        <div class="d-flex gap-2">
+            <Button Color="ButtonColor.Primary"
+                    @onclick="async () => await _addPoiModal.ShowAsync()">
+                <Icon Name="IconName.GeoFill" /> Aggiungi POI
+            </Button>
+            <Button Color="ButtonColor.Secondary" Outline="true"
+                    @onclick='() => Navigation.NavigateTo($"/missiontak/{MissionTakId}")'>
+                <Icon Name="IconName.ArrowLeft" /> Dettagli missione
+            </Button>
+        </div>
     </div>
 
     @if (string.IsNullOrEmpty(_mission.TakMissionUid))
@@ -75,12 +85,12 @@ else
                     @if (context.Color != ATAKHelper.COLOR_WAYPOINT_COMPLETED)
                     {
                         <Button Size="ButtonSize.Small" Color="ButtonColor.Success"
-                                @onclick="() => CompleteWaypoint(context)">
+                                @onclick="async () => await CompleteWaypoint(context)">
                             <Icon Name="IconName.CheckLg" />
                         </Button>
                     }
                     <Button Size="ButtonSize.Small" Color="ButtonColor.Secondary" Position="Position.Relative"
-                            @onclick="() => OpenAttachments(context)">
+                            @onclick="async () => await OpenAttachments(context)">
                         <Icon Name="IconName.Paperclip" />
                         @if (context.AttachmentUidList.Count > 0)
                         {
@@ -93,7 +103,7 @@ else
                         }
                     </Button>
                     <Button Size="ButtonSize.Small" Color="ButtonColor.Primary"
-                            @onclick="() => OpenMaps(context.Lat, context.Lon)">
+                            @onclick="async () => await OpenMaps(context.Lat, context.Lon)">
                         <Icon Name="IconName.GeoAltFill" />
                     </Button>
                 </GridColumn>
@@ -149,6 +159,7 @@ else
     private MissionSuite? _mission;
     private Grid<Waypoint> _grid = default!;
     private Modal _attachmentModal = default!;
+    private ModalAddPoi _addPoiModal = default!;
     private string? _selectedWaypointUid;
 
     protected override async Task OnInitializedAsync()
@@ -171,9 +182,14 @@ else
     private string GetRowClass(Waypoint wpt)
         => wpt.Color == ATAKHelper.COLOR_WAYPOINT_COMPLETED ? "table-success" : string.Empty;
 
+    private async Task OnPoiCreated(ModalAddPoi.PoiResult result)
+    {
+        await _grid.RefreshDataAsync();
+    }
+
     private async Task CompleteWaypoint(Waypoint item)
     {
-        await CoTManager.ChangeCotColor(item.Uid, ATAKHelper.COLOR_WAYPOINT_COMPLETED);
+        await CoTManager.ChangeCotColor(_mission?.TakMissionUid ?? string.Empty, item.Uid, ATAKHelper.COLOR_WAYPOINT_COMPLETED);
         await _grid.RefreshDataAsync();
     }
 

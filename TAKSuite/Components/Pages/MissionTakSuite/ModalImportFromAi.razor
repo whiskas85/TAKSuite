@@ -1,0 +1,329 @@
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@using TAKSuite.Helper
+@using TAKSuite.TAK.CoT
+@using TAKSuite.TAK.Helper
+@using Microsoft.AspNetCore.Components.Forms
+@inject AiCoordinatesService AiService
+@inject CoTManager CoTManager
+@inject TaskService TaskService
+@inject ToastService ToastService
+
+<Modal @ref="_modal" Title="Importa punti da AI" Size="ModalSize.ExtraLarge" UseStaticBackdrop="true">
+    <BodyTemplate>
+
+        @if (_step == Step.Input)
+        {
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Testo con coordinate</label>
+                <textarea class="form-control font-monospace" rows="9" @bind="_inputText"
+                          placeholder="Incolla qui il testo con i punti e coordinate (UTM, lat/lon...)&#10;&#10;Esempi:&#10;  WP ALFA  32T 452390E 4520000N&#10;  OBJ BRAVO  32T 453100E 4521500N&#10;  RECON CHARLIE  32T 454000E 4522000N"></textarea>
+            </div>
+            <div class="mb-2">
+                <label class="form-label fw-semibold">Oppure carica un'immagine</label>
+                <InputFile OnChange="OnImageSelected" accept="image/*" class="form-control" />
+            </div>
+            @if (_imagePreviewUrl != null)
+            {
+                <div class="mb-2">
+                    <img src="@_imagePreviewUrl" class="img-fluid rounded border" style="max-height:180px" />
+                    <Button Size="ButtonSize.Small" Color="ButtonColor.Secondary" Class="ms-2"
+                            @onclick="ClearImage">
+                        <Icon Name="IconName.XLg" /> Rimuovi
+                    </Button>
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <div class="alert alert-danger py-2 mt-2">@_errorMessage</div>
+            }
+        }
+
+        else if (_step == Step.Preview)
+        {
+            @if (_points.Count == 0)
+            {
+                <div class="alert alert-warning">
+                    <Icon Name="IconName.ExclamationTriangleFill" /> Nessun punto trovato nell'input fornito.
+                    Prova a riformulare il testo o a fornire un'immagine più leggibile.
+                </div>
+            }
+            else
+            {
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="text-muted small">
+                        <strong>@_points.Count</strong> punti estratti —
+                        WP (TAK): <strong>@_points.Count(p => p.Type == AiPointType.Waypoint)</strong>,
+                        Obiettivi: <strong>@_points.Count(p => p.Type == AiPointType.Objective)</strong>
+                    </span>
+                    <div class="d-flex gap-1">
+                        <Button Size="ButtonSize.Small" Color="ButtonColor.Secondary" Outline="true"
+                                @onclick="() => SetAll(true)">
+                            Seleziona tutti
+                        </Button>
+                        <Button Size="ButtonSize.Small" Color="ButtonColor.Secondary" Outline="true"
+                                @onclick="() => SetAll(false)">
+                            Deseleziona tutti
+                        </Button>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width:36px"></th>
+                                <th>Nome</th>
+                                <th style="width:130px">Tipo</th>
+                                <th style="width:130px">Lat</th>
+                                <th style="width:130px">Lon</th>
+                                <th style="width:120px">Colore WP</th>
+                                <th>Note</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var pt in _points)
+                            {
+                                <tr class="@(pt.Selected ? "" : "opacity-50")">
+                                    <td class="text-center">
+                                        <input type="checkbox" class="form-check-input mt-0"
+                                               checked="@pt.Selected"
+                                               @onchange="e => pt.Selected = (bool)(e.Value ?? false)" />
+                                    </td>
+                                    <td>
+                                        <input type="text" class="form-control form-control-sm"
+                                               @bind="pt.Name" style="min-width:100px" />
+                                    </td>
+                                    <td>
+                                        <select class="form-select form-select-sm"
+                                                value="@pt.Type"
+                                                @onchange="e => pt.Type = ParsePointType(e.Value)">
+                                            <option value="@AiPointType.Waypoint">WP (TAK)</option>
+                                            <option value="@AiPointType.Objective">Obiettivo</option>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <input type="number" class="form-control form-control-sm"
+                                               step="0.000001" @bind="pt.Lat" />
+                                    </td>
+                                    <td>
+                                        <input type="number" class="form-control form-control-sm"
+                                               step="0.000001" @bind="pt.Lon" />
+                                    </td>
+                                    <td>
+                                        @if (pt.Type == AiPointType.Waypoint)
+                                        {
+                                            <div class="d-flex align-items-center gap-1">
+                                                <div style="width:16px;height:16px;border-radius:3px;flex-shrink:0;
+                                                            background-color:@ColorConverterHelper.ArgbToHex(pt.ArgbColor);
+                                                            border:1px solid #888;"></div>
+                                                <select class="form-select form-select-sm"
+                                                        value="@pt.ArgbColor"
+                                                        @onchange="e => { if (int.TryParse(e.Value?.ToString(), out var v)) pt.ArgbColor = v; }">
+                                                    @foreach (var c in ATAKHelper.ATAKPredefinedColors)
+                                                    {
+                                                        <option value="@c.Argb">@c.Name</option>
+                                                    }
+                                                </select>
+                                            </div>
+                                        }
+                                    </td>
+                                    <td>
+                                        <input type="text" class="form-control form-control-sm"
+                                               @bind="pt.Notes" placeholder="—" />
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <div class="alert alert-danger py-2 mt-2">@_errorMessage</div>
+            }
+        }
+
+        else if (_step == Step.Done)
+        {
+            <div class="text-center py-4">
+                <Icon Name="IconName.CheckCircleFill" Color="IconColor.Success" Size="IconSize.x3" />
+                <h5 class="mt-3">Importazione completata</h5>
+                <p class="text-muted mb-0">
+                    @if (_doneWp > 0) { <span>Waypoints TAK creati: <strong>@_doneWp</strong>. </span> }
+                    @if (_doneObj > 0) { <span>Obiettivi creati: <strong>@_doneObj</strong>.</span> }
+                </p>
+            </div>
+        }
+
+    </BodyTemplate>
+    <FooterTemplate>
+        @if (_step == Step.Input)
+        {
+            <Button Color="ButtonColor.Primary"
+                    @onclick="AnalyzeAsync"
+                    Loading="_busy" LoadingText="Analisi AI in corso...">
+                <Icon Name="IconName.Stars" /> Analizza
+            </Button>
+            <Button Color="ButtonColor.Secondary" @onclick="HideAsync">Annulla</Button>
+        }
+        else if (_step == Step.Preview)
+        {
+            <Button Color="ButtonColor.Success"
+                    @onclick="ImportAsync"
+                    Loading="_busy" LoadingText="Importazione..."
+                    Disabled="@(!_points.Any(p => p.Selected))">
+                <Icon Name="IconName.CloudArrowDownFill" />
+                Importa (@_points.Count(p => p.Selected))
+            </Button>
+            <Button Color="ButtonColor.Secondary" @onclick="BackToInput">Indietro</Button>
+        }
+        else
+        {
+            <Button Color="ButtonColor.Secondary" @onclick="HideAsync">Chiudi</Button>
+        }
+    </FooterTemplate>
+</Modal>
+
+@code {
+    public record ImportResult(int WpCount, int ObjCount);
+
+    [Parameter] public Guid MissionTakSuiteId { get; set; }
+    [Parameter] public string? MissionTakUid { get; set; }
+    [Parameter] public EventCallback<ImportResult> OnImportCompleted { get; set; }
+
+    private Modal _modal = default!;
+
+    private enum Step { Input, Preview, Done }
+    private Step _step = Step.Input;
+
+    private string _inputText = string.Empty;
+    private string? _imageBase64;
+    private string? _imageMimeType;
+    private string? _imagePreviewUrl;
+
+    private List<AiExtractedPoint> _points = new();
+    private bool _busy;
+    private string? _errorMessage;
+    private int _doneWp, _doneObj;
+
+    public async Task ShowAsync()
+    {
+        Reset();
+        await _modal.ShowAsync();
+    }
+
+    public async Task HideAsync() => await _modal.HideAsync();
+
+    private void Reset()
+    {
+        _step = Step.Input;
+        _inputText = string.Empty;
+        _imageBase64 = null;
+        _imageMimeType = null;
+        _imagePreviewUrl = null;
+        _points = new();
+        _errorMessage = null;
+        _doneWp = 0;
+        _doneObj = 0;
+    }
+
+    private async Task OnImageSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        using var ms = new MemoryStream();
+        await file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024).CopyToAsync(ms);
+        var bytes = ms.ToArray();
+        _imageBase64 = Convert.ToBase64String(bytes);
+        _imageMimeType = file.ContentType;
+        _imagePreviewUrl = $"data:{_imageMimeType};base64,{_imageBase64}";
+    }
+
+    private void ClearImage()
+    {
+        _imageBase64 = null;
+        _imageMimeType = null;
+        _imagePreviewUrl = null;
+    }
+
+    private async Task AnalyzeAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_inputText) && _imageBase64 == null)
+        {
+            _errorMessage = "Inserisci del testo o carica un'immagine prima di procedere.";
+            return;
+        }
+        _errorMessage = null;
+        _busy = true;
+        try
+        {
+            _points = await AiService.ExtractPointsAsync(
+                string.IsNullOrWhiteSpace(_inputText) ? null : _inputText,
+                _imageBase64,
+                _imageMimeType);
+            _step = Step.Preview;
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Errore durante l'analisi: {ex.Message}";
+        }
+        finally { _busy = false; }
+    }
+
+    private void BackToInput()
+    {
+        _step = Step.Input;
+        _errorMessage = null;
+    }
+
+    private static AiPointType ParsePointType(object? value) =>
+        value?.ToString() == nameof(AiPointType.Objective) ? AiPointType.Objective : AiPointType.Waypoint;
+
+    private void SetAll(bool value)
+    {
+        foreach (var p in _points) p.Selected = value;
+    }
+
+    private async Task ImportAsync()
+    {
+        _errorMessage = null;
+        _busy = true;
+        _doneWp = 0;
+        _doneObj = 0;
+        try
+        {
+            foreach (var pt in _points.Where(p => p.Selected))
+            {
+                if (pt.Type == AiPointType.Waypoint)
+                {
+                    if (!string.IsNullOrEmpty(MissionTakUid))
+                    {
+                        await CoTManager.CreateAndPublishPoiAsync(
+                            MissionTakUid, pt.Name, PoiType.Spotmap,
+                            pt.Lat, pt.Lon,
+                            string.IsNullOrWhiteSpace(pt.Notes) ? null : pt.Notes,
+                            pt.ArgbColor);
+                        _doneWp++;
+                    }
+                }
+                else
+                {
+                    await TaskService.AddAsync(new TaskEntity
+                    {
+                        Name = pt.Name,
+                        Description = pt.Notes ?? string.Empty,
+                        MissionTAKSuiteId = MissionTakSuiteId,
+                        MissionUid = MissionTakUid ?? string.Empty
+                    });
+                    _doneObj++;
+                }
+            }
+            _step = Step.Done;
+            await OnImportCompleted.InvokeAsync(new ImportResult(_doneWp, _doneObj));
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Errore durante l'importazione: {ex.Message}";
+        }
+        finally { _busy = false; }
+    }
+}

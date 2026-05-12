@@ -1,8 +1,15 @@
-﻿using System.Xml;
+﻿using System.Globalization;
+using System.Xml;
 using TAKSuite.Helper;
 
 namespace TAKSuite.TAK.Helper
 {
+    public enum PoiType
+    {
+        Spotmap,
+        Obiettivo,
+        PuntoGenerico
+    }
     public class PredefinedColor
     {
         public string Name { get; set; }
@@ -70,6 +77,87 @@ namespace TAKSuite.TAK.Helper
             XmlDocument doc = new();
             doc.LoadXml(xml);
             ChangeSpotmapColor(doc, newArgbValue);
+            return doc;
+        }
+
+        public static void RefreshTimestamps(XmlDocument doc, TimeSpan? staleWindow = null)
+        {
+            var evt = doc.DocumentElement;
+            if (evt == null) return;
+            var now   = DateTime.UtcNow;
+            var stale = now.Add(staleWindow ?? TimeSpan.FromDays(365));
+            var fmt   = "yyyy-MM-dd'T'HH:mm:ss.fff'Z'";
+            evt.SetAttribute("time",  now.ToString(fmt));
+            evt.SetAttribute("start", now.ToString(fmt));
+            evt.SetAttribute("stale", stale.ToString(fmt));
+        }
+
+        public static string GetCotType(PoiType poiType) => poiType switch
+        {
+            PoiType.Spotmap => "b-m-p-s-m",
+            PoiType.Obiettivo => "b-m-p-w-GOTO",
+            PoiType.PuntoGenerico => "a-u-G",
+            _ => "b-m-p-s-m"
+        };
+
+        public static XmlDocument CreatePoiCoT(string uid, string callsign, PoiType poiType,
+            double lat, double lon, string? remarks = null, int? argbColor = null, double hae = 0)
+        {
+            var now = DateTime.UtcNow;
+            var stale = now.AddDays(365);
+            var cotType = GetCotType(poiType);
+
+            var doc = new XmlDocument();
+            var evt = doc.CreateElement("event");
+            evt.SetAttribute("version", "2.0");
+            evt.SetAttribute("uid", uid);
+            evt.SetAttribute("type", cotType);
+            evt.SetAttribute("time", now.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'"));
+            evt.SetAttribute("start", now.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'"));
+            evt.SetAttribute("stale", stale.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'"));
+            evt.SetAttribute("how", "h-g-i-g-o");
+            doc.AppendChild(evt);
+
+            var point = doc.CreateElement("point");
+            point.SetAttribute("lat", lat.ToString("G", CultureInfo.InvariantCulture));
+            point.SetAttribute("lon", lon.ToString("G", CultureInfo.InvariantCulture));
+            point.SetAttribute("hae", hae.ToString("G", CultureInfo.InvariantCulture));
+            point.SetAttribute("ce", "9999999.0");
+            point.SetAttribute("le", "9999999.0");
+            evt.AppendChild(point);
+
+            var detail = doc.CreateElement("detail");
+            evt.AppendChild(detail);
+
+            var contact = doc.CreateElement("contact");
+            contact.SetAttribute("callsign", callsign);
+            detail.AppendChild(contact);
+
+            var status = doc.CreateElement("status");
+            status.SetAttribute("readiness", "true");
+            detail.AppendChild(status);
+
+            detail.AppendChild(doc.CreateElement("archive"));
+
+            var colorArgb = argbColor ?? -1;
+            var colorEl = doc.CreateElement("color");
+            colorEl.SetAttribute("argb", colorArgb.ToString());
+            detail.AppendChild(colorEl);
+
+            if (!string.IsNullOrWhiteSpace(remarks))
+            {
+                var remarksEl = doc.CreateElement("remarks");
+                remarksEl.InnerText = remarks;
+                detail.AppendChild(remarksEl);
+            }
+
+            if (poiType == PoiType.Spotmap)
+            {
+                var usericon = doc.CreateElement("usericon");
+                usericon.SetAttribute("iconsetpath", $"COT_MAPPING_SPOTMAP/{cotType}/{colorArgb}");
+                detail.AppendChild(usericon);
+            }
+
             return doc;
         }
 

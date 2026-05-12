@@ -1,0 +1,335 @@
+@page "/settings/tak"
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+@using Microsoft.AspNetCore.Authorization
+@using System.Net.Http.Headers
+@using System.Security.Cryptography
+@using System.Text
+@using System.Text.Json.Nodes
+@using System.Xml.Linq
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@using TAKSuite.TAK
+@using TakLib
+
+@inject TakSettingsService SettingsService
+@inject TakClientProvider TakProvider
+
+<PageTitle>Connessione TAK</PageTitle>
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3><Icon Name="IconName.ShieldLockFill" /> Connessione TAK Server</h3>
+        <div class="d-flex gap-2">
+            <Button Color="ButtonColor.Primary" @onclick="SaveAsync" Loading="_saving" LoadingText="Salvataggio...">
+                <Icon Name="IconName.Save" /> Salva
+            </Button>
+            <Button Color="ButtonColor.Warning" @onclick="ApplyAndReconnectAsync" Loading="_reconnecting" LoadingText="Riconnessione...">
+                <Icon Name="IconName.ArrowRepeat" /> Applica e Riconnetti
+            </Button>
+        </div>
+    </div>
+
+    @if (_errorMessage != null)
+    {
+        <Alert Color="AlertColor.Danger" Dismissable="true">@_errorMessage</Alert>
+    }
+    @if (_successMessage != null)
+    {
+        <Alert Color="AlertColor.Success" Dismissable="true">@_successMessage</Alert>
+    }
+
+    <div class="row g-4">
+
+        <!-- Connection -->
+        <div class="col-12 col-lg-6">
+            <div class="card">
+                <div class="card-header"><Icon Name="IconName.Wifi" /> Connessione</div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">TAK Server IP</label>
+                        <input class="form-control" @bind="_settings.TakServerIp" placeholder="10.147.19.5" />
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-4">
+                            <label class="form-label">HTTPS Port</label>
+                            <input type="number" class="form-control" @bind="_settings.HttpsPort" />
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label">Streaming Port</label>
+                            <input type="number" class="form-control" @bind="_settings.StreamingPort" />
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label">Enrollment Port</label>
+                            <input type="number" class="form-control" @bind="_settings.EnrollmentPort" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Identity -->
+        <div class="col-12 col-lg-6">
+            <div class="card">
+                <div class="card-header"><Icon Name="IconName.PersonBadge" /> Identità</div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">Callsign</label>
+                        <input class="form-control" @bind="_settings.Callsign" placeholder="TAKSuiteServer" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Client UID</label>
+                        <input class="form-control" @bind="_settings.ClientUid" placeholder="TAKSUITE-SERVER" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Certificate Status -->
+        <div class="col-12 col-lg-6">
+            <div class="card">
+                <div class="card-header"><Icon Name="IconName.PatchCheckFill" /> Certificato</div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <span>Stato:</span>
+                            @if (_settings.HasCertificate)
+                            {
+                                <Badge Color="BadgeColor.Success"><Icon Name="IconName.CheckCircleFill" /> Certificato presente</Badge>
+                            }
+                            else
+                            {
+                                <Badge Color="BadgeColor.Danger"><Icon Name="IconName.XCircleFill" /> Nessun certificato</Badge>
+                            }
+                        </div>
+                        <div class="text-muted small">
+                            Ultimo aggiornamento: @_settings.LastModified.ToString("dd/MM/yyyy HH:mm") UTC
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Password Certificato (P12)</label>
+                        <input type="password" class="form-control" @bind="_settings.CertificatePassword" placeholder="atakatak" />
+                    </div>
+                    <div>
+                        <label class="form-label">Carica P12 esistente</label>
+                        <InputFile class="form-control" OnChange="OnP12UploadAsync" accept=".p12,.pfx" />
+                        @if (_uploadedBytes != null)
+                        {
+                            <div class="text-success small mt-1">
+                                <Icon Name="IconName.CheckCircle" /> File caricato (@_uploadedBytes.Length bytes). Salva per applicare.
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Enrollment -->
+        <div class="col-12 col-lg-6">
+            <div class="card">
+                <div class="card-header"><Icon Name="IconName.KeyFill" /> Enrollment (CSR)</div>
+                <div class="card-body">
+                    <p class="text-muted small">
+                        Genera un certificato client firmato dal server TAK tramite CSR.
+                        La chiave privata non lascia mai il server.
+                    </p>
+                    <div class="mb-3">
+                        <label class="form-label">Utente Enrollment</label>
+                        <input class="form-control" @bind="_settings.EnrollUser" placeholder="webadmin" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Password Enrollment</label>
+                        <input type="password" class="form-control" @bind="_settings.EnrollPassword" placeholder="password" />
+                    </div>
+                    <Button Color="ButtonColor.Success" @onclick="EnrollAsync" Loading="_enrolling" LoadingText="Enrollment in corso...">
+                        <Icon Name="IconName.KeyFill" /> Enroll via CSR
+                    </Button>
+
+                    @if (_enrollLog.Count > 0)
+                    {
+                        <div class="mt-3 p-2 bg-dark rounded small font-monospace" style="max-height:150px;overflow-y:auto;">
+                            @foreach (var line in _enrollLog)
+                            {
+                                <div>@line</div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+@code {
+    private TakSettings _settings = new();
+    private bool _saving;
+    private bool _reconnecting;
+    private bool _enrolling;
+    private string? _errorMessage;
+    private string? _successMessage;
+    private byte[]? _uploadedBytes;
+    private List<string> _enrollLog = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _settings = await SettingsService.GetOrCreateAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        _errorMessage = null;
+        _successMessage = null;
+        try
+        {
+            if (_uploadedBytes != null)
+                _settings.CertificateP12 = _uploadedBytes;
+
+            await SettingsService.SaveAsync(_settings);
+            _uploadedBytes = null;
+            _successMessage = "Impostazioni salvate.";
+            _settings = await SettingsService.GetOrCreateAsync();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Errore salvataggio: {ex.Message}";
+        }
+        finally { _saving = false; }
+    }
+
+    private async Task ApplyAndReconnectAsync()
+    {
+        _reconnecting = true;
+        _errorMessage = null;
+        _successMessage = null;
+        try
+        {
+            if (_uploadedBytes != null)
+                _settings.CertificateP12 = _uploadedBytes;
+
+            await SettingsService.SaveAsync(_settings);
+            await TakProvider.ReconfigureAsync(_settings);
+            _uploadedBytes = null;
+            _successMessage = "Impostazioni applicate. TakClient riconfigurato.";
+            _settings = await SettingsService.GetOrCreateAsync();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Errore riconfigurazione: {ex.Message}";
+        }
+        finally { _reconnecting = false; }
+    }
+
+    private async Task OnP12UploadAsync(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            using var ms = new MemoryStream();
+            await e.File.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024).CopyToAsync(ms);
+            _uploadedBytes = ms.ToArray();
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Errore lettura file: {ex.Message}";
+        }
+    }
+
+    private async Task EnrollAsync()
+    {
+        _enrolling = true;
+        _enrollLog.Clear();
+        _errorMessage = null;
+        _successMessage = null;
+
+        try
+        {
+            Log("Connessione al server enrollment...");
+
+            using var handler = new HttpClientHandler();
+            handler.ServerCertificateCustomValidationCallback = (_, _, _, _) => true;
+            using var enrollClient = new HttpClient(handler)
+            {
+                BaseAddress = new Uri($"https://{_settings.TakServerIp}:{_settings.EnrollmentPort}")
+            };
+
+            var token = Convert.ToBase64String(
+                Encoding.UTF8.GetBytes($"{_settings.EnrollUser}:{_settings.EnrollPassword}"));
+            enrollClient.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue("Basic", token);
+
+            Log("GET /Marti/api/tls/config ...");
+            var configResp = await enrollClient.GetAsync("/Marti/api/tls/config");
+            var configBody = await configResp.Content.ReadAsStringAsync();
+            if (!configResp.IsSuccessStatusCode)
+                throw new HttpRequestException($"tls/config HTTP {(int)configResp.StatusCode}: {configBody}");
+
+            var doc  = XDocument.Parse(configBody);
+            var rdns = doc.Descendants()
+                          .Where(el => el.Name.LocalName == "nameEntry")
+                          .Select(el => (
+                              Name:  (el.Attribute("name")?.Value  ?? "").ToUpper(),
+                              Value: el.Attribute("value")?.Value ?? ""))
+                          .ToList();
+            Log($"RDN ricevuti: {string.Join(", ", rdns.Select(r => $"{r.Name}={r.Value}"))}");
+
+            Log("Generazione CSR locale...");
+            var (privateKey, csrPem) = TakCsr.Build(_settings.EnrollUser, rdns);
+            Log($"CSR generata (CN={_settings.EnrollUser}).");
+
+            Log($"POST /Marti/api/tls/signClient/v2?clientUid={_settings.ClientUid} ...");
+            var url     = $"/Marti/api/tls/signClient/v2?clientUid={Uri.EscapeDataString(_settings.ClientUid)}";
+            var content = new StringContent(csrPem, Encoding.UTF8, "application/octet-stream");
+            var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+            var signResp = await enrollClient.SendAsync(request);
+            var signBody = await signResp.Content.ReadAsStringAsync();
+            if (!signResp.IsSuccessStatusCode)
+                throw new HttpRequestException($"signClient HTTP {(int)signResp.StatusCode}: {signBody}");
+
+            var json = JsonNode.Parse(signBody)!;
+            var signedCert = WrapPem(json["signedCert"]!.GetValue<string>());
+            var caPems = new List<string>();
+            for (int i = 0; json[$"ca{i}"] is JsonNode ca; i++)
+                caPems.Add(WrapPem(ca.GetValue<string>()));
+            Log($"Certificato firmato ricevuto. CA chain: {caPems.Count} certs.");
+
+            Log("Assemblaggio P12...");
+            var p12Bytes = TakCsr.ExportP12(privateKey, signedCert, caPems, _settings.CertificatePassword);
+            Log($"P12 generato ({p12Bytes.Length} bytes).");
+
+            _settings.CertificateP12 = p12Bytes;
+            await SettingsService.SaveAsync(_settings);
+            await TakProvider.ReconfigureAsync(_settings);
+
+            _settings = await SettingsService.GetOrCreateAsync();
+            Log("Enrollment completato. TakClient riconfigurato.");
+            _successMessage = "Enrollment completato con successo.";
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Enrollment fallito: {ex.Message}";
+            Log($"ERRORE: {ex.Message}");
+        }
+        finally
+        {
+            _enrolling = false;
+        }
+    }
+
+    private void Log(string msg)
+    {
+        _enrollLog.Add($"[{DateTime.Now:HH:mm:ss}] {msg}");
+        StateHasChanged();
+    }
+
+    private static string WrapPem(string data)
+    {
+        data = data.Trim();
+        return data.StartsWith("-----BEGIN", StringComparison.Ordinal)
+            ? data
+            : "-----BEGIN CERTIFICATE-----\n" + data + "\n-----END CERTIFICATE-----";
+    }
+}

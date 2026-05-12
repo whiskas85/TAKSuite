@@ -58,6 +58,21 @@ namespace TAKSuite.Data.Models
         public DateTime? PlannedStartDateTime { get; set; }
         public DateTime? PlannedEndDateTime { get; set; }
 
+        // Finestre temporali multiple (fino a 10), serializzate come JSON
+        public string? TimeWindowsJson { get; set; }
+
+        [NotMapped]
+        public List<TaskTimeWindow> TimeWindows
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(TimeWindowsJson)) return new();
+                try { return System.Text.Json.JsonSerializer.Deserialize<List<TaskTimeWindow>>(TimeWindowsJson) ?? new(); }
+                catch { return new(); }
+            }
+            set => TimeWindowsJson = System.Text.Json.JsonSerializer.Serialize(value);
+        }
+
 
 
 

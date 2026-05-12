@@ -268,7 +268,7 @@
         try
         {
             // Change the control of the point
-            await CoTManager.ChangeCotColor(Uid, team.Color);
+            await CoTManager.ChangeCotColor(string.Empty, Uid, team.Color);
             //await FetchInfoAsync(Uid);
             //StateHasChanged(); // Ensure UI updates after control action
             await ReloadPage();

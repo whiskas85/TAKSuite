@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using TAKSuite.Components;
 using TAKSuite.Components.Account;
 using TAKSuite.Data;
+using TAKSuite.TAK;
 using TAKSuite.TAK.CoT;
 using TAKSuite.TAK.MartiApi;
 using Microsoft.AspNetCore.Components;
@@ -53,7 +54,8 @@ builder.Services.AddIdentityCore<ApplicationUser>(options => options.SignIn.Requ
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
 
 // TAK Connectivity
-builder.Services.AddSingleton<CoTApiClient>(); // Singleton per la connessione persistente
+builder.Services.AddSingleton<TakClientProvider>();  // TakLib client (mTLS HTTP + TCP/SSL streaming)
+builder.Services.AddSingleton<CoTApiClient>();
 builder.Services.AddSingleton<MartiApiClient>();
 builder.Services.AddSingleton<MartiHttpClientProvider>();
 builder.Services.AddSingleton(sp => new MissionApiClient(sp.GetRequiredService<MartiHttpClientProvider>().HttpClient));
@@ -91,6 +93,9 @@ builder.Services.AddTransient<TaskPrioritiesService>();
 builder.Services.AddTransient<EventEntityService>();
 builder.Services.AddTransient<MissionSuiteEntityServices>();
 builder.Services.AddTransient<TaskTemplateService>();
+builder.Services.AddTransient<AiCoordinatesService>();
+builder.Services.AddTransient<TakSettingsService>();
+builder.Services.AddTransient<TakSubscriptionService>();
 
 
 
@@ -123,13 +128,41 @@ builder.Services.AddBlazorBootstrap();
 var app = builder.Build();
 
 // Avvio del client CoTApiClient in background quando l'app è pronta
-var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
-var cotApiClient = app.Services.GetRequiredService<CoTApiClient>();
+var lifetime      = app.Services.GetRequiredService<IHostApplicationLifetime>();
+var cotApiClient  = app.Services.GetRequiredService<CoTApiClient>();
+var takProvider   = app.Services.GetRequiredService<TakClientProvider>();
 
 lifetime.ApplicationStarted.Register(() =>
 {
     var cancellationToken = lifetime.ApplicationStopping;
-    Task.Run(() => cotApiClient.StartListening(cancellationToken)); // Avvia il client in background
+
+    Task.Run(async () =>
+    {
+        // Carica impostazioni TAK dal DB e riconfigura il client
+        try { await takProvider.InitializeFromDbAsync(); }
+        catch (Exception ex) { Console.WriteLine($"[Startup] InitializeFromDbAsync: {ex.Message}"); }
+
+        // Ripristina sottoscrizioni missioni salvate
+        try
+        {
+            using var scope   = app.Services.CreateScope();
+            var subSvc        = scope.ServiceProvider.GetRequiredService<TakSubscriptionService>();
+            var martiClient   = app.Services.GetRequiredService<MartiApiClient>();
+            var subscriptions = await subSvc.GetAllAsync();
+            foreach (var sub in subscriptions)
+            {
+                try { await martiClient.SubscribeMissionAsync(sub.MissionName); }
+                catch (Exception ex) { Console.WriteLine($"[Startup] Ri-sottoscrizione '{sub.MissionName}' fallita: {ex.Message}"); }
+            }
+            if (subscriptions.Count > 0)
+                Console.WriteLine($"[Startup] Ripristinate {subscriptions.Count} sottoscrizioni.");
+        }
+        catch (Exception ex) { Console.WriteLine($"[Startup] Ripristino sottoscrizioni: {ex.Message}"); }
+
+        // Avvia lo streaming CoT
+        await cotApiClient.StartListening(cancellationToken);
+    });
+
     Task.Run(() => cotApiClient.StartKeepAliveLoop(cancellationToken));
 });
 

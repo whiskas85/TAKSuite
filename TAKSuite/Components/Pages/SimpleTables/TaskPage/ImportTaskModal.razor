@@ -1,13 +1,34 @@
 @using TAKSuite.Data.Models
 @using TAKSuite.Data.Services
 @using System.Text.Json
+@using System.Diagnostics
 
 @inject TaskService taskService
 @inject RadioChannelService radioChannelService
+@inject MissionSuiteEntityServices missionService
+@inject TeamService teamService
 @inject IJSRuntime JS
 
 <Modal @ref="_modal" Title="Importa Task da Testo" Size="ModalSize.ExtraLarge" OnHidden="OnHidden">
     <BodyTemplate>
+
+        @if (_teams.Count > 0)
+        {
+            <div class="mb-3 d-flex align-items-center gap-2">
+                <label class="form-label small fw-semibold mb-0 text-nowrap">Team assegnato:</label>
+                <select class="form-select form-select-sm" style="max-width:260px;" @bind="_selectedTeamId">
+                    <option value="">— nessuno —</option>
+                    @foreach (var t in _teams)
+                    {
+                        <option value="@t.Id">@t.Name</option>
+                    }
+                </select>
+                @if (_selectedTeamId == null)
+                {
+                    <span class="text-warning small">⚠ Senza team i flag automatici della missione non si applicano</span>
+                }
+            </div>
+        }
 
         <ul class="nav nav-tabs mb-3">
             <li class="nav-item">
@@ -26,13 +47,14 @@
         {
             <p class="text-muted small mb-2">
                 Incolla il testo dell'obiettivo (da PDF o altra fonte), poi clicca <strong>Genera Prompt</strong>
-                e incollalo su ChatGPT. Torna alla tab 2 per importare il JSON generato.
+                e incollalo su ChatGPT, oppure usa <strong>Invia a Claude locale</strong> per l'importazione automatica.
             </p>
             <textarea class="form-control font-monospace import-textarea"
                       placeholder="Incolla qui il testo…"
                       @bind="_rawText"
                       @bind:event="oninput" />
-            <div class="mt-3 d-flex align-items-center gap-3">
+
+            <div class="mt-3 d-flex align-items-center gap-3 flex-wrap">
                 <Button Color="ButtonColor.Primary"
                         @onclick="GeneratePrompt"
                         Disabled="@(string.IsNullOrWhiteSpace(_rawText))">
@@ -43,6 +65,28 @@
                     <span class="text-success small">✓ Prompt copiato! Incollalo su ChatGPT, poi torna alla tab 2.</span>
                 }
             </div>
+
+            <hr class="my-3" />
+
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <Button Color="ButtonColor.Success"
+                        @onclick="SendToClaudeCliAsync"
+                        Loading="_sendingToClaude"
+                        LoadingText="Claude sta elaborando…"
+                        Disabled="@(string.IsNullOrWhiteSpace(_rawText))">
+                    <Icon Name="IconName.Robot" /> Invia a Claude locale
+                </Button>
+                <span class="text-muted small">Richiede <code>claude</code> nel PATH (Claude Code CLI)</span>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_claudeError))
+            {
+                <div class="alert alert-danger mt-2 py-2 small">@_claudeError</div>
+            }
+            @if (_claudeSuccess)
+            {
+                <div class="alert alert-success mt-2 py-2 small">✓ @_importedCount task importati automaticamente da Claude locale!</div>
+            }
         }
 
         @if (_tab == 1)
@@ -51,12 +95,12 @@
                 Incolla qui il JSON restituito da ChatGPT, poi clicca <strong>Crea Task</strong>.
             </p>
             <textarea class="form-control font-monospace import-textarea"
-                      placeholder='{ "name": "...", "items": [...] }'
+                      placeholder='[ { "name": "...", "items": [...] }, { "name": "...", ... } ]'
                       @bind="_jsonText"
                       @bind:event="oninput" />
             @if (_importSuccess && !string.IsNullOrEmpty(_importError))
             {
-                <div class="alert alert-warning mt-2 py-2 small">✓ Task creato. ⚠ @_importError</div>
+                <div class="alert alert-warning mt-2 py-2 small">✓ @_importedCount task creati. ⚠ @_importError</div>
             }
             else if (!string.IsNullOrEmpty(_importError))
             {
@@ -64,7 +108,7 @@
             }
             else if (_importSuccess)
             {
-                <div class="alert alert-success mt-2 py-2 small">✓ Task creato correttamente!</div>
+                <div class="alert alert-success mt-2 py-2 small">✓ @_importedCount task creati correttamente!</div>
             }
             <div class="mt-3">
                 <Button Color="ButtonColor.Success"
@@ -109,9 +153,26 @@
     private bool _importSuccess;
     private List<RadioChannel> _radioChannels = new();
 
+    private bool _sendingToClaude;
+    private string _claudeError = string.Empty;
+    private bool _claudeSuccess;
+    private int _importedCount;
+
+    private MissionSuite? _mission;
+    private List<Team> _teams = new();
+    private Guid? _selectedTeamId;
+
     public async Task ShowAsync()
     {
         _radioChannels = await radioChannelService.GetAllAsync();
+        _teams = (await teamService.GetAllAsync()).OrderBy(t => t.Name).ToList();
+
+        if (MissionId.HasValue)
+        {
+            _mission = await missionService.GetAsync(MissionId.Value);
+            _selectedTeamId = _mission?.TeamId;
+        }
+
         await _modal.ShowAsync();
     }
     public async Task HideAsync() => await _modal.HideAsync();
@@ -124,6 +185,10 @@
         _importError = string.Empty;
         _promptCopied = false;
         _importSuccess = false;
+        _claudeError = string.Empty;
+        _claudeSuccess = false;
+        _importedCount = 0;
+        // Non resettare _selectedTeamId e _teams: restano per la prossima apertura
     }
 
     private async Task GeneratePrompt()
@@ -133,6 +198,123 @@
         _promptCopied = true;
     }
 
+    private async Task SendToClaudeCliAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_rawText)) return;
+
+        _sendingToClaude = true;
+        _claudeError = string.Empty;
+        _claudeSuccess = false;
+        _importError = string.Empty;
+        _importSuccess = false;
+        StateHasChanged();
+
+        try
+        {
+            var prompt = BuildPrompt(_rawText.Trim(), _radioChannels);
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = "claude",
+                Arguments = "-p",
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var process = Process.Start(psi);
+            if (process == null)
+            {
+                _claudeError = "Impossibile avviare 'claude'. Verifica che Claude Code CLI sia installato e nel PATH di sistema.";
+                return;
+            }
+
+            await process.StandardInput.WriteAsync(prompt);
+            process.StandardInput.Close();
+
+            using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(120));
+            var outputTask = process.StandardOutput.ReadToEndAsync(cts.Token);
+            var errorTask  = process.StandardError.ReadToEndAsync(cts.Token);
+
+            await Task.WhenAll(outputTask, errorTask);
+            await process.WaitForExitAsync(cts.Token);
+
+            var output = await outputTask;
+            var stderr = await errorTask;
+
+            if (process.ExitCode != 0 && string.IsNullOrWhiteSpace(output))
+            {
+                _claudeError = $"Claude CLI ha terminato con errore (exit {process.ExitCode}): {stderr}";
+                return;
+            }
+
+            _jsonText = StripJsonFences(output.Trim());
+
+            if (string.IsNullOrWhiteSpace(_jsonText))
+            {
+                _claudeError = $"Claude CLI ha restituito una risposta vuota.{(string.IsNullOrEmpty(stderr) ? "" : $" Stderr: {stderr}")}";
+                return;
+            }
+
+            await ImportJson();
+
+            if (_importSuccess)
+            {
+                _claudeSuccess = true;
+                _claudeError = string.Empty;
+            }
+            else
+            {
+                _tab = 1;
+                if (string.IsNullOrEmpty(_importError))
+                    _importError = "Controlla il JSON generato e clicca 'Crea Task'.";
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            _claudeError = "Timeout: Claude CLI non ha risposto entro 120 secondi.";
+        }
+        catch (Exception ex) when (ex.Message.Contains("The system cannot find") || ex.Message.Contains("No such file"))
+        {
+            _claudeError = "Comando 'claude' non trovato. Verifica che Claude Code CLI sia installato e nel PATH.";
+        }
+        catch (Exception ex)
+        {
+            _claudeError = $"Errore: {ex.Message}";
+        }
+        finally
+        {
+            _sendingToClaude = false;
+        }
+    }
+
+    private static string StripJsonFences(string text)
+    {
+        var t = text.Trim();
+        if (t.StartsWith("```json", StringComparison.OrdinalIgnoreCase))
+            t = t[7..].TrimStart();
+        else if (t.StartsWith("```"))
+            t = t[3..].TrimStart();
+        if (t.EndsWith("```"))
+            t = t[..^3].TrimEnd();
+        t = t.Trim();
+
+        // Preferisci array [...] rispetto a oggetto singolo {...}
+        var arrStart = t.IndexOf('[');
+        var arrEnd   = t.LastIndexOf(']');
+        if (arrStart >= 0 && arrEnd > arrStart)
+            return t[arrStart..(arrEnd + 1)].Trim();
+
+        var objStart = t.IndexOf('{');
+        var objEnd   = t.LastIndexOf('}');
+        if (objStart >= 0 && objEnd > objStart)
+            return t[objStart..(objEnd + 1)].Trim();
+
+        return t;
+    }
+
     private string BuildPrompt(string text, List<RadioChannel> channels)
     {
         var channelList = channels.Count > 0
@@ -140,29 +322,33 @@
             : "nessun canale disponibile";
 
         return $$"""
-Sei un assistente per la pianificazione tattica. Analizza il testo seguente e restituisci un JSON strutturato che descriva un task operativo.
+Sei un assistente per la pianificazione tattica. Analizza il testo seguente ed estrai TUTTI gli obiettivi/task presenti. Restituisci un array JSON con un elemento per ogni obiettivo trovato.
 
-Restituisci SOLO il JSON (senza markdown, senza backtick, senza spiegazioni). Il formato deve essere ESATTAMENTE questo:
-{
-  "name": "titolo breve del task",
-  "sottotitolo": "sottotitolo opzionale",
-  "tipologiaObiettivo": "tipo di obiettivo",
-  "durata": 30,
-  "radioChannel": "scegli da lista canali o null",
-  "description": "descrizione estesa in markdown",
-  "items": [
-    { "type": "Info", "value": "informazione importante" },
-    { "type": "Note", "value": "nota di attenzione" },
-    { "type": "Action", "value": "azione operativa da eseguire" }
-  ]
-}
+Restituisci SOLO il JSON (senza markdown, senza backtick, senza spiegazioni). Il formato deve essere ESATTAMENTE questo array:
+[
+  {
+    "name": "titolo breve del task",
+    "sottotitolo": "sottotitolo opzionale",
+    "tipologiaObiettivo": "tipo di obiettivo",
+    "durata": 30,
+    "radioChannel": "scegli da lista canali o null",
+    "description": "descrizione estesa in markdown",
+    "items": [
+      { "type": "Info", "value": "informazione importante" },
+      { "type": "Note", "value": "nota di attenzione" },
+      { "type": "Action", "value": "azione operativa da eseguire" }
+    ]
+  }
+]
 
 Regole:
+- Restituisci SEMPRE un array, anche se c'è un solo obiettivo
+- Ogni obiettivo nel testo deve diventare un elemento separato dell'array
 - "type" può essere SOLO uno di: Info, Note, Action
-- "durata" è un numero intero (minuti stimati)
+- "durata" è un numero intero (minuti stimati per quell'obiettivo)
 - "description" può contenere markdown
-- Includi tutti gli elementi Info, Note e Action rilevanti estratti dal testo
-- Per "radioChannel": scegli il nome più simile tra quelli disponibili basandoti sul canale citato nel testo (es. frequenza, nome, codice). Se nessuno corrisponde, metti null.
+- Includi tutti gli elementi Info, Note e Action rilevanti per ciascun obiettivo
+- Per "radioChannel": scegli il nome più simile tra quelli disponibili. Se nessuno corrisponde, metti null.
 - Lista canali disponibili: {{channelList}}
 - Rispondi SOLO con il JSON puro, senza nessun testo aggiuntivo
 
@@ -175,78 +361,106 @@ Testo da analizzare:
     {
         _importError = string.Empty;
         _importSuccess = false;
+        _importedCount = 0;
         _importing = true;
         StateHasChanged();
         try
         {
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var dto = JsonSerializer.Deserialize<TaskImportDto>(_jsonText.Trim(), options);
+            var json = _jsonText.Trim();
 
-            if (dto == null || string.IsNullOrWhiteSpace(dto.Name))
+            // Supporta sia array [...] che oggetto singolo {...}
+            List<TaskImportDto> dtos;
+            if (json.StartsWith('['))
             {
-                _importError = "JSON non valido o campo 'name' mancante.";
+                dtos = JsonSerializer.Deserialize<List<TaskImportDto>>(json, options)
+                       ?? new List<TaskImportDto>();
+            }
+            else
+            {
+                var single = JsonSerializer.Deserialize<TaskImportDto>(json, options);
+                dtos = single != null ? new List<TaskImportDto> { single } : new List<TaskImportDto>();
+            }
+
+            dtos = dtos.Where(d => !string.IsNullOrWhiteSpace(d.Name)).ToList();
+            if (dtos.Count == 0)
+            {
+                _importError = "JSON non valido o nessun campo 'name' trovato.";
                 return;
             }
 
-            Guid? radioChannelId = null;
-            string? radioChannelWarning = null;
-            if (!string.IsNullOrWhiteSpace(dto.RadioChannel))
-            {
-                var channelName = dto.RadioChannel.Trim();
-                var match = _radioChannels.FirstOrDefault(r =>
-                    string.Equals(r.Name, channelName, StringComparison.OrdinalIgnoreCase))
-                    ?? _radioChannels.FirstOrDefault(r =>
-                    r.Name.Contains(channelName, StringComparison.OrdinalIgnoreCase))
-                    ?? _radioChannels.FirstOrDefault(r =>
-                    channelName.Contains(r.Name, StringComparison.OrdinalIgnoreCase));
+            var warnings = new List<string>();
+            int saved = 0;
 
-                if (match != null)
-                    radioChannelId = match.Id;
-                else
-                    radioChannelWarning = $"Canale radio \"{channelName}\" non trovato — campo lasciato vuoto.";
-            }
-
-            var task = new TaskEntity
+            foreach (var dto in dtos)
             {
-                Name = dto.Name.Trim(),
-                Sottotitolo = dto.Sottotitolo?.Trim() ?? string.Empty,
-                TipologiaObiettivo = dto.TipologiaObiettivo?.Trim() ?? string.Empty,
-                Durata = dto.Durata,
-                RadioChannelId = radioChannelId,
-                MissionTAKSuiteId = MissionId,
-                Description = dto.Description?.Trim() ?? string.Empty,
-                CreationDate = DateTime.UtcNow,
-                LastModified = DateTime.UtcNow,
-                Status = TaskStatusTak.Created
-            };
-
-            if (dto.Items != null)
-            {
-                int order = 0;
-                foreach (var item in dto.Items)
+                Guid? radioChannelId = null;
+                if (!string.IsNullOrWhiteSpace(dto.RadioChannel))
                 {
-                    if (string.IsNullOrWhiteSpace(item.Value)) continue;
-                    if (!Enum.TryParse<TaskStringItemType>(item.Type, true, out var itemType)) continue;
-                    task.Items.Add(new TaskStringItem
-                    {
-                        Type = itemType,
-                        Value = item.Value.Trim(),
-                        Order = order++
-                    });
+                    var channelName = dto.RadioChannel.Trim();
+                    var match = _radioChannels.FirstOrDefault(r =>
+                        string.Equals(r.Name, channelName, StringComparison.OrdinalIgnoreCase))
+                        ?? _radioChannels.FirstOrDefault(r =>
+                        r.Name.Contains(channelName, StringComparison.OrdinalIgnoreCase))
+                        ?? _radioChannels.FirstOrDefault(r =>
+                        channelName.Contains(r.Name, StringComparison.OrdinalIgnoreCase));
+
+                    if (match != null)
+                        radioChannelId = match.Id;
+                    else
+                        warnings.Add($"Canale \"{channelName}\" non trovato per il task \"{dto.Name}\".");
                 }
+
+                var task = new TaskEntity
+                {
+                    Name = dto.Name.Trim(),
+                    Sottotitolo = dto.Sottotitolo?.Trim() ?? string.Empty,
+                    TipologiaObiettivo = dto.TipologiaObiettivo?.Trim() ?? string.Empty,
+                    Durata = dto.Durata,
+                    RadioChannelId = radioChannelId,
+                    MissionTAKSuiteId = MissionId,
+                    AssignedTeamId = _selectedTeamId,
+                    Description = dto.Description?.Trim() ?? string.Empty,
+                    CreationDate = DateTime.UtcNow,
+                    LastModified = DateTime.UtcNow,
+                    Status = TaskStatusTak.Created  // TaskService.AddAsync lo sovrascrive in base ai flag missione
+                };
+
+                if (dto.Items != null)
+                {
+                    int order = 0;
+                    foreach (var item in dto.Items)
+                    {
+                        if (string.IsNullOrWhiteSpace(item.Value)) continue;
+                        if (!Enum.TryParse<TaskStringItemType>(item.Type, true, out var itemType)) continue;
+                        task.Items.Add(new TaskStringItem
+                        {
+                            Type = itemType,
+                            Value = item.Value.Trim(),
+                            Order = order++
+                        });
+                    }
+                }
+
+                var created = await taskService.AddAsync(task);
+                if (created != null)
+                    saved++;
+                else
+                    warnings.Add($"Errore nel salvataggio del task \"{dto.Name}\".");
             }
 
-            var created = await taskService.AddAsync(task);
-            if (created != null)
+            if (saved > 0)
             {
                 _importSuccess = true;
+                _importedCount = saved;
                 _jsonText = string.Empty;
-                if (radioChannelWarning != null) _importError = radioChannelWarning;
+                if (warnings.Count > 0)
+                    _importError = string.Join(" ", warnings);
                 await OnTaskCreated.InvokeAsync();
             }
             else
             {
-                _importError = "Errore durante il salvataggio del task.";
+                _importError = "Nessun task salvato. " + string.Join(" ", warnings);
             }
         }
         catch (JsonException ex)

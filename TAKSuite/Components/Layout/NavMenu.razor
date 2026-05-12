@@ -10,7 +10,7 @@
 <Sidebar2 Href="/"
 ImageSrc="images/tak trasp.png"
 Title="TAK Suite"
-BadgeText="v2.6.2"
+BadgeText="v3.1.1"
 DataProvider="Sidebar2DataProvider"
 WidthUnit="Unit.Px"
 Width="300"/>
@@ -69,6 +69,7 @@ Width="300"/>
                 new NavItem { Id = $"8.{counter++}", Href = "/evententitylist", IconName = IconName.ListNested, Text = "Lista Eventi", ParentId = "8" },
                 new NavItem { Id = $"8.{counter++}", Href = "/template-editor", IconName = IconName.FileEarmarkCode, Text = "Template Task", ParentId = "8" },
                 new NavItem { Id = $"8.{counter++}", Href = "/priorities", IconName = IconName.SortNumericDown, Text = "Priorità", ParentId = "8" },
+                new NavItem { Id = $"8.{counter++}", Href = "/settings/tak", IconName = IconName.ShieldLockFill, Text = "Connessione TAK", ParentId = "8" },
 
 
 
@@ -92,7 +93,7 @@ Width="300"/>
             // new NavItem { Id = "12", Href = "/switch", IconName = IconName.ToggleOn, Text = "Switch", ParentId="8"},
         };
 
-        
+
 
 
         navItems = await RetrieveAllMissions(navItems.ToList(), "Missioni");
@@ -113,6 +114,14 @@ Width="300"/>
             IconName = IconName.ListNested,
             Text = "Lista missioni",
             ParentId = parentId
+        });
+        navItems.Add(new NavItem
+            {
+                Id = $"{parentId}.datasync",
+                Href = "/datasync",
+                IconName = IconName.ArrowRepeat,
+                Text = "DataSync Mission",
+                ParentId = parentId
         });
 
         var missions = await MissionSuiteService.GetAllAsync();

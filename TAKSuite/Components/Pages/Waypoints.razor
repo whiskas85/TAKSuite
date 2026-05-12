@@ -285,7 +285,7 @@ Responsive="true">
     }
     private async Task CompleteWaypoint(Waypoint item)
     {
-        await CoTManager.ChangeCotColor(item.Uid, ATAKHelper.COLOR_WAYPOINT_COMPLETED);
+        await CoTManager.ChangeCotColor("TEST FEED2", item.Uid, ATAKHelper.COLOR_WAYPOINT_COMPLETED);
         await grid.RefreshDataAsync();
         StateHasChanged();
     }

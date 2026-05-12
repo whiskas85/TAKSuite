@@ -1,19 +1,21 @@
 @using System.Globalization
+@using TAKSuite.Data.Models
 
 @{
     var total = (MissionEnd - MissionStart).TotalMinutes;
     Func<DateTime, double> pct = dt =>
         total > 0 ? Math.Clamp((dt - MissionStart).TotalMinutes / total * 100, 0, 100) : 0;
 
-    var nowPct      = pct(DateTime.UtcNow);
-    var tStartPct   = TaskStart.HasValue       ? (double?)pct(TaskStart.Value)       : null;
-    var tEndPct     = TaskEnd.HasValue         ? (double?)pct(TaskEnd.Value)         : null;
-    var glPct       = GreenLight.HasValue      ? (double?)pct(GreenLight.Value)      : null;
-    var glEndPct    = GreenLightEnd.HasValue   ? (double?)pct(GreenLightEnd.Value)   : null;
-    var plStartPct  = PlannedStart.HasValue    ? (double?)pct(PlannedStart.Value)    : null;
-    var plEndPct    = PlannedEnd.HasValue      ? (double?)pct(PlannedEnd.Value)      : null;
+    var nowPct     = pct(DateTime.UtcNow);
+    var plStartPct = PlannedStart.HasValue ? (double?)pct(PlannedStart.Value) : null;
+    var plEndPct   = PlannedEnd.HasValue   ? (double?)pct(PlannedEnd.Value)   : null;
 
-    // mezzanotti locali tra start e end
+    var effectiveWindows = (Windows != null && Windows.Count > 0)
+        ? Windows.Where(w => !w.IsEmpty).ToList()
+        : (TaskStart.HasValue
+            ? new List<TaskTimeWindow> { new() { StartDateTime = TaskStart, EndDateTime = TaskEnd } }
+            : new List<TaskTimeWindow>());
+
     var localStart = DateTime.SpecifyKind(MissionStart, DateTimeKind.Utc).ToLocalTime();
     var localEnd   = DateTime.SpecifyKind(MissionEnd,   DateTimeKind.Utc).ToLocalTime();
     var midnights  = new List<(double Pct, string Label)>();
@@ -24,116 +26,245 @@
     }
 
     string F(double v) => v.ToString("F1", CultureInfo.InvariantCulture);
+    string L(DateTime utc) => DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToLocalTime().ToString("HH:mm");
+
+    // 10 colori distinti – fill semi-trasparente + bordo solido
+    string[] winFill   = {
+        "rgba(13,110,253,0.18)",   // blue
+        "rgba(102,16,242,0.18)",   // indigo
+        "rgba(111,66,193,0.18)",   // purple
+        "rgba(13,202,240,0.22)",   // cyan
+        "rgba(32,201,151,0.20)",   // teal
+        "rgba(253,126,20,0.20)",   // orange
+        "rgba(214,51,132,0.18)",   // pink
+        "rgba(220,53,69,0.18)",    // red
+        "rgba(255,193,7,0.24)",    // yellow
+        "rgba(25,135,84,0.18)"     // green
+    };
+    string[] winSolid  = {
+        "#0d6efd", "#6610f2", "#6f42c1", "#0dcaf0", "#20c997",
+        "#fd7e14", "#d63384", "#dc3545", "#ffc107", "#198754"
+    };
+
+    string   glBandColor  = "rgba(25,135,84,0.25)";
+
+    var glPct    = GreenLight.HasValue ? (double?)pct(GreenLight.Value) : null;
+    var glEndPct = GreenLightEnd.HasValue ? (double?)pct(GreenLightEnd.Value)
+                   : (GreenLight.HasValue && Durata.HasValue ? (double?)pct(GreenLight.Value.AddMinutes(Durata.Value)) : null);
+    var glStr    = GreenLight.HasValue ? L(GreenLight.Value) : "";
+
+    var winData = effectiveWindows.Select((w, i) =>
+    {
+        var ci       = i % winFill.Length;
+        var sPct     = w.StartDateTime.HasValue ? (double?)pct(w.StartDateTime.Value) : null;
+        var ePct     = w.EndDateTime.HasValue   ? (double?)pct(w.EndDateTime.Value)   : null;
+        var startStr = w.StartDateTime.HasValue ? L(w.StartDateTime.Value) : "";
+        var endStr   = w.EndDateTime.HasValue   ? L(w.EndDateTime.Value)   : "";
+        return (idx: i, ci, sPct, ePct, startStr, endStr);
+    }).ToList();
+
+    var missionStartStr = L(MissionStart);
+    var missionEndStr   = L(MissionEnd);
+    var plannedStartStr = PlannedStart.HasValue ? L(PlannedStart.Value) : "";
+    var plannedEndStr   = PlannedEnd.HasValue   ? L(PlannedEnd.Value)   : "";
+
 }
 
 <div class="mission-timeline-wrap" style="user-select:none;">
+
+    @* ── Barra principale ── *@
     <div style="position:relative; height:38px; background:#dee2e6; border-radius:6px; overflow:hidden;">
 
-        @if (plStartPct.HasValue && plEndPct.HasValue)
+        @* Finestra schedulata *@
+        @if (!_hidePlanned && plStartPct.HasValue && plEndPct.HasValue)
         {
-            <div title="Forchetta pianificata"
-                 style="position:absolute; left:@F(plStartPct.Value)%; width:@F(plEndPct.Value - plStartPct.Value)%;
-                        height:100%; background:rgba(108,117,125,0.18);
-                        border-left:2px dashed rgba(108,117,125,0.6); border-right:2px dashed rgba(108,117,125,0.6);">
+            <div title="Finestra schedulata"
+                 style="position:absolute; top:0; left:@F(plStartPct.Value)%; width:@F(plEndPct.Value - plStartPct.Value)%;
+                        height:100%; background:rgba(108,117,125,0.15);
+                        border-left:2px dashed rgba(108,117,125,0.55); border-right:2px dashed rgba(108,117,125,0.55);">
             </div>
         }
 
-        @if (tStartPct.HasValue && tEndPct.HasValue)
+        @* Bande finestre temporali *@
+        @foreach (var d in winData)
         {
-            <div title="Finestra obiettivo"
-                 style="position:absolute; left:@F(tStartPct.Value)%; width:@F(tEndPct.Value - tStartPct.Value)%;
-                        height:100%; background:rgba(13,110,253,0.22); border-left:2px solid #0d6efd; border-right:2px solid #0d6efd;">
-            </div>
+            if (!_hiddenWin.Contains(d.idx) && d.sPct.HasValue && d.ePct.HasValue)
+            {
+                <div title="Finestra task"
+                     style="position:absolute; top:0; left:@F(d.sPct.Value)%; width:@F(d.ePct.Value - d.sPct.Value)%;
+                            height:100%; background:@winFill[d.ci];
+                            border-left:2px solid @winSolid[d.ci]; border-right:2px solid @winSolid[d.ci];">
+                </div>
+            }
         }
 
-        @if (glPct.HasValue && glEndPct.HasValue)
+        @* Luce Verde *@
+        @if (!_hideGl && glPct.HasValue)
         {
-            <div title="Finestra luce verde"
-                 style="position:absolute; left:@F(glPct.Value)%; width:@F(glEndPct.Value - glPct.Value)%;
-                        height:100%; background:rgba(25,135,84,0.30); border-right:2px solid #198754;">
-            </div>
-        }
-
-        @if (glPct.HasValue)
-        {
-            <div title="Luce verde @(GreenLight!.Value.ToString("HH:mm"))"
+            if (glEndPct.HasValue)
+            {
+                <div title="Finestra luce verde"
+                     style="position:absolute; top:0; left:@F(glPct.Value)%; width:@F(glEndPct.Value - glPct.Value)%;
+                            height:100%; background:@glBandColor; border-right:2px solid #198754;">
+                </div>
+            }
+            <div title="Luce Verde @glStr"
                  style="position:absolute; left:@F(glPct.Value)%; top:0; width:3px; height:100%;
                         background:#198754; transform:translateX(-1px);">
-                <span style="position:absolute; top:1px; left:4px; font-size:9px; font-weight:700;
+                <span style="position:absolute; top:2px; left:4px; font-size:9px; font-weight:700;
                              color:#198754; white-space:nowrap; line-height:1;">GL</span>
             </div>
         }
 
+        @* Mezzanotti *@
         @foreach (var mn in midnights)
         {
             <div title="Mezzanotte @mn.Label"
                  style="position:absolute; left:@F(mn.Pct)%; top:0; width:2px; height:100%;
                         background:rgba(0,0,0,0.85); transform:translateX(-1px); box-shadow:0 0 3px rgba(0,0,0,0.5);">
-                <span style="position:absolute; top:1px; left:4px; font-size:9px;
+                <span style="position:absolute; top:2px; left:4px; font-size:9px;
                              color:#000; white-space:nowrap; line-height:1; font-weight:700;
                              text-shadow:0 0 2px rgba(255,255,255,0.6);">@mn.Label</span>
             </div>
         }
 
+        @* Ora corrente *@
         <div title="Ora corrente"
              style="position:absolute; left:@F(nowPct)%; top:0; width:2px; height:100%;
                     background:#dc3545; transform:translateX(-1px);">
         </div>
     </div>
 
-    <div style="position: relative; height: 1.3em; margin-top: 3px; overflow: visible;" class="small">
-        <span style="position:absolute; left:0; white-space:nowrap;" class="text-muted">
-            @MissionStart.ToString("HH:mm")
-        </span>
-        @if (plStartPct.HasValue && plStartPct > 4 && plStartPct < 96)
+    @* ── Etichette orarie ── *@
+    <div style="position:relative; height:1.3em; margin-top:3px; overflow:visible;" class="small">
+        <span style="position:absolute; left:0; white-space:nowrap;" class="text-muted">@missionStartStr</span>
+
+        @if (!_hidePlanned && plStartPct.HasValue && plStartPct > 4 && plStartPct < 96)
         {
             <span style="position:absolute; left:@F(plStartPct.Value)%; transform:translateX(-50%); white-space:nowrap; opacity:.6;" class="text-secondary">
-                @PlannedStart!.Value.ToString("HH:mm")
+                @plannedStartStr
             </span>
         }
-        @if (tStartPct.HasValue && tStartPct > 4 && tStartPct < 96)
+
+        @foreach (var d in winData)
         {
-            <span style="position:absolute; left:@F(tStartPct.Value)%; transform:translateX(-50%); white-space:nowrap;" class="text-primary">
-                @TaskStart!.Value.ToString("HH:mm")
-            </span>
+            if (!_hiddenWin.Contains(d.idx) && d.sPct.HasValue && d.sPct > 4 && d.sPct < 96)
+            {
+                <span style="@($"position:absolute; left:{F(d.sPct.Value)}%; transform:translateX(-50%); white-space:nowrap; color:{winSolid[d.ci]}; font-weight:700;")">
+                    @d.startStr
+                </span>
+            }
+            if (!_hiddenWin.Contains(d.idx) && d.ePct.HasValue && d.ePct > 4 && d.ePct < 96)
+            {
+                <span style="@($"position:absolute; left:{F(d.ePct.Value)}%; transform:translateX(-50%); white-space:nowrap; color:{winSolid[d.ci]}; font-weight:700;")">
+                    @d.endStr
+                </span>
+            }
         }
-        @if (glPct.HasValue && glPct > 2 && glPct < 98)
+
+        @if (!_hideGl && glPct.HasValue && glPct > 2 && glPct < 98)
         {
-            <span style="position:absolute; left:@F(glPct.Value)%; transform:translateX(-50%); white-space:nowrap;" class="text-success fw-semibold">
-                @GreenLight!.Value.ToString("HH:mm")
+            <span style="position:absolute; left:@F(glPct.Value)%; transform:translateX(-50%); white-space:nowrap; font-weight:600;" class="text-success">
+                @glStr
             </span>
         }
-        @if (glEndPct.HasValue && glEndPct > 2 && glEndPct < 98)
-        {
-            <span style="position:absolute; left:@F(glEndPct.Value)%; transform:translateX(-50%); white-space:nowrap;" class="text-success">
-                @GreenLightEnd!.Value.ToString("HH:mm")
-            </span>
-        }
-        @if (tEndPct.HasValue && tEndPct > 4 && tEndPct < 96)
-        {
-            <span style="position:absolute; left:@F(tEndPct.Value)%; transform:translateX(-50%); white-space:nowrap;" class="text-primary">
-                @TaskEnd!.Value.ToString("HH:mm")
-            </span>
-        }
-        @if (plEndPct.HasValue && plEndPct > 4 && plEndPct < 96)
+
+        @if (!_hidePlanned && plEndPct.HasValue && plEndPct > 4 && plEndPct < 96)
         {
             <span style="position:absolute; left:@F(plEndPct.Value)%; transform:translateX(-50%); white-space:nowrap; opacity:.6;" class="text-secondary">
-                @PlannedEnd!.Value.ToString("HH:mm")
+                @plannedEndStr
             </span>
         }
-        <span style="position:absolute; right:0; white-space:nowrap;" class="text-muted">
-            @MissionEnd.ToString("HH:mm")
-        </span>
+
+        <span style="position:absolute; right:0; white-space:nowrap;" class="text-muted">@missionEndStr</span>
     </div>
+
+
+    @* ── Legenda interattiva ── *@
+    @{
+        bool hasAnything = winData.Count > 0 || glPct.HasValue || (plStartPct.HasValue && plEndPct.HasValue);
+    }
+    @if (hasAnything)
+    {
+        <div style="display:flex; flex-wrap:wrap; gap:4px 12px; margin-top:5px; font-size:11px; font-weight:600; user-select:none;">
+
+            @foreach (var d in winData)
+            {
+                var hidden = _hiddenWin.Contains(d.idx);
+                <span @onclick="() => ToggleWin(d.idx)"
+                      style="cursor:pointer; display:inline-flex; align-items:center; gap:3px;
+                             opacity:@(hidden ? "0.35" : "1");
+                             text-decoration:@(hidden ? "line-through" : "none");">
+                    <span style="display:inline-block; width:10px; height:10px; flex-shrink:0;
+                                 background:@winSolid[d.ci]; border-radius:2px;"></span>
+                    <span style="color:@winSolid[d.ci];">F@(d.idx + 1)</span>
+                    @if (!string.IsNullOrEmpty(d.startStr))
+                    {
+                        <span class="fw-normal text-muted">@d.startStr–@d.endStr</span>
+                    }
+                </span>
+            }
+
+            @if (glPct.HasValue)
+            {
+                <span @onclick='() => _hideGl = !_hideGl'
+                      style="cursor:pointer; display:inline-flex; align-items:center; gap:3px;
+                             opacity:@(_hideGl ? "0.35" : "1");
+                             text-decoration:@(_hideGl ? "line-through" : "none");">
+                    <span style="display:inline-block; width:10px; height:10px; flex-shrink:0;
+                                 background:#198754; border-radius:2px;"></span>
+                    <span style="color:#198754;">GL</span>
+                    @if (!string.IsNullOrEmpty(glStr))
+                    {
+                        <span class="fw-normal text-muted">@glStr</span>
+                    }
+                </span>
+            }
+
+            @if (plStartPct.HasValue && plEndPct.HasValue)
+            {
+                <span @onclick='() => _hidePlanned = !_hidePlanned'
+                      style="cursor:pointer; display:inline-flex; align-items:center; gap:3px;
+                             opacity:@(_hidePlanned ? "0.35" : "1");
+                             text-decoration:@(_hidePlanned ? "line-through" : "none");">
+                    <span style="display:inline-block; width:10px; height:10px; flex-shrink:0;
+                                 background:rgba(108,117,125,0.4); border:1px dashed #6c757d; border-radius:2px;"></span>
+                    <span style="color:#6c757d;">Sched.</span>
+                    @if (!string.IsNullOrEmpty(plannedStartStr))
+                    {
+                        <span class="fw-normal text-muted">@plannedStartStr–@plannedEndStr</span>
+                    }
+                </span>
+            }
+
+        </div>
+    }
+
 </div>
 
 @code {
-    [Parameter] public DateTime  MissionStart   { get; set; }
-    [Parameter] public DateTime  MissionEnd     { get; set; }
-    [Parameter] public DateTime? TaskStart      { get; set; }
-    [Parameter] public DateTime? TaskEnd        { get; set; }
-    [Parameter] public DateTime? GreenLight     { get; set; }
-    [Parameter] public DateTime? GreenLightEnd  { get; set; }
-    [Parameter] public DateTime? PlannedStart   { get; set; }
-    [Parameter] public DateTime? PlannedEnd     { get; set; }
+    [Parameter] public DateTime  MissionStart  { get; set; }
+    [Parameter] public DateTime  MissionEnd    { get; set; }
+
+    [Parameter] public List<TaskTimeWindow>? Windows { get; set; }
+    [Parameter] public int? Durata { get; set; }
+
+    // Retrocompatibilità
+    [Parameter] public DateTime? TaskStart     { get; set; }
+    [Parameter] public DateTime? TaskEnd       { get; set; }
+    [Parameter] public DateTime? GreenLight    { get; set; }
+    [Parameter] public DateTime? GreenLightEnd { get; set; }
+
+    [Parameter] public DateTime? PlannedStart  { get; set; }
+    [Parameter] public DateTime? PlannedEnd    { get; set; }
+
+    private readonly HashSet<int> _hiddenWin = new();
+    private bool _hideGl;
+    private bool _hidePlanned;
+
+    private void ToggleWin(int idx)
+    {
+        if (!_hiddenWin.Remove(idx))
+            _hiddenWin.Add(idx);
+    }
 }

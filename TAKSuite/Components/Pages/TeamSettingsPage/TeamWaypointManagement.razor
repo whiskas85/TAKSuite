@@ -169,7 +169,7 @@ Responsive="true">
     }
     private async Task CompleteWaypoint(Waypoint item)
     {
-        await CoTManager.ChangeCotColor(item.Uid, ATAKHelper.COLOR_WAYPOINT_COMPLETED);
+        await CoTManager.ChangeCotColor(team?.MissionUid ?? string.Empty, item.Uid, ATAKHelper.COLOR_WAYPOINT_COMPLETED);
         await RefreshData();
         await grid.RefreshDataAsync();
 
