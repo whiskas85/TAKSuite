@@ -10,7 +10,7 @@
 <Sidebar2 Href="/"
 ImageSrc="images/tak trasp.png"
 Title="TAK Suite"
-BadgeText="v3.1.1"
+BadgeText="v3.2.5"
 DataProvider="Sidebar2DataProvider"
 WidthUnit="Unit.Px"
 Width="300"/>
@@ -70,6 +70,7 @@ Width="300"/>
                 new NavItem { Id = $"8.{counter++}", Href = "/template-editor", IconName = IconName.FileEarmarkCode, Text = "Template Task", ParentId = "8" },
                 new NavItem { Id = $"8.{counter++}", Href = "/priorities", IconName = IconName.SortNumericDown, Text = "Priorità", ParentId = "8" },
                 new NavItem { Id = $"8.{counter++}", Href = "/settings/tak", IconName = IconName.ShieldLockFill, Text = "Connessione TAK", ParentId = "8" },
+                new NavItem { Id = $"8.{counter++}", Href = "/settings/photo-join", IconName = IconName.CameraFill, Text = "Photo Auto-Join", ParentId = "8" },
 
 
 
@@ -180,6 +181,14 @@ Width="300"/>
                 Href = $"/missiontak/{mission.Id}/waypoints-simple",
                 IconName = IconName.PinFill,
                 Text = "WP Simple",
+                ParentId = missionMenuId
+            });
+            navItems.Add(new NavItem
+            {
+                Id = $"{missionMenuId}.photoJoin",
+                Href = $"/missiontak/{mission.Id}/photo-join",
+                IconName = IconName.CameraFill,
+                Text = "Photo Join",
                 ParentId = missionMenuId
             });
 

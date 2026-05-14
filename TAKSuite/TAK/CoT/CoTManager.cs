@@ -70,9 +70,12 @@ namespace TAKSuite.TAK.CoT
 
             var xml = XmlHelper.FormatXmlPlain(doc);
             await TakClient.SendCotAsync(xml);
-            await TakClient.AddUidsToMissionAsync(missionUid, new[] { uid }, CreatorUid);
 
-            await Task.Delay(300);
+            // Attende che il server TAK elabori il CoT ricevuto via TCP prima di
+            // aggiornare i contenuti della missione via REST.
+            await Task.Delay(500);
+
+            await TakClient.AddUidsToMissionAsync(missionUid, new[] { uid }, CreatorUid);
             return true;
         }
 

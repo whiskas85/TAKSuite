@@ -1,0 +1,138 @@
+@page "/settings/photo-join"
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using TAKSuite.Data
+@using TAKSuite.Data.Models
+
+@inject ApplicationDbContext Db
+@inject ToastService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>Photo Auto-Join</PageTitle>
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3><Icon Name="IconName.CameraFill" /> Photo Auto-Join</h3>
+    </div>
+
+    @if (_rows == null)
+    {
+        <p class="text-muted">Caricamento...</p>
+    }
+    else if (!_rows.Any())
+    {
+        <p class="text-muted">Nessuna missione trovata.</p>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Missione</th>
+                        <th>TAK UID</th>
+                        <th style="width:130px" class="text-center">Abilitato</th>
+                        <th style="width:130px" class="text-center">Raggio (m)</th>
+                        <th style="width:80px"  class="text-center">Regole</th>
+                        <th style="width:160px" class="text-center">Azioni</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in _rows)
+                    {
+                        <tr>
+                            <td><strong>@row.Mission.Name</strong></td>
+                            <td><small class="text-muted">@(row.Mission.TakMissionUid ?? "-")</small></td>
+                            <td class="text-center">
+                                <div class="form-check form-switch d-flex justify-content-center">
+                                    <input class="form-check-input" type="checkbox" role="switch"
+                                           checked="@row.Config.Enabled"
+                                           @onchange="e => row.Config.Enabled = (bool)e.Value!" />
+                                </div>
+                            </td>
+                            <td class="text-center">
+                                <NumberInput TValue="int"
+                                             @bind-Value="row.Config.RadiusMeters"
+                                             Min="5" Max="5000" />
+                            </td>
+                            <td class="text-center">
+                                <Badge Color="BadgeColor.Primary">@row.Config.PriorityRules.Count</Badge>
+                            </td>
+                            <td class="text-center d-flex gap-1 justify-content-center">
+                                <Button Size="ButtonSize.Small" Color="ButtonColor.Success"
+                                        @onclick="() => SaveRowAsync(row)">
+                                    <Icon Name="IconName.Save" />
+                                </Button>
+                                <Button Size="ButtonSize.Small" Color="ButtonColor.Primary"
+                                        @onclick="() => GoToRules(row.Mission.Id)">
+                                    <Icon Name="IconName.PencilFill" /> Regole
+                                </Button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    private List<PhotoJoinRow>? _rows;
+
+    private class PhotoJoinRow
+    {
+        public MissionSuite Mission { get; set; } = null!;
+        public MissionPhotoJoinConfig Config { get; set; } = null!;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var missions = await Db.MissionsTakSuite
+            .Include(m => m.PhotoJoinConfig)
+                .ThenInclude(c => c!.PriorityRules)
+            .OrderBy(m => m.Name)
+            .ToListAsync();
+
+        foreach (var m in missions.Where(m => m.PhotoJoinConfig == null))
+        {
+            var cfg = new MissionPhotoJoinConfig { Id = Guid.NewGuid(), MissionId = m.Id };
+            Db.MissionPhotoJoinConfigs.Add(cfg);
+            m.PhotoJoinConfig = cfg;
+        }
+        await Db.SaveChangesAsync();
+
+        // Detach all entities so the settings page checkboxes/inputs don't
+        // accumulate unsaved changes in the shared circuit-scoped DbContext.
+        Db.ChangeTracker.Clear();
+
+        _rows = missions
+            .Select(m => new PhotoJoinRow { Mission = m, Config = m.PhotoJoinConfig! })
+            .ToList();
+    }
+
+    private void GoToRules(Guid missionId) =>
+        Navigation.NavigateTo($"/missiontak/{missionId}/photo-join");
+
+    private async Task SaveRowAsync(PhotoJoinRow row)
+    {
+        try
+        {
+            // Re-attach the detached entity and mark only the editable fields.
+            var entry = Db.Entry(row.Config);
+            if (entry.State == EntityState.Detached)
+                Db.Attach(row.Config);
+            entry.Property(c => c.Enabled).IsModified = true;
+            entry.Property(c => c.RadiusMeters).IsModified = true;
+            await Db.SaveChangesAsync();
+            entry.State = EntityState.Detached;
+            ToastService.Notify(new(ToastType.Success, "Salvato", $"Missione '{row.Mission.Name}' aggiornata."));
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(new(ToastType.Danger, "Errore", ex.Message));
+        }
+    }
+}

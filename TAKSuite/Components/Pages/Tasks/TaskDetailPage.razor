@@ -6,6 +6,7 @@
 @using TAKSuite.Components.Layout
 @using TAKSuite.Components.Pages.Tasks.TaskComponents
 @using TAKSuite.Data.Models
+@using TAKSuite.Data.ModelsTak
 @using TAKSuite.Data.Services
 @using TAKSuite.Data.ServicesTak
 @inject TaskService TaskService
@@ -15,6 +16,7 @@
 @inject TaskTemplateService TemplateService
 @inject AttachmentService AttachmentService
 @inject ToastService ToastService
+@inject IJSRuntime JS
 @inject TeamService TeamService
 @inject NavigationManager Navigation
 
@@ -299,6 +301,72 @@ else
             </div>
         </div>
 
+        @if (!string.IsNullOrEmpty(_task.PoiUid))
+        {
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header fw-bold d-flex justify-content-between align-items-center">
+                        <span><Icon Name="IconName.Paperclip" /> Allegati obiettivo</span>
+                    </div>
+                    <div class="card-body">
+                        @if (!string.IsNullOrEmpty(_mission?.TakMissionUid))
+                        {
+                            <div class="d-flex gap-2 align-items-center mb-3">
+                                <InputFile OnChange="OnAttachFileSelected" class="form-control form-control-sm" />
+                                <Button Color="ButtonColor.Primary" Size="ButtonSize.Small"
+                                        @onclick="UploadAttachmentAsync"
+                                        Loading="_uploading" LoadingText="Caricamento..."
+                                        Disabled="@(_uploadFile == null || _uploading)">
+                                    <Icon Name="IconName.CloudUploadFill" /> Allega
+                                </Button>
+                            </div>
+                        }
+                        <Grid @ref="_attachGrid"
+                              TItem="AtakAttachment"
+                              Class="table table-hover table-sm"
+                              DataProvider="AttachDataProvider"
+                              AllowFiltering="false"
+                              AllowPaging="false"
+                              AllowSorting="false"
+                              Responsive="true"
+                              EmptyText="Nessun allegato">
+                            <GridColumns>
+                                <GridColumn TItem="AtakAttachment" HeaderText="Nome" SortKeySelector="x => x.Name">
+                                    @Uri.UnescapeDataString(context.Name ?? "")
+                                </GridColumn>
+                                <GridColumn TItem="AtakAttachment" HeaderText="Tipo" SortKeySelector="x => x.MediaType">
+                                    @context.MediaType
+                                </GridColumn>
+                                <GridColumn TItem="AtakAttachment" HeaderText="" Style="width:100px">
+                                    <Button Size="ButtonSize.Small" @onclick="() => DownloadAttachment(context)">
+                                        @if (context.MediaType?.Contains("jpeg") == true || context.MediaType?.Contains("png") == true)
+                                        {
+                                            <Icon Name="IconName.FileEarmarkImage" Color="IconColor.Primary" />
+                                        }
+                                        else if (context.MediaType?.Contains("pdf") == true)
+                                        {
+                                            <Icon Name="IconName.FileEarmarkPdfFill" Color="IconColor.Primary" />
+                                        }
+                                        else
+                                        {
+                                            <Icon Name="IconName.FileEarmarkArrowDownFill" Color="IconColor.Primary" />
+                                        }
+                                    </Button>
+                                    @if (!string.IsNullOrEmpty(_mission?.TakMissionUid))
+                                    {
+                                        <Button Size="ButtonSize.Small" Color="ButtonColor.Danger"
+                                                @onclick="() => DeleteAttachmentAsync(context)">
+                                            <Icon Name="IconName.Trash3Fill" />
+                                        </Button>
+                                    }
+                                </GridColumn>
+                            </GridColumns>
+                        </Grid>
+                    </div>
+                </div>
+            </div>
+        }
+
         <!-- Descrizione -->
         @if (!string.IsNullOrWhiteSpace(_task.Description))
         {
@@ -374,6 +442,10 @@ else
     private MissionSuite? _mission;
     private List<Team> _subteams = new();
     private bool _pushing;
+
+    private Grid<AtakAttachment> _attachGrid = default!;
+    private IBrowserFile? _uploadFile;
+    private bool _uploading;
 
     private System.Timers.Timer? _timer;
 
@@ -540,6 +612,64 @@ else
         {
             Console.WriteLine($"[AutoSubscribe] {takMissionUid}: {ex.Message}");
         }
+    }
+
+    private void OnAttachFileSelected(InputFileChangeEventArgs e) => _uploadFile = e.File;
+
+    private async Task<GridDataProviderResult<AtakAttachment>> AttachDataProvider(GridDataProviderRequest<AtakAttachment> request)
+    {
+        var list = string.IsNullOrEmpty(_task?.PoiUid)
+            ? new List<AtakAttachment>()
+            : await AttachmentService.GetAllAsync(_task.PoiUid);
+        return request.ApplyTo(list);
+    }
+
+    private async Task UploadAttachmentAsync()
+    {
+        if (_uploadFile == null || string.IsNullOrEmpty(_task?.PoiUid) || string.IsNullOrEmpty(_mission?.TakMissionUid)) return;
+        _uploading = true;
+        try
+        {
+            using var ms = new System.IO.MemoryStream();
+            await _uploadFile.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024).CopyToAsync(ms);
+            var ok = await AttachmentService.UploadAndAttachAsync(
+                _mission.TakMissionUid, _task.PoiUid,
+                ms.ToArray(), _uploadFile.Name,
+                string.IsNullOrEmpty(_uploadFile.ContentType) ? "application/octet-stream" : _uploadFile.ContentType);
+            if (ok)
+            {
+                ToastService.Notify(new(ToastType.Success, "Allegato", "File allegato con successo."));
+                _uploadFile = null;
+                await _attachGrid.RefreshDataAsync();
+            }
+            else
+            {
+                ToastService.Notify(new(ToastType.Danger, "Errore", "Impossibile allegare il file."));
+            }
+        }
+        finally { _uploading = false; }
+    }
+
+    private async Task DeleteAttachmentAsync(AtakAttachment attach)
+    {
+        var ok = await AttachmentService.DeleteAsync(_mission!.TakMissionUid!, attach);
+        if (ok)
+        {
+            ToastService.Notify(new(ToastType.Success, "Allegato", "Allegato rimosso."));
+            await _attachGrid.RefreshDataAsync();
+        }
+        else
+        {
+            ToastService.Notify(new(ToastType.Danger, "Errore", "Impossibile rimuovere l'allegato."));
+        }
+    }
+
+    private async Task DownloadAttachment(AtakAttachment attach)
+    {
+        if (attach.FileBytes == null) return;
+        var base64 = Convert.ToBase64String(attach.FileBytes);
+        var mediaType = attach.MediaType ?? "application/octet-stream";
+        await JS.InvokeVoidAsync("downloadFile", $"data:{mediaType};base64,{base64}", attach.Name);
     }
 
     public void Dispose()

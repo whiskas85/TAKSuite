@@ -55,6 +55,7 @@ Responsive="true">
 
 @code {
     [Parameter] public Waypoint? Item { get; set; }
+    [Parameter] public string? MissionUid { get; set; }
 
     private List<AtakAttachment> list = new();
 
@@ -71,7 +72,7 @@ Responsive="true">
 
     private async Task DeleteAttachment(AtakAttachment attach)
     {
-        bool res = await AttachmentService.DeleteAsync(attach);
+        bool res = await AttachmentService.DeleteAsync(MissionUid ?? string.Empty, attach);
         if (res)
         {
             ToastService.Notify(new(ToastType.Success, "Eliminazione", $"Il file {attach.Name} è stato eliminato"));

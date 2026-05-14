@@ -14,6 +14,7 @@
 @inject CoTManager CoTManager
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject ToastService ToastService
 
 <PageTitle>Waypoints — @(_mission?.Name ?? "Missione")</PageTitle>
 
@@ -26,6 +27,7 @@ else
     <ModalAddPoi @ref="_addPoiModal"
                  MissionTakUid="@_mission.TakMissionUid"
                  OnPoiCreated="OnPoiCreated" />
+    <ConfirmDialog @ref="_confirmDialog" />
 
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
@@ -106,6 +108,10 @@ else
                             @onclick="async () => await OpenMaps(context.Lat, context.Lon)">
                         <Icon Name="IconName.GeoAltFill" />
                     </Button>
+                    <Button Size="ButtonSize.Small" Color="ButtonColor.Danger"
+                            @onclick="async () => await RemoveWaypoint(context)">
+                        <Icon Name="IconName.Trash3Fill" />
+                    </Button>
                 </GridColumn>
             </GridColumns>
         </Grid>
@@ -113,7 +119,17 @@ else
 
     <Modal @ref="_attachmentModal" Title="Allegati waypoint" Size="ModalSize.Large">
         <BodyTemplate>
-            <Grid TItem="AtakAttachment"
+            <div class="mb-3 d-flex gap-2 align-items-center">
+                <InputFile OnChange="OnAttachFileSelected" class="form-control form-control-sm" />
+                <Button Color="ButtonColor.Primary" Size="ButtonSize.Small"
+                        @onclick="UploadAttachmentAsync"
+                        Loading="_uploading" LoadingText="Caricamento..."
+                        Disabled="@(_uploadFile == null || _uploading)">
+                    <Icon Name="IconName.CloudUploadFill" /> Allega
+                </Button>
+            </div>
+            <Grid @ref="_attachmentGrid"
+                  TItem="AtakAttachment"
                   Class="table table-hover"
                   HeaderRowCssClass="bg-success text-white border-bottom-0"
                   DataProvider="AttachmentDataProvider"
@@ -143,6 +159,10 @@ else
                                 <Icon Name="IconName.FileEarmarkArrowDownFill" Color="IconColor.Primary" />
                             }
                         </Button>
+                        <Button Size="ButtonSize.Small" Color="ButtonColor.Danger"
+                                @onclick="async () => await DeleteAttachmentAsync(context)">
+                            <Icon Name="IconName.Trash3Fill" />
+                        </Button>
                     </GridColumn>
                 </GridColumns>
             </Grid>
@@ -158,9 +178,13 @@ else
 
     private MissionSuite? _mission;
     private Grid<Waypoint> _grid = default!;
+    private Grid<AtakAttachment> _attachmentGrid = default!;
     private Modal _attachmentModal = default!;
     private ModalAddPoi _addPoiModal = default!;
+    private ConfirmDialog _confirmDialog = default!;
     private string? _selectedWaypointUid;
+    private IBrowserFile? _uploadFile;
+    private bool _uploading;
 
     protected override async Task OnInitializedAsync()
     {
@@ -187,6 +211,33 @@ else
         await _grid.RefreshDataAsync();
     }
 
+    private async Task RemoveWaypoint(Waypoint item)
+    {
+        var confirmed = await _confirmDialog.ShowAsync(
+            title: "Rimuovi waypoint",
+            message1: $"Rimuovere \"{item.Callsign}\" dalla missione TAK?",
+            confirmDialogOptions: new ConfirmDialogOptions
+            {
+                YesButtonText = "Rimuovi",
+                YesButtonColor = ButtonColor.Danger,
+                NoButtonText = "Annulla",
+                NoButtonColor = ButtonColor.Secondary
+            });
+
+        if (!confirmed) return;
+
+        var ok = await CoTManager.DeleteMissionUidAsync(_mission!.TakMissionUid!, item.Uid);
+        if (ok)
+        {
+            ToastService.Notify(new(ToastType.Success, "Waypoint", $"\"{item.Callsign}\" rimosso dalla missione."));
+            await _grid.RefreshDataAsync();
+        }
+        else
+        {
+            ToastService.Notify(new(ToastType.Danger, "Errore", $"Impossibile rimuovere \"{item.Callsign}\"."));
+        }
+    }
+
     private async Task CompleteWaypoint(Waypoint item)
     {
         await CoTManager.ChangeCotColor(_mission?.TakMissionUid ?? string.Empty, item.Uid, ATAKHelper.COLOR_WAYPOINT_COMPLETED);
@@ -203,7 +254,61 @@ else
     private async Task OpenAttachments(Waypoint item)
     {
         _selectedWaypointUid = item.Uid;
+        _uploadFile = null;
         await _attachmentModal.ShowAsync();
+    }
+
+    private void OnAttachFileSelected(InputFileChangeEventArgs e) => _uploadFile = e.File;
+
+    private async Task UploadAttachmentAsync()
+    {
+        if (_uploadFile == null || string.IsNullOrEmpty(_selectedWaypointUid) || string.IsNullOrEmpty(_mission?.TakMissionUid)) return;
+        _uploading = true;
+        try
+        {
+            using var ms = new System.IO.MemoryStream();
+            await _uploadFile.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024).CopyToAsync(ms);
+            var ok = await AttachmentService.UploadAndAttachAsync(
+                _mission.TakMissionUid, _selectedWaypointUid,
+                ms.ToArray(), _uploadFile.Name,
+                string.IsNullOrEmpty(_uploadFile.ContentType) ? "application/octet-stream" : _uploadFile.ContentType);
+            if (ok)
+            {
+                ToastService.Notify(new(ToastType.Success, "Allegato", "File allegato con successo."));
+                _uploadFile = null;
+                await _attachmentGrid.RefreshDataAsync();
+            }
+            else
+            {
+                ToastService.Notify(new(ToastType.Danger, "Errore", "Impossibile allegare il file."));
+            }
+        }
+        finally { _uploading = false; }
+    }
+
+    private async Task DeleteAttachmentAsync(AtakAttachment attach)
+    {
+        var confirmed = await _confirmDialog.ShowAsync(
+            title: "Rimuovi allegato",
+            message1: $"Rimuovere \"{attach.Name}\"?",
+            confirmDialogOptions: new ConfirmDialogOptions
+            {
+                YesButtonText = "Rimuovi",
+                YesButtonColor = ButtonColor.Danger,
+                NoButtonText = "Annulla",
+                NoButtonColor = ButtonColor.Secondary
+            });
+        if (!confirmed) return;
+        var ok = await AttachmentService.DeleteAsync(_mission!.TakMissionUid!, attach);
+        if (ok)
+        {
+            ToastService.Notify(new(ToastType.Success, "Allegato", "Allegato rimosso."));
+            await _attachmentGrid.RefreshDataAsync();
+        }
+        else
+        {
+            ToastService.Notify(new(ToastType.Danger, "Errore", "Impossibile rimuovere l'allegato."));
+        }
     }
 
     private async Task<GridDataProviderResult<AtakAttachment>> AttachmentDataProvider(GridDataProviderRequest<AtakAttachment> request)

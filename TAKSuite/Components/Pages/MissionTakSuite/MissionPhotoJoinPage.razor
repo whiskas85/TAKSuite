@@ -1,0 +1,190 @@
+@page "/missiontak/{MissionTakId:guid}/photo-join"
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using TAKSuite.Data
+@using TAKSuite.Data.Models
+
+@inject ApplicationDbContext Db
+@inject ToastService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>Photo Join — @(_mission?.Name ?? "...")</PageTitle>
+
+@if (_mission == null)
+{
+    <p class="text-muted">Caricamento...</p>
+}
+else
+{
+    <div class="container-fluid">
+        <div class="d-flex align-items-center gap-3 mb-4">
+            <Button Color="ButtonColor.Secondary" Size="ButtonSize.Small"
+                    @onclick='() => Navigation.NavigateTo($"/missiontak/{MissionTakId}")'>
+                <Icon Name="IconName.ArrowLeft" />
+            </Button>
+            <div>
+                <h3 class="mb-0"><Icon Name="IconName.CameraFill" /> Photo Auto-Join</h3>
+                <small class="text-muted">Missione: <strong>@_mission.Name</strong></small>
+            </div>
+        </div>
+
+        <!-- Intestazione: on/off + raggio -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="row g-3 align-items-center">
+                    <div class="col-auto">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" role="switch" id="switchEnabled"
+                                   checked="@_config!.Enabled"
+                                   @onchange="e => _config!.Enabled = (bool)e.Value!" />
+                            <label class="form-check-label" for="switchEnabled">Abilita join automatico foto</label>
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <label class="form-label mb-0">Raggio (metri)</label>
+                        <NumberInput TValue="int" @bind-Value="_config.RadiusMeters" Min="5" Max="5000" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Regole di priorità -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <strong>Regole di priorità</strong>
+                <Button Size="ButtonSize.Small" Color="ButtonColor.Success" @onclick="AddRule">
+                    <Icon Name="IconName.PlusCircle" /> Aggiungi regola
+                </Button>
+            </div>
+            <div class="card-body p-0">
+                @if (!_config.PriorityRules.Any())
+                {
+                    <p class="text-muted p-3 mb-0">Nessuna regola — il target più vicino verrà selezionato automaticamente.</p>
+                }
+                else
+                {
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width:70px" class="text-center">Priorità</th>
+                                <th>Type contains</th>
+                                <th>Callsign contains</th>
+                                <th>Tipi esclusi (csv)</th>
+                                <th style="width:50px"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var rule in _config.PriorityRules.OrderBy(r => r.Priority))
+                            {
+                                <tr>
+                                    <td>
+                                        <NumberInput TValue="int" @bind-Value="rule.Priority" Min="1" Max="999" />
+                                    </td>
+                                    <td>
+                                        <TextInput @bind-Value="rule.TypeContains"
+                                                   Placeholder="es: b-m-p-s-m" />
+                                    </td>
+                                    <td>
+                                        <TextInput @bind-Value="rule.CallSignContains"
+                                                   Placeholder="es: OBJ" />
+                                    </td>
+                                    <td>
+                                        <TextInput @bind-Value="rule.ExcludedTypesCsv"
+                                                   Placeholder="es: a-f-G,friendly" />
+                                    </td>
+                                    <td class="text-center">
+                                        <Button Size="ButtonSize.Small" Color="ButtonColor.Danger"
+                                                @onclick="() => RemoveRule(rule)">
+                                            <Icon Name="IconName.Trash" />
+                                        </Button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+            <div class="card-footer">
+                <Button Color="ButtonColor.Primary" @onclick="SaveAsync" Loading="_saving" LoadingText="Salvataggio...">
+                    <Icon Name="IconName.Save" /> Salva
+                </Button>
+            </div>
+        </div>
+
+        <!-- Info box -->
+        <div class="alert alert-info">
+            <strong>Come funziona:</strong>
+            quando arriva una foto (<code>b-i-x-i</code>) con allegati, il sistema cerca i waypoint
+            entro <strong>@_config.RadiusMeters m</strong> e sceglie quello con priorità più alta.
+            Se nessuna regola corrisponde, viene scelto il più vicino. La foto COT viene eliminata e
+            gli allegati trasferiti al target selezionato.
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid MissionTakId { get; set; }
+
+    private MissionSuite? _mission;
+    private MissionPhotoJoinConfig? _config;
+    private bool _saving;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _mission = await Db.MissionsTakSuite
+            .Include(m => m.PhotoJoinConfig)
+                .ThenInclude(c => c!.PriorityRules)
+            .FirstOrDefaultAsync(m => m.Id == MissionTakId);
+
+        if (_mission == null) return;
+
+        if (_mission.PhotoJoinConfig == null)
+        {
+            _config = new MissionPhotoJoinConfig { Id = Guid.NewGuid(), MissionId = _mission.Id };
+            Db.MissionPhotoJoinConfigs.Add(_config);
+            _mission.PhotoJoinConfig = _config;
+            await Db.SaveChangesAsync();
+        }
+        else
+        {
+            _config = _mission.PhotoJoinConfig;
+        }
+    }
+
+    private void AddRule()
+    {
+        var next = _config!.PriorityRules.Any() ? _config.PriorityRules.Max(r => r.Priority) + 1 : 1;
+        var rule = new CotPriorityRule
+        {
+            Id = Guid.NewGuid(),
+            PhotoJoinConfigId = _config.Id,
+            Priority = next
+        };
+        Db.CotPriorityRules.Add(rule);
+        _config.PriorityRules.Add(rule);
+    }
+
+    private void RemoveRule(CotPriorityRule rule)
+    {
+        Db.CotPriorityRules.Remove(rule);
+        _config!.PriorityRules.Remove(rule);
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        try
+        {
+            await Db.SaveChangesAsync();
+            ToastService.Notify(new(ToastType.Success, "Salvato", "Configurazione photo-join aggiornata."));
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(new(ToastType.Danger, "Errore", ex.Message));
+        }
+        finally { _saving = false; }
+    }
+}

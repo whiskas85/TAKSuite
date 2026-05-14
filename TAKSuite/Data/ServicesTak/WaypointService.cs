@@ -1,22 +1,16 @@
 ﻿using TAKSuite.Data.ModelsTak;
 using TAKSuite.TAK.CoT;
 using System.Text.Json;
-using System.Linq;
-using Microsoft.EntityFrameworkCore;
 using TAKSuite.TAK.Helper;
-using System.Xml;
-using System.Text.Json.Nodes;
 
 namespace TAKSuite.Data.ServicesTak
 {
     public class WaypointService
     {
         private readonly MartiApiClient _client;
-        private readonly CoTManager _cotManager;
-        public WaypointService(MartiApiClient client, CoTManager manager)
+        public WaypointService(MartiApiClient client)
         {
             _client = client;
-            _cotManager = manager;
         }
         public async Task<List<Waypoint>> GetAllWaypointsAsync(string missionUid)
         {
@@ -148,22 +142,8 @@ namespace TAKSuite.Data.ServicesTak
         }
 
 
-        public async Task<bool> JoinPhotoToWaypoint(string missionUid, Waypoint wpt, ATAKPhoto photo)
-        {
-            var response = await _client.GetInfoAsync(wpt.Uid);
-
-            if (response != null)
-            {
-                XmlDocument doc = new XmlDocument();
-                doc.LoadXml(response);
-
-
-                photo.AttachmentUidList.ToList().ForEach(x => AttachmentService.AddAttachment(doc, x));
-                var res = await _cotManager.UpdateCoTMission(missionUid, wpt.Uid, doc);
-                return res;
-            }
-            return false;
-        }
+        public Task<bool> JoinPhotoToWaypoint(string missionUid, Waypoint wpt, ATAKPhoto photo)
+            => _client.AddFilesToCotAsync(wpt.Uid, photo.AttachmentUidList, missionUid);
 
     }
 }

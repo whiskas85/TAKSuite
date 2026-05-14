@@ -96,6 +96,7 @@ builder.Services.AddTransient<TaskTemplateService>();
 builder.Services.AddTransient<AiCoordinatesService>();
 builder.Services.AddTransient<TakSettingsService>();
 builder.Services.AddTransient<TakSubscriptionService>();
+builder.Services.AddSingleton<PhotoAutoJoinService>();
 
 
 
@@ -128,9 +129,10 @@ builder.Services.AddBlazorBootstrap();
 var app = builder.Build();
 
 // Avvio del client CoTApiClient in background quando l'app è pronta
-var lifetime      = app.Services.GetRequiredService<IHostApplicationLifetime>();
-var cotApiClient  = app.Services.GetRequiredService<CoTApiClient>();
-var takProvider   = app.Services.GetRequiredService<TakClientProvider>();
+var lifetime         = app.Services.GetRequiredService<IHostApplicationLifetime>();
+var cotApiClient     = app.Services.GetRequiredService<CoTApiClient>();
+var takProvider      = app.Services.GetRequiredService<TakClientProvider>();
+var photoAutoJoinSvc = app.Services.GetRequiredService<PhotoAutoJoinService>(); // sottoscrive CoTManager in ctor
 
 lifetime.ApplicationStarted.Register(() =>
 {

@@ -67,6 +67,18 @@
 <Button Color="ButtonColor.Primary" @onclick="Subscribe">Subscribe</Button>
 <Button Color="ButtonColor.Primary" @onclick="UnSubscribe">Unsubscribe</Button>
 
+<Modal @ref="_uploadModal" Title="Allega file" Size="ModalSize.Regular">
+    <BodyTemplate>
+        <InputFile OnChange="OnUploadFileSelected" class="form-control" />
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Primary" @onclick="ConfirmUploadAsync" Disabled="_uploading">
+            @if (_uploading) { <text>Caricamento...</text> } else { <text>Allega</text> }
+        </Button>
+        <Button Color="ButtonColor.Secondary" @onclick="() => _uploadModal.HideAsync()">Annulla</Button>
+    </FooterTemplate>
+</Modal>
+
 <Modal @ref="modal" Title="Lista allegati" OnHidden="OnModalHidden" Size="ModalSize.Large">
     <BodyTemplate>
         <Grid TItem="AtakAttachment"
@@ -193,6 +205,11 @@ Responsive="true">
 
     // modal ------------------------------------------------------------------------
     private Modal modal = default!;
+    private Modal _uploadModal = default!;
+    private IBrowserFile? _uploadFile;
+    private Waypoint? _uploadWaypoint;
+    private bool _uploading;
+
     class Model
     {
         public string Name { get; set; }
@@ -231,7 +248,7 @@ Responsive="true">
     
     private async Task DeleteAttachment(AtakAttachment attach)
     {
-        bool res = await AttachmentService.DeleteAsync(attach);
+        bool res = await AttachmentService.DeleteAsync("TEST FEED2", attach);
         if (res)
         {
             ToastService.Notify(new(ToastType.Success, "Eliminazione", $"Il file {attach.Name} è stato eliminato" ));
@@ -291,7 +308,34 @@ Responsive="true">
     }
     private async Task UploadAttachmentWaypoint(Waypoint item)
     {
+        _uploadWaypoint = item;
+        _uploadFile = null;
+        await _uploadModal.ShowAsync();
+    }
 
+    private void OnUploadFileSelected(InputFileChangeEventArgs e) => _uploadFile = e.File;
+
+    private async Task ConfirmUploadAsync()
+    {
+        if (_uploadFile == null || _uploadWaypoint == null) return;
+        _uploading = true;
+        try
+        {
+            using var ms = new System.IO.MemoryStream();
+            await _uploadFile.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024).CopyToAsync(ms);
+            var ct = string.IsNullOrEmpty(_uploadFile.ContentType) ? "application/octet-stream" : _uploadFile.ContentType;
+            var ok = await AttachmentService.UploadToCotAsync(_uploadWaypoint.Uid, ms.ToArray(), _uploadFile.Name, ct);
+            if (ok)
+            {
+                ToastService.Notify(new(ToastType.Success, "Allegato", "File allegato con successo."));
+                await _uploadModal.HideAsync();
+            }
+            else
+            {
+                ToastService.Notify(new(ToastType.Danger, "Errore", "Impossibile allegare il file."));
+            }
+        }
+        finally { _uploading = false; }
     }
     private async Task GetAttachmentWaypoint(Waypoint item)
     {

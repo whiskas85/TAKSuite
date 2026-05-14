@@ -35,6 +35,9 @@ namespace TAKSuite.Data.Models
 
 
 
+        // Auto-join foto a target vicino
+        public MissionPhotoJoinConfig? PhotoJoinConfig { get; set; }
+
         // Automazioni task
         public bool AutoScheduleTeam { get; set; } = false;
         public bool AutoAssignTeam { get; set; } = false;

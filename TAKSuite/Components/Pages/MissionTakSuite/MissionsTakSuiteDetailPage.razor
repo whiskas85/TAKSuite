@@ -43,7 +43,17 @@ else
     <!-- Allegati waypoint modal -->
     <Modal @ref="_wpAttachmentModal" Title="Allegati waypoint" Size="ModalSize.Large">
         <BodyTemplate>
-            <Grid TItem="AtakAttachment"
+            <div class="mb-3 d-flex gap-2 align-items-center">
+                <InputFile OnChange="OnWpAttachFileSelected" class="form-control form-control-sm" />
+                <Button Color="ButtonColor.Primary" Size="ButtonSize.Small"
+                        @onclick="UploadWpAttachmentAsync"
+                        Loading="_wpUploading" LoadingText="Caricamento..."
+                        Disabled="@(_wpUploadFile == null || _wpUploading)">
+                    <Icon Name="IconName.CloudUploadFill" /> Allega
+                </Button>
+            </div>
+            <Grid @ref="_wpAttachGrid"
+                  TItem="AtakAttachment"
                   Class="table table-hover"
                   HeaderRowCssClass="bg-success text-white border-bottom-0"
                   DataProvider="WpAttachmentDataProvider"
@@ -69,6 +79,10 @@ else
                             {
                                 <Icon Name="IconName.FileEarmarkArrowDownFill" Color="IconColor.Primary" />
                             }
+                        </Button>
+                        <Button Size="ButtonSize.Small" Color="ButtonColor.Danger"
+                                @onclick="async () => await DeleteWpAttachmentAsync(context)">
+                            <Icon Name="IconName.Trash3Fill" />
                         </Button>
                     </GridColumn>
                 </GridColumns>
@@ -578,18 +592,34 @@ else
 
     // Waypoint attachments + POI + AI import
     private Modal _wpAttachmentModal = default!;
+    private Grid<AtakAttachment> _wpAttachGrid = default!;
     private ModalAddPoi _addPoiModal = default!;
     private ModalImportFromAi _importAiModal = default!;
     private string? _selectedWpUid;
+    private IBrowserFile? _wpUploadFile;
+    private bool _wpUploading;
 
     private void ComputeView()
     {
+        
         _activeObjectives = _tasks
             .Where(t => !_completedStatuses.Contains(t.Status))
-            .OrderBy(t => t.GreenLightDateTime.HasValue ? 0 : 1)
+
+            // 1️⃣ Prima quelli con PlannedStartDateTime valorizzata
+            .OrderBy(t => t.PlannedStartDateTime.HasValue ? 0 : 1)
+
+            // 2️⃣ Poi per PlannedStartDateTime (fallback MaxValue)
+            .ThenBy(t => t.PlannedStartDateTime ?? DateTime.MaxValue)
+
+            // 3️⃣ Poi per GreenLightDateTime (stessa logica)
+            .ThenBy(t => t.GreenLightDateTime.HasValue ? 0 : 1)
             .ThenBy(t => t.GreenLightDateTime ?? DateTime.MaxValue)
+
+            // 4️⃣ Infine nome
             .ThenBy(t => t.Name)
+
             .ToList();
+
         _completedObjectives = _tasks
             .Where(t => _completedStatuses.Contains(t.Status))
             .OrderByDescending(t => t.LastModified)
@@ -849,7 +879,51 @@ else
     private async Task OpenWpAttachments(Waypoint wp)
     {
         _selectedWpUid = wp.Uid;
+        _wpUploadFile = null;
         await _wpAttachmentModal.ShowAsync();
+    }
+
+    private void OnWpAttachFileSelected(InputFileChangeEventArgs e) => _wpUploadFile = e.File;
+
+    private async Task UploadWpAttachmentAsync()
+    {
+        if (_wpUploadFile == null || string.IsNullOrEmpty(_selectedWpUid) || string.IsNullOrEmpty(missionTak?.TakMissionUid)) return;
+        _wpUploading = true;
+        try
+        {
+            using var ms = new System.IO.MemoryStream();
+            await _wpUploadFile.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024).CopyToAsync(ms);
+            var ok = await AttachmentService.UploadAndAttachAsync(
+                missionTak.TakMissionUid, _selectedWpUid,
+                ms.ToArray(), _wpUploadFile.Name,
+                string.IsNullOrEmpty(_wpUploadFile.ContentType) ? "application/octet-stream" : _wpUploadFile.ContentType);
+            if (ok)
+            {
+                ToastService.Notify(new(ToastType.Success, "Allegato", "File allegato con successo."));
+                _wpUploadFile = null;
+                await _wpAttachGrid.RefreshDataAsync();
+            }
+            else
+            {
+                ToastService.Notify(new(ToastType.Danger, "Errore", "Impossibile allegare il file."));
+            }
+        }
+        finally { _wpUploading = false; }
+    }
+
+    private async Task DeleteWpAttachmentAsync(AtakAttachment attach)
+    {
+        if (string.IsNullOrEmpty(missionTak?.TakMissionUid)) return;
+        var ok = await AttachmentService.DeleteAsync(missionTak.TakMissionUid, attach);
+        if (ok)
+        {
+            ToastService.Notify(new(ToastType.Success, "Allegato", "Allegato rimosso."));
+            await _wpAttachGrid.RefreshDataAsync();
+        }
+        else
+        {
+            ToastService.Notify(new(ToastType.Danger, "Errore", "Impossibile rimuovere l'allegato."));
+        }
     }
 
     private async Task<GridDataProviderResult<AtakAttachment>> WpAttachmentDataProvider(GridDataProviderRequest<AtakAttachment> request)

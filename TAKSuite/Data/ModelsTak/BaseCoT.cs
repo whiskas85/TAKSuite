@@ -7,6 +7,7 @@ namespace TAKSuite.Data.ModelsTak
     {
         public string Uid { get; set; }
         public string? Callsign { get; set; }
+        public string? CotType { get; set; }
         public double? Lat { get; set; }
         public double? Lon { get; set; }
         public DateTime LastUpdateTime { get; set; }
@@ -19,6 +20,7 @@ namespace TAKSuite.Data.ModelsTak
             Uid = uid.GetProperty("data").GetString();
             LastUpdateTime = uid.GetProperty("timestamp").GetDateTime();
             Callsign = uid.GetProperty("details").GetProperty("callsign").GetString();
+            CotType = uid.GetProperty("details").GetProperty("type").GetString();
             Lat = uid.GetProperty("details").GetProperty("location").GetProperty("lat").GetDouble();
             Lon = uid.GetProperty("details").GetProperty("location").GetProperty("lon").GetDouble();
 

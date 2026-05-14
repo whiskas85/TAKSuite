@@ -25,6 +25,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<EventEntity> EventEntities { get; set; }
 
     public DbSet<MissionSuite> MissionsTakSuite { get; set; }
+    public DbSet<MissionPhotoJoinConfig> MissionPhotoJoinConfigs { get; set; }
+    public DbSet<CotPriorityRule> CotPriorityRules { get; set; }
 
     public DbSet<TakSettings>     TakSettings     { get; set; }
     public DbSet<TakSubscription> TakSubscriptions { get; set; }
@@ -94,6 +96,20 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasForeignKey(m => m.TeamId)
             .OnDelete(DeleteBehavior.SetNull)
             .IsRequired(false);
+
+        // MissionSuite ↔ MissionPhotoJoinConfig (1-to-1, cascade delete)
+        modelBuilder.Entity<MissionPhotoJoinConfig>()
+            .HasOne(c => c.Mission)
+            .WithOne(m => m.PhotoJoinConfig)
+            .HasForeignKey<MissionPhotoJoinConfig>(c => c.MissionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // MissionPhotoJoinConfig → CotPriorityRules (1-to-many, cascade delete)
+        modelBuilder.Entity<CotPriorityRule>()
+            .HasOne(r => r.PhotoJoinConfig)
+            .WithMany(c => c.PriorityRules)
+            .HasForeignKey(r => r.PhotoJoinConfigId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         // model builder for TaskEntity
         modelBuilder.Entity<TaskEntity>()

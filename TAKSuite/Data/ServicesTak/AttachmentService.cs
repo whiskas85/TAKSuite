@@ -1,5 +1,6 @@
 ﻿using TAKSuite.Data.ModelsTak;
 using TAKSuite.TAK.CoT;
+using TAKSuite.Helper;
 using System.Text.Json;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
@@ -11,13 +12,10 @@ namespace TAKSuite.Data.ServicesTak
     public class AttachmentService
     {
         private readonly MartiApiClient _client;
-        private readonly CoTManager _cotManager;
         private readonly ApplicationDbContext _context;
-        public AttachmentService(ApplicationDbContext context, MartiApiClient client, CoTManager manager)
+        public AttachmentService(ApplicationDbContext context, MartiApiClient client)
         {
-
             _client = client;
-            _cotManager = manager;
             _context = context;
         }
         public async Task<List<AtakAttachment>> GetAllAsync(string itemAttachment)
@@ -166,41 +164,34 @@ namespace TAKSuite.Data.ServicesTak
 
         public async Task<bool> AttachHtmlAsync(string missionUid, string poiUid, byte[] htmlBytes, string filename)
         {
-            // 1. Carica il file sul server TAK → ottieni hash
-            var hash = await _client.UploadFileAsync(htmlBytes, filename);
+            var hash = await _client.UploadFileToMissionAsync(missionUid, htmlBytes, filename, "text/html");
             if (string.IsNullOrEmpty(hash)) return false;
+            return await UpdateAttachmentListAsync(poiUid, hash, missionUid);
+        }
 
-            // 2. Recupera il CoT XML corrente per il UID
-            var cotXml = await _client.GetInfoAsync(poiUid);
-            if (cotXml == null) return false;
-
-            // 3. Aggiunge l'hash all'attachment_list nel CoT
-            var doc = new XmlDocument();
-            doc.LoadXml(cotXml);
-            AddAttachment(doc, hash);
-
-            // 4. Invia il CoT aggiornato e aggiorna la missione
-            await _cotManager.UpdateCoTMission(missionUid, poiUid, doc);
+        public async Task<bool> UploadAndAttachAsync(string missionUid, string poiUid, byte[] bytes, string filename, string contentType = "application/octet-stream")
+        {
+            var hash = await _client.UploadFileToMissionAsync(missionUid, bytes, filename, contentType);
+            if (string.IsNullOrEmpty(hash)) return false;
+            await UpdateAttachmentListAsync(poiUid, hash, missionUid);
             return true;
         }
 
-        public async Task<bool> DeleteAsync(AtakAttachment itemAttachment)
+        private Task<bool> UpdateAttachmentListAsync(string poiUid, string hash, string? missionName = null)
+            => _client.AddFileToCotAsync(poiUid, hash, missionName);
+
+        public async Task<bool> UploadToCotAsync(string cotUid, byte[] bytes, string filename, string contentType = "application/octet-stream")
         {
-            var response = await _client.GetInfoAsync(itemAttachment.Uid);
+            var hash = await _client.UploadFileAsync(bytes, filename, contentType);
+            if (string.IsNullOrEmpty(hash)) return false;
+            return await _client.AddFileToCotAsync(cotUid, hash);
+        }
 
-            if (response != null)
-            {
-                XmlDocument doc = new XmlDocument();
-                doc.LoadXml(response);
-
-                RemoveAttachment(doc, itemAttachment.Hash);
-                await _cotManager.UpdateCoTMission("TEST FEED2", itemAttachment.Uid, doc);
-            }
-
-            // le missioni devono essere tutte quelle che sono assegnate al team
-            var res = await _client.DeleteAttachmentAsync("TEST FEED2", itemAttachment.Hash);
-
-            return await Task.Run(() => res);
+        public async Task<bool> DeleteAsync(string missionUid, AtakAttachment itemAttachment)
+        {
+            await _client.RemoveFileFromCotAsync(itemAttachment.Uid, itemAttachment.Hash,
+                string.IsNullOrEmpty(missionUid) ? null : missionUid);
+            return await _client.DeleteAttachmentAsync(missionUid, itemAttachment.Hash);
         }
     }
 

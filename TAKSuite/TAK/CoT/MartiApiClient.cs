@@ -2,9 +2,12 @@ namespace TAKSuite.TAK.CoT
 {
     using System.Text;
     using System.Text.Json;
+    using System.Xml;
     using TAKSuite.Data.ModelsTak;
     using TAKSuite.Data.ServicesTak;
+    using TAKSuite.Helper;
     using TAKSuite.TAK;
+    using TAKSuite.TAK.Helper;
     using TAKSuite.TAK.MartiApi;
     using TakLib;
 
@@ -127,7 +130,8 @@ namespace TAKSuite.TAK.CoT
                 }
                 var body = (await response.Content.ReadAsStringAsync()).Trim();
                 using var doc = JsonDocument.Parse(body);
-                if (doc.RootElement.TryGetProperty("hash", out var hashEl))
+                if (doc.RootElement.TryGetProperty("Hash", out var hashEl) ||
+                    doc.RootElement.TryGetProperty("hash", out hashEl))
                     return hashEl.GetString()?.Trim('"').Trim();
                 return body.Trim('"');
             }
@@ -160,6 +164,141 @@ namespace TAKSuite.TAK.CoT
             if (string.IsNullOrEmpty(hash)) return null;
             await AddFileToMissionAsync(missionName, hash);
             return hash;
+        }
+
+        public async Task<bool> AddFileToCotAsync(string cotUid, string hash, string? missionName = null)
+        {
+            try
+            {
+                var cotXml = await GetInfoAsync(cotUid);
+                if (string.IsNullOrEmpty(cotXml)) return false;
+
+                var doc = new XmlDocument();
+                doc.LoadXml(cotXml);
+                AttachmentService.AddAttachment(doc, hash);
+                ATAKHelper.CleanFlowTags(doc);
+                ATAKHelper.RefreshTimestamps(doc);
+
+                var xml = XmlHelper.FormatXmlPlain(doc);
+
+                if (!string.IsNullOrEmpty(missionName))
+                    xml = CotEditor.Modify(xml, missionDest: missionName);
+
+                await TakClient.SendCotAsync(xml);
+
+                if (!string.IsNullOrEmpty(missionName))
+                {
+                    await Task.Delay(500);
+                    await TakClient.AddUidsToMissionAsync(missionName, new[] { cotUid }, CreatorUid);
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Eccezione AddFileToCot: {ex.Message}");
+                return false;
+            }
+        }
+
+        public async Task<string?> UploadFileToCoTAsync(string cotUid, byte[] content, string filename, string contentType = "application/octet-stream", string? missionName = null)
+        {
+            var hash = await UploadFileAsync(content, filename, contentType);
+            if (string.IsNullOrEmpty(hash)) return null;
+            await AddFileToCotAsync(cotUid, hash, missionName);
+            return hash;
+        }
+
+        public async Task<bool> AddFilesToCotAsync(string cotUid, IEnumerable<string> hashes, string? missionName = null)
+        {
+            try
+            {
+                var cotXml = await GetInfoAsync(cotUid);
+                if (string.IsNullOrEmpty(cotXml)) return false;
+
+                var doc = new XmlDocument();
+                doc.LoadXml(cotXml);
+                foreach (var h in hashes)
+                    AttachmentService.AddAttachment(doc, h);
+                ATAKHelper.CleanFlowTags(doc);
+                ATAKHelper.RefreshTimestamps(doc);
+
+                var xml = XmlHelper.FormatXmlPlain(doc);
+                if (!string.IsNullOrEmpty(missionName))
+                    xml = CotEditor.Modify(xml, missionDest: missionName);
+
+                await TakClient.SendCotAsync(xml);
+
+                if (!string.IsNullOrEmpty(missionName))
+                {
+                    await Task.Delay(500);
+                    await TakClient.AddUidsToMissionAsync(missionName, new[] { cotUid }, CreatorUid);
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Eccezione AddFilesToCot: {ex.Message}");
+                return false;
+            }
+        }
+
+        public async Task<bool> DeleteCotAsync(string uid, string? missionName = null)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(missionName))
+                    await TakClient.RemoveUidFromMissionAsync(missionName, uid, CreatorUid);
+
+                var now = DateTime.UtcNow;
+                string Fmt(DateTime d) => d.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'");
+                var deleteCot = $"<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+                    $"<event uid=\"{uid}\" type=\"t-x-d-d\" version=\"2.0\" " +
+                    $"time=\"{Fmt(now)}\" start=\"{Fmt(now)}\" stale=\"{Fmt(now.AddMinutes(1))}\" how=\"h-g-i-g-o\">" +
+                    $"<point lat=\"0\" lon=\"0\" hae=\"0\" ce=\"9999999\" le=\"9999999\"/></event>";
+                await TakClient.SendCotAsync(deleteCot);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Eccezione DeleteCot: {ex.Message}");
+                return false;
+            }
+        }
+
+        public async Task<bool> RemoveFileFromCotAsync(string cotUid, string hash, string? missionName = null)
+        {
+            try
+            {
+                var cotXml = await GetInfoAsync(cotUid);
+                if (string.IsNullOrEmpty(cotXml)) return false;
+
+                var doc = new XmlDocument();
+                doc.LoadXml(cotXml);
+                AttachmentService.RemoveAttachment(doc, hash);
+                ATAKHelper.CleanFlowTags(doc);
+                ATAKHelper.RefreshTimestamps(doc);
+
+                var xml = XmlHelper.FormatXmlPlain(doc);
+
+                if (!string.IsNullOrEmpty(missionName))
+                    xml = CotEditor.Modify(xml, missionDest: missionName);
+
+                await TakClient.SendCotAsync(xml);
+
+                if (!string.IsNullOrEmpty(missionName))
+                {
+                    await Task.Delay(500);
+                    await TakClient.AddUidsToMissionAsync(missionName, new[] { cotUid }, CreatorUid);
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Eccezione RemoveFileFromCot: {ex.Message}");
+                return false;
+            }
         }
 
         // ── CoT ──────────────────────────────────────────────────────────────
