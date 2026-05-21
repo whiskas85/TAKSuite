@@ -18,6 +18,17 @@ namespace TAKSuite.Data.ServicesTak
             _client = client;
             _context = context;
         }
+        public async Task<int> GetCountAsync(string itemAttachment)
+        {
+            if (string.IsNullOrEmpty(itemAttachment)) return 0;
+            try
+            {
+                var uidInfo = await _client.GetInfoAsync(itemAttachment);
+                return GetAttachmentFromItem(uidInfo).Count;
+            }
+            catch { return 0; }
+        }
+
         public async Task<List<AtakAttachment>> GetAllAsync(string itemAttachment)
         {
             // le missioni devono essere tutte quelle che sono assegnate al team
@@ -164,6 +175,18 @@ namespace TAKSuite.Data.ServicesTak
 
         public async Task<bool> AttachHtmlAsync(string missionUid, string poiUid, byte[] htmlBytes, string filename)
         {
+            // Rimuovi allegati esistenti con lo stesso nome prima di ricaricare
+            try
+            {
+                var existing = await GetAllAsync(poiUid);
+                foreach (var att in existing.Where(a =>
+                    string.Equals(Uri.UnescapeDataString(a.Name ?? ""), filename, StringComparison.OrdinalIgnoreCase)))
+                {
+                    await DeleteAsync(missionUid, att);
+                }
+            }
+            catch { /* non bloccare l'upload se la lista non è raggiungibile */ }
+
             var hash = await _client.UploadFileToMissionAsync(missionUid, htmlBytes, filename, "text/html");
             if (string.IsNullOrEmpty(hash)) return false;
             return await UpdateAttachmentListAsync(poiUid, hash, missionUid);

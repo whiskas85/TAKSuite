@@ -31,7 +31,7 @@ else
 
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h2 class="mb-0">Waypoints TAK</h2>
+            <h2 class="mb-0">Waypoints</h2>
             <p class="text-muted mb-0">@_mission.Name</p>
         </div>
         <div class="d-flex gap-2">
@@ -68,7 +68,11 @@ else
                 <GridColumn TItem="Waypoint" HeaderText="" TextAlignment="Alignment.Center">
                     @if (context.Color.HasValue)
                     {
-                        <div style="width: 18px; height: 18px; border-radius: 50%; background-color: @ColorConverterHelper.ArgbToHex(context.Color.Value); border: 1px solid #888; margin: auto;"></div>
+                        <button type="button"
+                                title="Cambia colore"
+                                style="width:18px;height:18px;border-radius:50%;background-color:@ColorConverterHelper.ArgbToHex(context.Color.Value);border:1px solid #888;cursor:pointer;padding:0;display:block;margin:auto;"
+                                @onclick="() => OpenColorPicker(context.Uid, context.Color)">
+                        </button>
                     }
                 </GridColumn>
                 <GridColumn TItem="Waypoint" HeaderText="Callsign" SortKeySelector="x => x.Callsign">
@@ -117,6 +121,43 @@ else
         </Grid>
     }
 
+    <!-- Modal: modifica colore waypoint -->
+    <Modal @ref="_colorModal" Title="Cambia colore">
+        <BodyTemplate>
+            <p class="text-muted small mb-2">Colori predefiniti ATAK</p>
+            <div class="d-flex flex-wrap gap-2 mb-3">
+                @foreach (var pc in ATAKHelper.ATAKPredefinedColors)
+                {
+                    var isSelected = !_cpIsCustom && _cpArgb == pc.Argb;
+                    <button type="button"
+                            title="@pc.Name"
+                            style="width:30px;height:30px;border-radius:50%;background-color:@pc.ToHex();border:@(isSelected ? "3px solid #000" : "1px solid #888");cursor:pointer;"
+                            @onclick="() => CpSelectPredefined(pc.Argb)">
+                    </button>
+                }
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <label class="form-label mb-0">Colore custom</label>
+                <input type="color"
+                       class="form-control form-control-color"
+                       value="@_cpHex"
+                       @oninput="CpOnCustomInput"
+                       style="width:50px;height:34px;padding:2px;" />
+                @if (_cpIsCustom)
+                {
+                    <span class="badge bg-secondary">@_cpHex</span>
+                }
+            </div>
+        </BodyTemplate>
+        <FooterTemplate>
+            <Button Color="ButtonColor.Success" @onclick="SaveColor"
+                    Loading="_cpSaving" LoadingText="Salvataggio...">
+                <Icon Name="IconName.Save" /> Applica colore
+            </Button>
+            <Button Color="ButtonColor.Secondary" @onclick="async () => await _colorModal.HideAsync()">Annulla</Button>
+        </FooterTemplate>
+    </Modal>
+
     <Modal @ref="_attachmentModal" Title="Allegati waypoint" Size="ModalSize.Large">
         <BodyTemplate>
             <div class="mb-3 d-flex gap-2 align-items-center">
@@ -145,7 +186,7 @@ else
                         @context.MediaType
                     </GridColumn>
                     <GridColumn TItem="AtakAttachment" HeaderText="">
-                        <Button Size="ButtonSize.Small" @onclick="() => DownloadAttachment(context)">
+                        <Button Size="ButtonSize.Small" @onclick="() => ViewAttachment(context)">
                             @if (context.MediaType?.Contains("jpeg") == true)
                             {
                                 <Icon Name="IconName.FileEarmarkImage" Color="IconColor.Primary" />
@@ -180,15 +221,30 @@ else
     private Grid<Waypoint> _grid = default!;
     private Grid<AtakAttachment> _attachmentGrid = default!;
     private Modal _attachmentModal = default!;
+    private Modal _colorModal = default!;
     private ModalAddPoi _addPoiModal = default!;
     private ConfirmDialog _confirmDialog = default!;
     private string? _selectedWaypointUid;
     private IBrowserFile? _uploadFile;
     private bool _uploading;
 
-    protected override async Task OnInitializedAsync()
+    // Color picker state
+    private string? _cpUid;
+    private int _cpArgb = -1;
+    private bool _cpIsCustom;
+    private string _cpHex = "#ffffff";
+    private bool _cpSaving;
+
+    private Guid _loadedMissionId = Guid.Empty;
+
+    protected override async Task OnParametersSetAsync()
     {
+        if (MissionTakId == _loadedMissionId) return;
+        _loadedMissionId = MissionTakId;
+        _mission = null;
         _mission = await MissionSuiteService.GetAsync(MissionTakId);
+        if (_grid is not null)
+            await _grid.RefreshDataAsync();
     }
 
     private async Task<GridDataProviderResult<Waypoint>> WaypointDataProvider(GridDataProviderRequest<Waypoint> request)
@@ -319,11 +375,55 @@ else
         return request.ApplyTo(list);
     }
 
-    private async Task DownloadAttachment(AtakAttachment attach)
+    private async Task ViewAttachment(AtakAttachment attach)
     {
         if (attach.FileBytes == null) return;
         var base64 = Convert.ToBase64String(attach.FileBytes);
         var mediaType = attach.MediaType ?? "application/octet-stream";
-        await JS.InvokeVoidAsync("downloadFile", $"data:{mediaType};base64,{base64}", attach.Name);
+        await JS.InvokeVoidAsync("viewFile", base64, mediaType);
+    }
+
+    private async Task OpenColorPicker(string uid, int? currentArgb)
+    {
+        _cpUid = uid;
+        _cpArgb = currentArgb ?? -1;
+        _cpIsCustom = !ATAKHelper.ATAKPredefinedColors.Any(c => c.Argb == _cpArgb);
+        _cpHex = ColorConverterHelper.ArgbToHex(_cpArgb);
+        await _colorModal.ShowAsync();
+    }
+
+    private void CpSelectPredefined(int argb)
+    {
+        _cpArgb = argb;
+        _cpIsCustom = false;
+        _cpHex = ColorConverterHelper.ArgbToHex(argb);
+    }
+
+    private void CpOnCustomInput(ChangeEventArgs e)
+    {
+        _cpHex = e.Value?.ToString() ?? "#ffffff";
+        _cpArgb = ColorConverterHelper.HexToArgb(_cpHex);
+        _cpIsCustom = true;
+    }
+
+    private async Task SaveColor()
+    {
+        if (string.IsNullOrEmpty(_cpUid) || string.IsNullOrEmpty(_mission?.TakMissionUid)) return;
+        _cpSaving = true;
+        try
+        {
+            var ok = await CoTManager.ChangeCotColor(_mission.TakMissionUid, _cpUid, _cpArgb);
+            if (ok)
+            {
+                await _colorModal.HideAsync();
+                await _grid.RefreshDataAsync();
+                ToastService.Notify(new(ToastType.Success, "Waypoint", "Colore aggiornato."));
+            }
+            else
+            {
+                ToastService.Notify(new(ToastType.Danger, "Errore", "Impossibile aggiornare il colore."));
+            }
+        }
+        finally { _cpSaving = false; }
     }
 }

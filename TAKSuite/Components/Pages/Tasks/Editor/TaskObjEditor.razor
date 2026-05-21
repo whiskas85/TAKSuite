@@ -282,8 +282,13 @@ else
 
     CancellationTokenSource? _cts;
 
-    protected override async Task OnInitializedAsync()
+    private Guid _loadedTaskId = Guid.Empty;
+
+    protected override async Task OnParametersSetAsync()
     {
+        if (TaskId == _loadedTaskId) return;
+        _loadedTaskId = TaskId;
+        taskEntity = null;
         taskEntity = await taskService.GetAsync(TaskId);
         RadioList = await radioChannelService.GetAllAsync();
     }

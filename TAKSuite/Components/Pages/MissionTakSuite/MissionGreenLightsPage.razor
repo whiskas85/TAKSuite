@@ -1,0 +1,307 @@
+@page "/missiontak/{MissionTakId:guid}/greenlights"
+@attribute [Authorize]
+@implements IDisposable
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.ModelsTak
+@using TAKSuite.Data.Services
+@using TAKSuite.Data.ServicesTak
+@inject MissionSuiteEntityServices MissionSuiteService
+@inject TaskService TaskService
+@inject AttachmentService AttachmentService
+@inject IJSRuntime JS
+
+<PageTitle>GL — @(_mission?.Name ?? "Missione")</PageTitle>
+
+@if (_mission == null)
+{
+    <div class="d-flex justify-content-center align-items-center" style="min-height:60vh">
+        <div class="text-center text-muted">
+            <div class="spinner-border mb-3" role="status"></div>
+            <p>Caricamento...</p>
+        </div>
+    </div>
+}
+else
+{
+    <!-- Allegati modal -->
+    <Modal @ref="_attachModal" Title="@($"Allegati — {_selectedTask?.Name}")">
+        <BodyTemplate>
+            @if (_attachList == null)
+            {
+                <div class="text-center py-3">
+                    <div class="spinner-border spinner-border-sm" role="status"></div>
+                    <span class="ms-2 text-muted">Caricamento...</span>
+                </div>
+            }
+            else if (!_attachList.Any())
+            {
+                <p class="text-center text-muted py-3">Nessun allegato</p>
+            }
+            else
+            {
+                <div class="list-group list-group-flush">
+                    @foreach (var a in _attachList)
+                    {
+                        var displayName = Uri.UnescapeDataString(a.Name ?? "");
+                        var isImage = a.MediaType?.Contains("jpeg") == true || a.MediaType?.Contains("png") == true || a.MediaType?.Contains("image") == true;
+                        var isPdf = a.MediaType?.Contains("pdf") == true;
+                        <button class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-2 border-0"
+                                @onclick="() => ViewAttachment(a)">
+                            @if (isImage)
+                            {
+                                <Icon Name="IconName.FileEarmarkImage" Color="IconColor.Primary" Size="IconSize.x5" />
+                            }
+                            else if (isPdf)
+                            {
+                                <Icon Name="IconName.FileEarmarkPdfFill" Color="IconColor.Danger" Size="IconSize.x5" />
+                            }
+                            else
+                            {
+                                <Icon Name="IconName.FileEarmarkFill" Color="IconColor.Secondary" Size="IconSize.x5" />
+                            }
+                            <span class="flex-grow-1 text-truncate small text-start">@displayName</span>
+                            <Icon Name="IconName.BoxArrowUpRight" Color="IconColor.Secondary" />
+                        </button>
+                    }
+                </div>
+            }
+        </BodyTemplate>
+        <FooterTemplate>
+            <Button Color="ButtonColor.Secondary" @onclick="() => _attachModal.HideAsync()">Chiudi</Button>
+        </FooterTemplate>
+    </Modal>
+
+    <!-- Header fisso -->
+    <div class="sticky-top bg-body border-bottom px-3 py-2" style="z-index:100;">
+        <div class="d-flex justify-content-between align-items-baseline gap-2">
+            <div class="fw-bold text-truncate">@_mission.Name</div>
+            <div class="text-muted" style="font-size:.8rem; white-space:nowrap; font-variant-numeric:tabular-nums;">
+                @DateTime.Now.ToString("HH:mm:ss")
+            </div>
+        </div>
+        <div class="text-muted small">
+            @(_glTasks.Count) luc@(_glTasks.Count == 1 ? "e verde" : "i verdi") attive o future
+        </div>
+    </div>
+
+    @if (!_glTasks.Any())
+    {
+        <div class="text-center py-5 text-muted">
+            <Icon Name="IconName.CheckCircleFill" Color="IconColor.Success" Size="IconSize.x5" />
+            <p class="mt-3">Nessuna luce verde attiva o futura</p>
+        </div>
+    }
+    else
+    {
+        <div class="px-2 py-2 d-flex flex-column gap-2">
+            @foreach (var task in _glTasks)
+            {
+                var now = DateTime.UtcNow;
+                var gl = task.GreenLightDateTime!.Value;
+                var glEnd = task.Durata is > 0 ? (DateTime?)gl.AddMinutes(task.Durata.Value) : null;
+                var inWindow = now >= gl && (glEnd == null || now < glEnd.Value);
+                var timeToGl = gl - now;
+                var timeLeft = glEnd.HasValue ? glEnd.Value - now : (TimeSpan?)null;
+                var attachCount = _attachCounts.TryGetValue(task.Id, out var c) ? c : 0;
+
+                <div class="card border @(inWindow ? "border-success border-2" : "border-warning") shadow-sm">
+                    <div class="card-body py-3 px-3">
+
+                        <!-- Riga 1: badge countdown + orario GL -->
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            @if (inWindow)
+                            {
+                                <span class="badge bg-success" style="font-size:1rem; padding:.4em .75em;">
+                                    IN FINESTRA
+                                    @if (timeLeft.HasValue)
+                                    {
+                                        <span class="ms-2 fw-normal opacity-90">@FormatTs(timeLeft.Value)</span>
+                                    }
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-warning text-dark" style="font-size:1rem; padding:.4em .75em;">
+                                    tra @FormatTs(timeToGl)
+                                </span>
+                            }
+
+                            <div class="text-end lh-1 flex-shrink-0">
+                                <div class="d-flex align-items-center justify-content-end gap-1">
+                                    <Icon Name="IconName.CircleFill" Color="@(inWindow ? IconColor.Success : IconColor.Warning)" Size="IconSize.x6" />
+                                    <span class="fw-bold @(inWindow ? "text-success" : "text-warning")" style="font-size:1.1rem; font-variant-numeric:tabular-nums;">
+                                        @ToLocal(gl, "HH:mm")
+                                    </span>
+                                </div>
+                                <div class="text-muted" style="font-size:.75rem;">@ToLocal(gl, "dd/MM/yyyy")</div>
+                            </div>
+                        </div>
+
+                        <!-- Riga 2: nome obiettivo (link) -->
+                        <a href="/taskdetail/@task.Id"
+                           class="d-block fw-semibold text-body text-decoration-none mb-1"
+                           style="font-size:1.05rem;">
+                            @task.Name
+                        </a>
+                        @if (!string.IsNullOrEmpty(task.Sottotitolo))
+                        {
+                            <div class="text-muted small mb-2">@task.Sottotitolo</div>
+                        }
+
+                        <!-- Riga 3: durata + team + azioni -->
+                        <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+                            @if (task.Durata is > 0)
+                            {
+                                <span class="badge bg-secondary fw-normal">@task.Durata min</span>
+                            }
+                            @if (task.AssignedTeam != null)
+                            {
+                                <span class="badge bg-light text-dark border">@task.AssignedTeam.Name</span>
+                            }
+                            @if (task.Priority != null)
+                            {
+                                <span class="badge bg-secondary">@task.Priority.Name</span>
+                            }
+                            <div class="ms-auto d-flex gap-2">
+                                @if (!string.IsNullOrEmpty(task.PoiUid))
+                                {
+                                    <div class="position-relative d-inline-block">
+                                        <button class="btn btn-sm btn-outline-secondary"
+                                                @onclick="() => OpenAttachments(task)">
+                                            <Icon Name="IconName.Paperclip" /> Allegati
+                                        </button>
+                                        @if (attachCount > 0)
+                                        {
+                                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
+                                                  style="font-size:.65rem;">
+                                                @attachCount
+                                            </span>
+                                        }
+                                    </div>
+                                }
+                                <a href="/taskdetail/@task.Id" class="btn btn-sm btn-outline-primary">
+                                    <Icon Name="IconName.Eye" /> Apri
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public Guid MissionTakId { get; set; }
+
+    private Guid _loadedMissionId = Guid.Empty;
+    private MissionSuite? _mission;
+    private List<TaskEntity> _glTasks = new();
+    private Dictionary<Guid, int> _attachCounts = new();
+
+    private System.Timers.Timer? _timer;
+
+    private Modal _attachModal = default!;
+    private TaskEntity? _selectedTask;
+    private List<AtakAttachment>? _attachList;
+
+    private static readonly HashSet<TaskStatusTak> _completedStatuses = new()
+    {
+        TaskStatusTak.Completed,
+        TaskStatusTak.Aborted,
+        TaskStatusTak.Failed,
+        TaskStatusTak.Canceled
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (MissionTakId == _loadedMissionId) return;
+        _loadedMissionId = MissionTakId;
+        _mission = null;
+        _glTasks = new();
+        _attachCounts = new();
+
+        _mission = await MissionSuiteService.GetAsync(MissionTakId);
+        await RefreshTasks();
+        StartTimer();
+        _ = LoadAttachCountsAsync();
+    }
+
+    private async Task RefreshTasks()
+    {
+        var all = await TaskService.GetAllAsync();
+        var now = DateTime.UtcNow;
+
+        _glTasks = all
+            .Where(t =>
+                t.MissionTAKSuiteId == MissionTakId &&
+                !_completedStatuses.Contains(t.Status) &&
+                t.GreenLightDateTime.HasValue &&
+                IsGlNotExpired(t, now))
+            .OrderBy(t => t.GreenLightDateTime!.Value)
+            .ToList();
+    }
+
+    private async Task LoadAttachCountsAsync()
+    {
+        foreach (var task in _glTasks.Where(t => !string.IsNullOrEmpty(t.PoiUid)))
+        {
+            var count = await AttachmentService.GetCountAsync(task.PoiUid!);
+            _attachCounts[task.Id] = count;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private static bool IsGlNotExpired(TaskEntity t, DateTime now)
+    {
+        var gl = t.GreenLightDateTime!.Value;
+        if (t.Durata is > 0)
+            return gl.AddMinutes(t.Durata.Value) > now;
+        return gl > now;
+    }
+
+    private void StartTimer()
+    {
+        if (_timer != null) return;
+        _timer = new System.Timers.Timer(1000);
+        _timer.Elapsed += async (_, _) => await InvokeAsync(StateHasChanged);
+        _timer.AutoReset = true;
+        _timer.Start();
+    }
+
+    private async Task OpenAttachments(TaskEntity task)
+    {
+        _selectedTask = task;
+        _attachList = null;
+        await _attachModal.ShowAsync();
+        _attachList = string.IsNullOrEmpty(task.PoiUid)
+            ? new List<AtakAttachment>()
+            : await AttachmentService.GetAllAsync(task.PoiUid);
+        StateHasChanged();
+    }
+
+    private async Task ViewAttachment(AtakAttachment attach)
+    {
+        if (attach.FileBytes == null) return;
+        var base64 = Convert.ToBase64String(attach.FileBytes);
+        var mediaType = attach.MediaType ?? "application/octet-stream";
+        await JS.InvokeVoidAsync("viewFile", base64, mediaType);
+    }
+
+    private static string FormatTs(TimeSpan ts)
+    {
+        if (ts.TotalDays >= 1) return $"{(int)ts.TotalDays}g {ts.Hours:00}h {ts.Minutes:00}m {ts.Seconds:00}s";
+        if (ts.TotalHours >= 1) return $"{(int)ts.TotalHours:00}h {ts.Minutes:00}m {ts.Seconds:00}s";
+        return $"{ts.Minutes:00}m {ts.Seconds:00}s";
+    }
+
+    private static string ToLocal(DateTime utc, string format = "dd/MM/yyyy HH:mm")
+        => DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToLocalTime().ToString(format);
+
+    public void Dispose()
+    {
+        _timer?.Stop();
+        _timer?.Dispose();
+    }
+}

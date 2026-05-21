@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using TAKSuite.Data;
 
@@ -11,9 +12,11 @@ using TAKSuite.Data;
 namespace TAKSuite.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260514112933_CotTemplates")]
+    partial class CotTemplates
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -273,9 +276,6 @@ namespace TAKSuite.Migrations
                     b.Property<string>("IconPreview")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<bool>("IsPrimary")
-                        .HasColumnType("bit");
-
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -370,34 +370,6 @@ namespace TAKSuite.Migrations
                     b.ToTable("EventEntities");
                 });
 
-            modelBuilder.Entity("TAKSuite.Data.Models.MissionPhoneContact", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<Guid>("MissionId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("PhoneContactId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("Role")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MissionId");
-
-                    b.HasIndex("PhoneContactId");
-
-                    b.ToTable("MissionPhoneContacts");
-                });
-
             modelBuilder.Entity("TAKSuite.Data.Models.MissionPhotoJoinConfig", b =>
                 {
                     b.Property<Guid>("Id")
@@ -419,39 +391,6 @@ namespace TAKSuite.Migrations
                         .IsUnique();
 
                     b.ToTable("MissionPhotoJoinConfigs");
-                });
-
-            modelBuilder.Entity("TAKSuite.Data.Models.MissionRadioContact", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid?>("BackupRadioChannelId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("MissionId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Note")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<Guid>("RadioChannelId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("BackupRadioChannelId");
-
-                    b.HasIndex("MissionId");
-
-                    b.HasIndex("RadioChannelId");
-
-                    b.ToTable("MissionRadioContacts");
                 });
 
             modelBuilder.Entity("TAKSuite.Data.Models.MissionSuite", b =>
@@ -508,34 +447,6 @@ namespace TAKSuite.Migrations
                     b.ToTable("MissionsTakSuite");
                 });
 
-            modelBuilder.Entity("TAKSuite.Data.Models.PhoneContact", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("Cognome")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Nickname")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Nome")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Squadra")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Telefono")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("PhoneContacts");
-                });
-
             modelBuilder.Entity("TAKSuite.Data.Models.RadioChannel", b =>
                 {
                     b.Property<Guid>("Id")
@@ -589,9 +500,6 @@ namespace TAKSuite.Migrations
                 {
                     b.Property<int>("Id")
                         .HasColumnType("int");
-
-                    b.Property<string>("AiPromptTemplate")
-                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Callsign")
                         .IsRequired()
@@ -1077,25 +985,6 @@ namespace TAKSuite.Migrations
                     b.Navigation("Documentation");
                 });
 
-            modelBuilder.Entity("TAKSuite.Data.Models.MissionPhoneContact", b =>
-                {
-                    b.HasOne("TAKSuite.Data.Models.MissionSuite", "Mission")
-                        .WithMany()
-                        .HasForeignKey("MissionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("TAKSuite.Data.Models.PhoneContact", "PhoneContact")
-                        .WithMany()
-                        .HasForeignKey("PhoneContactId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Mission");
-
-                    b.Navigation("PhoneContact");
-                });
-
             modelBuilder.Entity("TAKSuite.Data.Models.MissionPhotoJoinConfig", b =>
                 {
                     b.HasOne("TAKSuite.Data.Models.MissionSuite", "Mission")
@@ -1105,32 +994,6 @@ namespace TAKSuite.Migrations
                         .IsRequired();
 
                     b.Navigation("Mission");
-                });
-
-            modelBuilder.Entity("TAKSuite.Data.Models.MissionRadioContact", b =>
-                {
-                    b.HasOne("TAKSuite.Data.Models.RadioChannel", "BackupRadioChannel")
-                        .WithMany()
-                        .HasForeignKey("BackupRadioChannelId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("TAKSuite.Data.Models.MissionSuite", "Mission")
-                        .WithMany()
-                        .HasForeignKey("MissionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("TAKSuite.Data.Models.RadioChannel", "RadioChannel")
-                        .WithMany()
-                        .HasForeignKey("RadioChannelId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("BackupRadioChannel");
-
-                    b.Navigation("Mission");
-
-                    b.Navigation("RadioChannel");
                 });
 
             modelBuilder.Entity("TAKSuite.Data.Models.MissionSuite", b =>

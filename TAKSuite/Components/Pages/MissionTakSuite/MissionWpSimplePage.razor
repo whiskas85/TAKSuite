@@ -96,7 +96,7 @@ else
                         @context.Name
                     </GridColumn>
                     <GridColumn TItem="AtakAttachment" HeaderText="">
-                        <Button Size="ButtonSize.Small" @onclick="() => DownloadAttachment(context)">
+                        <Button Size="ButtonSize.Small" @onclick="() => ViewAttachment(context)">
                             @if (context.MediaType?.Contains("jpeg") == true)
                             {
                                 <Icon Name="IconName.FileEarmarkImage" Color="IconColor.Primary" />
@@ -128,8 +128,13 @@ else
     private Modal _attachmentModal = default!;
     private string? _selectedWaypointUid;
 
-    protected override async Task OnInitializedAsync()
+    private Guid _loadedMissionId = Guid.Empty;
+
+    protected override async Task OnParametersSetAsync()
     {
+        if (MissionTakId == _loadedMissionId) return;
+        _loadedMissionId = MissionTakId;
+        _mission = null;
         _mission = await MissionSuiteService.GetAsync(MissionTakId);
     }
 
@@ -165,11 +170,11 @@ else
         return request.ApplyTo(list);
     }
 
-    private async Task DownloadAttachment(AtakAttachment attach)
+    private async Task ViewAttachment(AtakAttachment attach)
     {
         if (attach.FileBytes == null) return;
         var base64 = Convert.ToBase64String(attach.FileBytes);
         var mediaType = attach.MediaType ?? "application/octet-stream";
-        await JS.InvokeVoidAsync("downloadFile", $"data:{mediaType};base64,{base64}", attach.Name);
+        await JS.InvokeVoidAsync("viewFile", base64, mediaType);
     }
 }

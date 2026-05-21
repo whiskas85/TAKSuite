@@ -1,0 +1,112 @@
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@inject PhoneContactService _contactService
+
+@code {
+    [Parameter] public EventCallback<PhoneContact> OnSaved { get; set; }
+
+    private Modal _modal = default!;
+    private bool _isEdit;
+    private Guid _editId;
+    private string _nome = "";
+    private string _cognome = "";
+    private string _nickname = "";
+    private string _telefono = "";
+    private string _squadra = "";
+    private bool _saving;
+
+    public async Task ShowAsync()
+    {
+        _isEdit = false;
+        _editId = Guid.Empty;
+        _nome = "";
+        _cognome = "";
+        _nickname = "";
+        _telefono = "";
+        _squadra = "";
+        await _modal.ShowAsync();
+    }
+
+    public async Task ShowAsync(PhoneContact contact)
+    {
+        _isEdit = true;
+        _editId = contact.Id;
+        _nome = contact.Nome;
+        _cognome = contact.Cognome;
+        _nickname = contact.Nickname ?? "";
+        _telefono = contact.Telefono ?? "";
+        _squadra = contact.Squadra ?? "";
+        await _modal.ShowAsync();
+    }
+
+    public async Task HideAsync() => await _modal.HideAsync();
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_nome) || string.IsNullOrWhiteSpace(_cognome)) return;
+        _saving = true;
+        try
+        {
+            PhoneContact result;
+            if (_isEdit)
+            {
+                var existing = await _contactService.GetAsync(_editId);
+                if (existing == null) return;
+                existing.Nome = _nome.Trim();
+                existing.Cognome = _cognome.Trim();
+                existing.Nickname = string.IsNullOrWhiteSpace(_nickname) ? null : _nickname.Trim();
+                existing.Telefono = string.IsNullOrWhiteSpace(_telefono) ? null : _telefono.Trim();
+                existing.Squadra = string.IsNullOrWhiteSpace(_squadra) ? null : _squadra.Trim();
+                result = await _contactService.UpdateAsync(existing);
+            }
+            else
+            {
+                result = await _contactService.AddAsync(new PhoneContact
+                {
+                    Nome = _nome.Trim(),
+                    Cognome = _cognome.Trim(),
+                    Nickname = string.IsNullOrWhiteSpace(_nickname) ? null : _nickname.Trim(),
+                    Telefono = string.IsNullOrWhiteSpace(_telefono) ? null : _telefono.Trim(),
+                    Squadra = string.IsNullOrWhiteSpace(_squadra) ? null : _squadra.Trim()
+                });
+            }
+
+            await _modal.HideAsync();
+            await OnSaved.InvokeAsync(result);
+        }
+        finally { _saving = false; }
+    }
+}
+
+<Modal @ref="_modal" Title="@(_isEdit ? "Modifica contatto" : "Nuovo contatto")">
+    <BodyTemplate>
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label">Nome <span class="text-danger">*</span></label>
+                <input class="form-control" @bind="_nome" placeholder="Mario" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Cognome <span class="text-danger">*</span></label>
+                <input class="form-control" @bind="_cognome" placeholder="Rossi" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Nickname <span class="text-muted small">(opzionale)</span></label>
+                <input class="form-control" @bind="_nickname" placeholder="es. MarioR" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Telefono <span class="text-muted small">(opzionale)</span></label>
+                <input class="form-control" @bind="_telefono" placeholder="es. 333 1234567" />
+            </div>
+            <div class="col-12">
+                <label class="form-label">Squadra <span class="text-muted small">(opzionale)</span></label>
+                <input class="form-control" @bind="_squadra" placeholder="es. Squadra" />
+            </div>
+        </div>
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Success" @onclick="Save" Loading="_saving" LoadingText="Salvataggio...">
+            <Icon Name="IconName.Save" /> Salva
+        </Button>
+        <Button Color="ButtonColor.Secondary" @onclick="async () => await _modal.HideAsync()">Annulla</Button>
+    </FooterTemplate>
+</Modal>

@@ -137,6 +137,98 @@ namespace TAKSuite.TAK.CoT
             }
         }
 
+        /// <summary>
+        /// Genera e pubblica un punto TAK partendo da un template COT.
+        /// I placeholder nel CotXml vengono sostituiti con i valori reali.
+        /// </summary>
+        public async Task<string?> CreateFromTemplateAsync(
+            Data.Models.CotTemplate template, string missionUid,
+            Dictionary<string, object> dicName)
+        {
+            var uid  = Guid.NewGuid().ToString();
+            var now  = DateTime.UtcNow;
+            var stale = now.AddYears(1);
+
+            //var inv = System.Globalization.CultureInfo.InvariantCulture;
+            //var cotXml = template.CotXml
+            //    .Replace("{{UID}}", uid)
+            //    .Replace("{{NAME}}", dicName["callsign"].ToString())
+            //    .Replace("{{LAT}}", ((int)dicName["lat"]).ToString(inv))
+            //    .Replace("{{LON}}", ((int)dicName["lon"]).ToString(inv))
+            //    .Replace("{{REMARKS}}", (dicName.TryGetValue("remarks", out var remarks)? remarks?.ToString() ?? string.Empty: string.Empty)
+            //    .Replace("{{MISSION_UID}}", missionUid)
+            //    .Replace("{{TIME}}", now.ToString("yyyy-MM-ddTHH:mm:ss.00Z"))
+            //    .Replace("{{STALE}}", stale.ToString("yyyy-MM-ddTHH:mm:ss.00Z"))
+            //    .Replace("{{CREATOR_UID}}", CreatorUid)
+            //    .Replace("{{COLOR}}", dicName.TryGetValue("color", out var color) && color is int c ? c.ToString(inv) : "-1"));
+
+            // ✅ aggiungo i valori extra non nel dizionario
+            var extra = new Dictionary<string, object>
+            {
+                { "UID", uid },
+                { "MISSION_UID", missionUid },
+                { "TIME", now },
+                { "STALE", stale },
+                { "CREATOR_UID", CreatorUid },
+            };
+
+            var mapper = new CotTemplateMapper(dicName, extra);
+            var cotXml = mapper.ApplyTemplate(template.CotXml);
+
+
+            await TakClient.SendCotAsync(cotXml);
+            await Task.Delay(200);
+
+            try
+            {
+                await TakClient.AddUidsToMissionAsync(missionUid, new[] { uid }, CreatorUid);
+                return uid;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[CreateFromTemplate] AddUidsToMission: {ex.Message}");
+                return null;
+            }
+        }
+
+        public async Task<string?> CreateParkingAsync(string missionUid, string name, double lat, double lon, int argbColor = -1)
+        {
+            var uid   = Guid.NewGuid().ToString();
+            var now   = DateTime.UtcNow;
+            var stale = now.AddYears(1);
+            var inv   = System.Globalization.CultureInfo.InvariantCulture;
+            var safeName = System.Security.SecurityElement.Escape(name);
+
+            var cotXml =
+                $"<?xml version='1.0' encoding='UTF-8' standalone='yes'?>" +
+                $"<event version='2.0' uid='{uid}' type='a-u-G' " +
+                $"time='{now.ToString("yyyy-MM-ddTHH:mm:ssZ", inv)}' " +
+                $"start='{now.ToString("yyyy-MM-ddTHH:mm:ssZ", inv)}' " +
+                $"stale='{stale.ToString("yyyy-MM-ddTHH:mm:ssZ", inv)}' how='h-g-i-g-o'>" +
+                $"<point lat='{lat.ToString("G17", inv)}' lon='{lon.ToString("G17", inv)}' hae='9999999.0' ce='9999999.0' le='9999999.0' />" +
+                $"<detail>" +
+                $"<contact callsign=\"{safeName}\"/>" +
+                $"<precisionlocation geopointsrc=\"???\" altsrc=\"DTED2\"/>" +
+                $"<archive/>" +
+                $"<color argb=\"{argbColor}\"/>" +
+                $"<usericon iconsetpath=\"6d781afb-89a6-4c07-b2b9-a89748b6a38f/Transport/parking.png\"/>" +
+                $"</detail></event>";
+
+            await TakClient.SendCotAsync(cotXml);
+            await Task.Delay(300);
+
+            try
+            {
+                await TakClient.AddUidsToMissionAsync(missionUid, new[] { uid }, CreatorUid);
+                return uid;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[CreateParking] AddUidsToMission: {ex.Message}");
+                return null;
+            }
+        }
+
         public async Task<bool> ChangeCotColor(string missionUID, string uid, int newColor)
         {
             try

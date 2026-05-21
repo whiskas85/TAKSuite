@@ -17,8 +17,36 @@ namespace TAKSuite.Data.Models
         // ATAK Link
         public List<string> Uids { get; set; } = new(); // Lista di UID (ATAK) allegati al task
         public string MissionUid { get; set; } = "";    // Missione dalla quale attingere
-        public string? PoiUid { get; set; }             // UID del POI di riferimento TAK
-        public string? PoiName { get; set; }            // Nome (callsign) del POI di riferimento TAK
+        public string? PoiUid { get; set; }             // UID del POI principale (legacy — usare PoiLinks)
+        public string? PoiName { get; set; }            // Nome del POI principale (legacy — usare PoiLinks)
+
+        // Multi-point support: punto principale + punti secondari (ingresso, uscita, eliporto…)
+        public string? PoiLinksJson { get; set; }
+
+        [NotMapped]
+        public List<TaskPoiLink> PoiLinks
+        {
+            get
+            {
+                if (!string.IsNullOrEmpty(PoiLinksJson))
+                {
+                    try { return System.Text.Json.JsonSerializer.Deserialize<List<TaskPoiLink>>(PoiLinksJson) ?? new(); }
+                    catch { return new(); }
+                }
+                // Backward compat: se non c'è JSON ma c'è il vecchio PoiUid, crea il link principale
+                if (!string.IsNullOrEmpty(PoiUid))
+                    return new List<TaskPoiLink> { new() { Uid = PoiUid, Name = PoiName ?? PoiUid, IsPrimary = true, Role = "Principale" } };
+                return new();
+            }
+            set
+            {
+                PoiLinksJson = System.Text.Json.JsonSerializer.Serialize(value);
+                // Mantieni PoiUid/PoiName sincronizzati con il link principale
+                var primary = value.FirstOrDefault(p => p.IsPrimary) ?? value.FirstOrDefault();
+                PoiUid  = primary?.Uid;
+                PoiName = primary?.Name;
+            }
+        }
 
 
         public Guid? MissionTAKSuiteId { get; set; }       // FK esplicita

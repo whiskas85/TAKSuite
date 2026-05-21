@@ -12,6 +12,15 @@ window.openNewTab = (url, title) => {
     newTab.document.body.innerHTML = '<img src="' + url + '" style="width:100%; height:auto;">';  // Scrive l'immagine nel body
 }
 
+window.viewFile = (base64Data, mediaType) => {
+    const bytes = atob(base64Data);
+    const arr = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    const blob = new Blob([arr], { type: mediaType || 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+};
+
 window.downloadFile = (fileDataUrl, filename) => {
     const a = document.createElement("a");
     a.href = fileDataUrl;

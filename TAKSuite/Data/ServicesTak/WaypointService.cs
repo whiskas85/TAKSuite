@@ -5,6 +5,8 @@ using TAKSuite.TAK.Helper;
 
 namespace TAKSuite.Data.ServicesTak
 {
+    public record TakPoint(string Uid, string? Callsign, double Lat, double Lon);
+
     public class WaypointService
     {
         private readonly MartiApiClient _client;
@@ -18,6 +20,39 @@ namespace TAKSuite.Data.ServicesTak
             var mission = await _client.GetMissionDataAsync(missionUid);
             return await Task.Run(() => GetWaypoints(mission));
         }
+        public async Task<List<TakPoint>> GetAllMissionPointsAsync(string missionUid)
+        {
+            var data = await _client.GetMissionDataAsync(missionUid);
+            return ParseAllPoints(data);
+        }
+
+        private List<TakPoint> ParseAllPoints(string data)
+        {
+            var result = new List<TakPoint>();
+            if (string.IsNullOrEmpty(data)) return result;
+            try
+            {
+                using var doc = JsonDocument.Parse(data);
+                var uids = doc.RootElement.GetProperty("data")[0].GetProperty("uids");
+                foreach (var uid in uids.EnumerateArray())
+                {
+                    try
+                    {
+                        var uidStr = uid.GetProperty("data").GetString() ?? string.Empty;
+                        var callsign = uid.GetProperty("details").GetProperty("callsign").GetString();
+                        if (!uid.GetProperty("details").TryGetProperty("location", out var loc)) continue;
+                        var lat = loc.GetProperty("lat").GetDouble();
+                        var lon = loc.GetProperty("lon").GetDouble();
+                        if (lat == 0 && lon == 0) continue;
+                        result.Add(new TakPoint(uidStr, callsign, lat, lon));
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+            return result;
+        }
+
         public async Task<List<UidEntry>> GetAllMissionCotAsync(string missionUid)
         {
             // le missioni devono essere tutte quelle che sono assegnate al team

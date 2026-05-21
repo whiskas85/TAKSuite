@@ -1,0 +1,155 @@
+@page "/settings/phone-contacts"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Components.Pages.Components
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@inject PhoneContactService ContactService
+@inject ToastService ToastService
+
+<PageTitle>Rubrica Telefonica</PageTitle>
+
+<PhoneContactEditModal @ref="_editModal" OnSaved="OnContactSaved" />
+
+<ConfirmDialog @ref="_confirm" />
+
+<!-- Header fisso -->
+<div style="position: fixed; top: 0; left: 300px; right: 0; z-index: 100;
+            background: var(--bs-body-bg); border-bottom: 1px solid var(--bs-border-color);
+            padding: 0.5rem 1.5rem;">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h2 class="mb-0 fs-4">Rubrica Telefonica</h2>
+            <p class="text-muted mb-0 small">Gestione contatti per le missioni</p>
+        </div>
+        <Button Color="ButtonColor.Primary" @onclick="OpenAdd">
+            <Icon Name="IconName.PlusLg" /> Nuovo contatto
+        </Button>
+    </div>
+</div>
+<div style="height: 72px;"></div>
+
+<!-- Omnibar search -->
+<div class="mb-3">
+    <input class="form-control" placeholder="Cerca per nome, cognome, nickname, squadra, telefono..."
+           @bind="_search" @bind:event="oninput" />
+</div>
+
+@if (_contacts == null)
+{
+    <div class="text-center py-5 text-muted">
+        <div class="spinner-border mb-3" role="status"></div>
+        <p>Caricamento...</p>
+    </div>
+}
+else if (!Filtered.Any())
+{
+    <div class="text-center py-5 text-muted">
+        <Icon Name="IconName.PersonLinesFill" Size="IconSize.x5" />
+        <p class="mt-3">
+            @if (string.IsNullOrWhiteSpace(_search))
+            {
+                <span>Nessun contatto in rubrica. Aggiungine uno con il pulsante qui sopra.</span>
+            }
+            else
+            {
+                <span>Nessun risultato per "<strong>@_search</strong>".</span>
+            }
+        </p>
+    </div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Nome</th>
+                    <th>Cognome</th>
+                    <th>Nickname</th>
+                    <th>Telefono</th>
+                    <th>Squadra</th>
+                    <th class="text-end">Azioni</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var c in Filtered)
+                {
+                    <tr>
+                        <td class="fw-semibold">@c.Nome</td>
+                        <td>@c.Cognome</td>
+                        <td class="text-muted">@(c.Nickname ?? "—")</td>
+                        <td class="font-monospace small">@(c.Telefono ?? "—")</td>
+                        <td>@(c.Squadra ?? "—")</td>
+                        <td class="text-end">
+                            <Button Size="ButtonSize.Small" Color="ButtonColor.Primary"
+                                    @onclick="() => OpenEdit(c)">
+                                <Icon Name="IconName.PencilFill" />
+                            </Button>
+                            <Button Size="ButtonSize.Small" Color="ButtonColor.Danger"
+                                    @onclick="() => ConfirmDelete(c)">
+                                <Icon Name="IconName.Trash3Fill" />
+                            </Button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private PhoneContactEditModal _editModal = default!;
+    private ConfirmDialog _confirm = default!;
+
+    private List<PhoneContact>? _contacts;
+    private string _search = "";
+
+    private IEnumerable<PhoneContact> Filtered => _contacts == null
+        ? Enumerable.Empty<PhoneContact>()
+        : string.IsNullOrWhiteSpace(_search)
+            ? _contacts
+            : _contacts.Where(c =>
+                c.Nome.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                c.Cognome.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+                (c.Nickname?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (c.Squadra?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (c.Telefono?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Refresh();
+    }
+
+    private async Task Refresh()
+    {
+        _contacts = await ContactService.GetAllAsync();
+        _contacts.Sort((a, b) => string.Compare(a.Cognome, b.Cognome, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async Task OpenAdd() => await _editModal.ShowAsync();
+
+    private async Task OpenEdit(PhoneContact c) => await _editModal.ShowAsync(c);
+
+    private async Task OnContactSaved(PhoneContact saved)
+    {
+        await Refresh();
+        ToastService.Notify(new(ToastType.Success, "Rubrica", "Contatto salvato."));
+        StateHasChanged();
+    }
+
+    private async Task ConfirmDelete(PhoneContact c)
+    {
+        var confirmed = await _confirm.ShowAsync(
+            "Elimina contatto",
+            $"Eliminare {c.Nome} {c.Cognome}? Verrà rimosso anche da tutte le missioni associate.",
+            new ConfirmDialogOptions { YesButtonColor = ButtonColor.Danger, YesButtonText = "Elimina" });
+
+        if (!confirmed) return;
+
+        await ContactService.DeleteAsync(c.Id);
+        await Refresh();
+        ToastService.Notify(new(ToastType.Success, "Rubrica", "Contatto eliminato."));
+        StateHasChanged();
+    }
+}

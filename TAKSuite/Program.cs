@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using TAKSuite.Components;
 using TAKSuite.Components.Account;
 using TAKSuite.Data;
@@ -43,7 +44,8 @@ builder.Services.AddScoped(sp =>
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(connectionString));
+    options.UseSqlServer(connectionString)
+           .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
 builder.Services.AddIdentityCore<ApplicationUser>(options => options.SignIn.RequireConfirmedAccount = true)
@@ -93,6 +95,10 @@ builder.Services.AddTransient<TaskPrioritiesService>();
 builder.Services.AddTransient<EventEntityService>();
 builder.Services.AddTransient<MissionSuiteEntityServices>();
 builder.Services.AddTransient<TaskTemplateService>();
+builder.Services.AddTransient<CotTemplateService>();
+builder.Services.AddTransient<MissionRadioContactService>();
+builder.Services.AddTransient<PhoneContactService>();
+builder.Services.AddTransient<MissionPhoneContactService>();
 builder.Services.AddTransient<AiCoordinatesService>();
 builder.Services.AddTransient<TakSettingsService>();
 builder.Services.AddTransient<TakSubscriptionService>();

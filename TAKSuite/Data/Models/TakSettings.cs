@@ -25,5 +25,8 @@ namespace TAKSuite.Data.Models
         public bool HasCertificate => CertificateP12 is { Length: > 0 };
 
         public DateTime LastModified { get; set; } = DateTime.UtcNow;
+
+        // Template del prompt inviato all'AI (null = usa il default hardcoded)
+        public string? AiPromptTemplate { get; set; }
     }
 }

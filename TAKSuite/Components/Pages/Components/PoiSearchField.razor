@@ -8,36 +8,47 @@
              MissionTakUid="@MissionTakName"
              OnPoiCreated="OnNewPoiCreated" />
 
-<div class="input-group">
-    <InputText class="form-control"
-               Value="@Value"
-               ValueChanged="OnValueChanged"
-               ValueExpression="() => Value"
-               placeholder="UID del POI di riferimento" />
-    <Button Color="ButtonColor.Secondary"
-            @onclick="ShowModal"
-            Disabled="@(string.IsNullOrEmpty(MissionTakName))">
-        <Icon Name="IconName.Search" />
-    </Button>
-    <Button Color="ButtonColor.Primary"
-            title="Crea nuovo POI su TAK"
-            @onclick="async () => await _addPoiModal.ShowAsync()">
-        <Icon Name="IconName.GeoFill" />
-    </Button>
-</div>
-@if (!string.IsNullOrEmpty(NameValue))
+@if (!string.IsNullOrEmpty(Value))
 {
-    <div class="mt-1 text-info">
-        <Icon Name="IconName.GeoAltFill" /> <strong>@NameValue</strong>
+    <div class="d-flex align-items-center gap-2 p-2 border rounded bg-light-subtle">
+        <Icon Name="IconName.GeoAltFill" class="text-danger flex-shrink-0" />
+        <div class="flex-grow-1" style="min-width:0">
+            <div class="fw-semibold">@(string.IsNullOrEmpty(NameValue) ? Value : NameValue)</div>
+            @if (!string.IsNullOrEmpty(NameValue))
+            {
+                <div class="text-muted small font-monospace text-truncate">@Value</div>
+            }
+        </div>
+        <Button Color="ButtonColor.Secondary" Outline="true" Size="ButtonSize.Small"
+                @onclick="ShowModal"
+                Disabled="@(string.IsNullOrEmpty(MissionTakName))"
+                title="Cambia POI">
+            <Icon Name="IconName.ArrowRepeat" />
+        </Button>
+        <Button Color="ButtonColor.Danger" Outline="true" Size="ButtonSize.Small"
+                @onclick="ClearPoi" title="Rimuovi POI">
+            <Icon Name="IconName.X" />
+        </Button>
     </div>
-}
-@if (string.IsNullOrEmpty(MissionTakName))
-{
-    <small class="form-text text-muted">La ricerca è disponibile solo per task associati a una missione TAK</small>
 }
 else
 {
-    <small class="form-text text-muted">Cerca il POI dalla missione <strong>@MissionTakName</strong></small>
+    <div class="d-flex gap-2">
+        <Button Color="ButtonColor.Secondary" Outline="true"
+                @onclick="ShowModal"
+                Disabled="@(string.IsNullOrEmpty(MissionTakName))">
+            <Icon Name="IconName.Search" /> Cerca POI
+        </Button>
+        <Button Color="ButtonColor.Primary" Outline="true"
+                title="Crea nuovo POI su TAK"
+                @onclick="async () => await _addPoiModal.ShowAsync()">
+            <Icon Name="IconName.GeoFill" /> Nuovo POI
+        </Button>
+    </div>
+    @if (string.IsNullOrEmpty(MissionTakName))
+    {
+        <small class="form-text text-muted">Ricerca disponibile solo per task in una missione TAK</small>
+    }
 }
 
 <Modal @ref="_modal" Title="Seleziona POI" Size="ModalSize.Large">
@@ -61,13 +72,13 @@ else
               Responsive="true">
             <GridColumns>
                 <GridColumn TItem="UidEntry" HeaderText="Nome" SortKeySelector="item => item.Details.Callsign">
-                    @context.Details?.Callsign
+                    <strong>@context.Details?.Callsign</strong>
                 </GridColumn>
                 <GridColumn TItem="UidEntry" HeaderText="Tipo" SortKeySelector="item => item.Details.Type">
                     @context.Details?.Type
                 </GridColumn>
                 <GridColumn TItem="UidEntry" HeaderText="UID">
-                    @context.Data
+                    <span class="text-muted small font-monospace">@context.Data</span>
                 </GridColumn>
             </GridColumns>
         </Grid>
@@ -129,10 +140,9 @@ else
         await OnPoiCreated.InvokeAsync();
     }
 
-    private async Task OnValueChanged(string? value)
+    private async Task ClearPoi()
     {
-        await ValueChanged.InvokeAsync(value);
-        if (string.IsNullOrEmpty(value))
-            await NameValueChanged.InvokeAsync(null);
+        await ValueChanged.InvokeAsync(null);
+        await NameValueChanged.InvokeAsync(null);
     }
 }

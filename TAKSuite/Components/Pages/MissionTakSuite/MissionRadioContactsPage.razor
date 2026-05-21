@@ -1,0 +1,222 @@
+@page "/missiontak/{MissionTakId:guid}/radiocontacts"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@inject MissionSuiteEntityServices MissionSuiteService
+@inject MissionRadioContactService ContactService
+@inject RadioChannelService RadioChannelService
+@inject ToastService ToastService
+
+<PageTitle>Comunicazioni — @(_mission?.Name ?? "Missione")</PageTitle>
+
+@if (_mission == null)
+{
+    <div class="d-flex justify-content-center align-items-center" style="min-height:60vh">
+        <div class="text-center text-muted">
+            <div class="spinner-border mb-3" role="status"></div>
+            <p>Caricamento...</p>
+        </div>
+    </div>
+}
+else
+{
+    <Modal @ref="_modal" Title="@(_isNew ? "Aggiungi contatto radio" : "Modifica contatto radio")">
+        <BodyTemplate>
+            <div class="mb-3">
+                <label class="form-label">Nome / Ruolo <span class="text-danger">*</span></label>
+                <input class="form-control" @bind="_editName" placeholder="es. Centrale, TOC, Unità Alpha..." />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Canale radio <span class="text-danger">*</span></label>
+                <select class="form-select" @bind="_editRadioChannelId">
+                    <option value="@Guid.Empty">— seleziona —</option>
+                    @foreach (var ch in _radioChannels)
+                    {
+                        <option value="@ch.Id">@ch.Name — @ch.Frequency</option>
+                    }
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Canale backup <span class="text-muted small">(opzionale)</span></label>
+                <select class="form-select" @bind="_editBackupChannelId">
+                    <option value="@Guid.Empty">— nessuno —</option>
+                    @foreach (var ch in _radioChannels)
+                    {
+                        <option value="@ch.Id">@ch.Name — @ch.Frequency</option>
+                    }
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Note <span class="text-muted small">(opzionale)</span></label>
+                <input class="form-control" @bind="_editNote" placeholder="Informazioni aggiuntive..." />
+            </div>
+        </BodyTemplate>
+        <FooterTemplate>
+            <Button Color="ButtonColor.Success" @onclick="Save" Loading="_saving" LoadingText="Salvataggio...">
+                <Icon Name="IconName.Save" /> Salva
+            </Button>
+            <Button Color="ButtonColor.Secondary" @onclick="async () => await _modal.HideAsync()">Annulla</Button>
+        </FooterTemplate>
+    </Modal>
+
+    <div class="sticky-top bg-body border-bottom px-3 py-2" style="z-index:100;">
+        <div class="d-flex justify-content-between align-items-center gap-2">
+            <div>
+                <div class="fw-bold">@_mission.Name</div>
+                <div class="text-muted small">Contatti radio missione</div>
+            </div>
+            <Button Color="ButtonColor.Primary" Size="ButtonSize.Small" @onclick="OpenAdd">
+                <Icon Name="IconName.PlusLg" /> Aggiungi contatto
+            </Button>
+        </div>
+    </div>
+
+    <div class="px-3 py-3">
+        @if (!_contacts.Any())
+        {
+            <div class="text-center py-5 text-muted">
+                <Icon Name="IconName.Headset" Size="IconSize.x5" />
+                <p class="mt-3">Nessun contatto radio. Aggiungine uno con il pulsante qui sopra.</p>
+            </div>
+        }
+        else
+        {
+            <div class="list-group">
+                @foreach (var contact in _contacts)
+                {
+                    <div class="list-group-item d-flex align-items-start gap-3 py-3">
+                        <Icon Name="IconName.Headset" Color="IconColor.Primary" Class="mt-1" />
+                        <div class="flex-grow-1">
+                            <div class="fw-semibold">@contact.Name</div>
+                            <div class="text-muted small">
+                                <Icon Name="IconName.BroadcastPin" Size="IconSize.x6" />
+                                @contact.RadioChannel.Name — <span class="font-monospace">@contact.RadioChannel.Frequency</span>
+                                @if (!string.IsNullOrEmpty(contact.RadioChannel.FrequencyType))
+                                {
+                                    <span class="ms-1 badge bg-secondary fw-normal">@contact.RadioChannel.FrequencyType</span>
+                                }
+                            </div>
+                            @if (contact.BackupRadioChannel != null)
+                            {
+                                <div class="text-muted small">
+                                    <Icon Name="IconName.ArrowRepeat" Size="IconSize.x6" />
+                                    backup: @contact.BackupRadioChannel.Name — <span class="font-monospace">@contact.BackupRadioChannel.Frequency</span>
+                                </div>
+                            }
+                            @if (!string.IsNullOrEmpty(contact.Note))
+                            {
+                                <div class="text-muted small fst-italic mt-1">@contact.Note</div>
+                            }
+                        </div>
+                        <div class="d-flex gap-1 flex-shrink-0">
+                            <Button Size="ButtonSize.Small" Color="ButtonColor.Primary" @onclick="() => OpenEdit(contact)">
+                                <Icon Name="IconName.PencilFill" />
+                            </Button>
+                            <Button Size="ButtonSize.Small" Color="ButtonColor.Danger" @onclick="() => Delete(contact)">
+                                <Icon Name="IconName.Trash3Fill" />
+                            </Button>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public Guid MissionTakId { get; set; }
+
+    private MissionSuite? _mission;
+    private List<MissionRadioContact> _contacts = new();
+    private List<RadioChannel> _radioChannels = new();
+
+    private Modal _modal = default!;
+    private bool _saving;
+    private bool _isNew;
+    private Guid _editId;
+    private string _editName = "";
+    private Guid _editRadioChannelId = Guid.Empty;
+    private Guid _editBackupChannelId = Guid.Empty;
+    private string? _editNote;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _mission = await MissionSuiteService.GetAsync(MissionTakId);
+        _radioChannels = await RadioChannelService.GetAllAsync();
+        _radioChannels.Sort((a, b) => a.Name.CompareTo(b.Name));
+        await Refresh();
+    }
+
+    private async Task Refresh()
+    {
+        _contacts = await ContactService.GetByMissionAsync(MissionTakId);
+        StateHasChanged();
+    }
+
+    private async Task OpenAdd()
+    {
+        _isNew = true;
+        _editId = Guid.Empty;
+        _editName = "";
+        _editRadioChannelId = Guid.Empty;
+        _editBackupChannelId = Guid.Empty;
+        _editNote = null;
+        await _modal.ShowAsync();
+    }
+
+    private async Task OpenEdit(MissionRadioContact contact)
+    {
+        _isNew = false;
+        _editId = contact.Id;
+        _editName = contact.Name;
+        _editRadioChannelId = contact.RadioChannelId;
+        _editBackupChannelId = contact.BackupRadioChannelId ?? Guid.Empty;
+        _editNote = contact.Note;
+        await _modal.ShowAsync();
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_editName) || _editRadioChannelId == Guid.Empty) return;
+        _saving = true;
+        try
+        {
+            if (_isNew)
+            {
+                await ContactService.AddAsync(new MissionRadioContact
+                {
+                    Name = _editName.Trim(),
+                    MissionId = MissionTakId,
+                    RadioChannelId = _editRadioChannelId,
+                    BackupRadioChannelId = _editBackupChannelId == Guid.Empty ? null : _editBackupChannelId,
+                    Note = string.IsNullOrWhiteSpace(_editNote) ? null : _editNote.Trim()
+                });
+            }
+            else
+            {
+                var existing = await ContactService.GetAsync(_editId);
+                if (existing != null)
+                {
+                    existing.Name = _editName.Trim();
+                    existing.RadioChannelId = _editRadioChannelId;
+                    existing.BackupRadioChannelId = _editBackupChannelId == Guid.Empty ? null : _editBackupChannelId;
+                    existing.Note = string.IsNullOrWhiteSpace(_editNote) ? null : _editNote.Trim();
+                    await ContactService.UpdateAsync(existing);
+                }
+            }
+
+            await _modal.HideAsync();
+            await Refresh();
+            ToastService.Notify(new(ToastType.Success, "Contatti radio", "Salvato con successo."));
+        }
+        finally { _saving = false; }
+    }
+
+    private async Task Delete(MissionRadioContact contact)
+    {
+        await ContactService.DeleteAsync(contact.Id);
+        await Refresh();
+        ToastService.Notify(new(ToastType.Success, "Contatti radio", "Contatto eliminato."));
+    }
+}

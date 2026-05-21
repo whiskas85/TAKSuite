@@ -11,7 +11,10 @@ namespace TAKSuite.Data.ModelsTak
 
         public Waypoint(JsonElement uid) : base(uid)
         {
-            Color = int.Parse(uid.GetProperty("details").GetProperty("color").GetString());
+            if (uid.TryGetProperty("details", out var det) &&
+                det.TryGetProperty("color", out var colorEl) &&
+                int.TryParse(colorEl.GetString(), out var colorVal))
+                Color = colorVal;
 
 
             var attachments = new List<String>();

@@ -1,4 +1,5 @@
-﻿@using TAKSuite.Data.Services
+﻿@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
 @* @inherits ConnectedUserInfo *@
 @implements IDisposable
 @inject NavigationManager NavigationManager
@@ -10,7 +11,7 @@
 <Sidebar2 Href="/"
 ImageSrc="images/tak trasp.png"
 Title="TAK Suite"
-BadgeText="v3.2.5"
+BadgeText="v3.5.4"
 DataProvider="Sidebar2DataProvider"
 WidthUnit="Unit.Px"
 Width="300"/>
@@ -36,14 +37,14 @@ Width="300"/>
             new NavItem { Id = "1", Href = "/", IconName = IconName.HouseDoorFill, Text = "Home" },
 
 
-            new NavItem { Id = $"2", Href = "", IconName = IconName.ListNested, Text = "TAK Missions" },
-            new NavItem { Id = $"2.{counter=0}", Href = "/missions", IconName = IconName.ListNested, Text = "Lista missioni", ParentId ="2" },
-            new NavItem { Id = $"2.{counter++}", Href = "/mission", IconName = IconName.ListNested, Text = "Mission", ParentId ="2" },
-            new NavItem { Id = $"2.{counter++}", Href = "/parkings", IconName = IconName.PCircleFill, Text = "Gestione Parkings", ParentId ="2" },
-            new NavItem { Id = $"2.{counter++}", Href = "/objs", IconName = IconName.PinMapFill, Text = "Obiettivi", ParentId ="2" },
-            new NavItem { Id = $"2.{counter++}", Href = "/waypoints", IconName = IconName.PinAngleFill, Text = "Waypoints", ParentId ="2" },
-            new NavItem { Id = $"2.{counter++}", Href = "/medevac", IconName = IconName.PlusCircleFill, Text = "Medevac" , ParentId ="2"},
-            new NavItem { Id = $"2.{counter++}", Href = "/waypoints-simple", IconName = IconName.PinAngleFill, Text = "WP Simple", ParentId ="2" },
+            // new NavItem { Id = $"2", Href = "", IconName = IconName.ListNested, Text = "TAK Missions" },
+            // new NavItem { Id = $"2.{counter=0}", Href = "/missions", IconName = IconName.ListNested, Text = "Lista missioni", ParentId ="2" },
+            // new NavItem { Id = $"2.{counter++}", Href = "/mission", IconName = IconName.ListNested, Text = "Mission", ParentId ="2" },
+            // new NavItem { Id = $"2.{counter++}", Href = "/parkings", IconName = IconName.PCircleFill, Text = "Gestione Parkings", ParentId ="2" },
+            // new NavItem { Id = $"2.{counter++}", Href = "/objs", IconName = IconName.PinMapFill, Text = "Obiettivi", ParentId ="2" },
+            // new NavItem { Id = $"2.{counter++}", Href = "/waypoints", IconName = IconName.PinAngleFill, Text = "Waypoints", ParentId ="2" },
+            // new NavItem { Id = $"2.{counter++}", Href = "/medevac", IconName = IconName.PlusCircleFill, Text = "Medevac" , ParentId ="2"},
+            // new NavItem { Id = $"2.{counter++}", Href = "/waypoints-simple", IconName = IconName.PinAngleFill, Text = "WP Simple", ParentId ="2" },
 
 
 
@@ -71,27 +72,11 @@ Width="300"/>
                 new NavItem { Id = $"8.{counter++}", Href = "/priorities", IconName = IconName.SortNumericDown, Text = "Priorità", ParentId = "8" },
                 new NavItem { Id = $"8.{counter++}", Href = "/settings/tak", IconName = IconName.ShieldLockFill, Text = "Connessione TAK", ParentId = "8" },
                 new NavItem { Id = $"8.{counter++}", Href = "/settings/photo-join", IconName = IconName.CameraFill, Text = "Photo Auto-Join", ParentId = "8" },
+                new NavItem { Id = $"8.{counter++}", Href = "/settings/cot-templates", IconName = IconName.FileEarmarkCode, Text = "Template COT", ParentId = "8" },
+                new NavItem { Id = $"8.{counter++}", Href = "/settings/phone-contacts", IconName = IconName.TelephoneInboundFill, Text = "Rubrica Telefonica", ParentId = "8" },
 
 
 
-            // new NavItem { Id = "1", Href = "/getting-started", IconName = IconName.HouseDoorFill, Text = "Getting Started"},
-
-            // new NavItem { Id = "2", IconName = IconName.LayoutSidebarInset, Text = "Content" },
-            // new NavItem { Id = "3", Href = "/icons", IconName = IconName.PersonSquare, Text = "Icons", ParentId="2"},
-
-            // new NavItem { Id = "4", IconName = IconName.ExclamationTriangleFill, Text = "Components" },
-            // new NavItem { Id = "5", Href = "/alerts", IconName = IconName.CheckCircleFill, Text = "Alerts", ParentId="4"},
-            // new NavItem { Id = "6", Href = "/breadcrumb", IconName = IconName.SegmentedNav, Text = "Breadcrumb", ParentId="4"},
-
-            // new NavItem { Id = "7", IconName = IconName.ListNested, Text = "Sidebar 2", ParentId="4"},
-            // new NavItem { Id = "701", Href = "/sidebar2", IconName = IconName.Dash, Text = "How to use", ParentId="7"},
-            // new NavItem { Id = "702", Href = "/sidebar2-examples", IconName = IconName.Dash, Text = "Examples", ParentId="7"},
-
-            // new NavItem { Id = "8", IconName = IconName.WindowPlus, Text = "Forms" },
-            // new NavItem { Id = "9", Href = "/autocomplete", IconName = IconName.InputCursorText, Text = "Auto Complete", ParentId="8"},
-            // new NavItem { Id = "10", Href = "/currency-input", IconName = IconName.CurrencyDollar, Text = "Currency Input", ParentId="8"},
-            // new NavItem { Id = "11", Href = "/number-input", IconName = IconName.InputCursor, Text = "Number Input", ParentId="8"},
-            // new NavItem { Id = "12", Href = "/switch", IconName = IconName.ToggleOn, Text = "Switch", ParentId="8"},
         };
 
 
@@ -109,13 +94,13 @@ Width="300"/>
         if (parentId == null) return navItems;
 
         navItems.Add(new NavItem
-        {
-            Id = $"{parentId}.list",
-            Href = "/missionstaksuite",
-            IconName = IconName.ListNested,
-            Text = "Lista missioni",
-            ParentId = parentId
-        });
+            {
+                Id = $"{parentId}.list",
+                Href = "/missionstaksuite",
+                IconName = IconName.ListNested,
+                Text = "Lista missioni",
+                ParentId = parentId
+            });
         navItems.Add(new NavItem
             {
                 Id = $"{parentId}.datasync",
@@ -123,7 +108,7 @@ Width="300"/>
                 IconName = IconName.ArrowRepeat,
                 Text = "DataSync Mission",
                 ParentId = parentId
-        });
+            });
 
         var missions = await MissionSuiteService.GetAllAsync();
         var allTasks = await TaskService.GetAllAsync();
@@ -132,16 +117,63 @@ Width="300"/>
             .GroupBy(t => t.MissionTAKSuiteId!.Value)
             .ToDictionary(g => g.Key, g => g.OrderBy(t => t.Name).ToList());
 
+
+        var createdMissions = missions.Where(t =>
+            t.Status == MissionStatusTak.Created)
+            .ToList();
+        var activeMissions = missions.Where(t =>
+            t.Status == MissionStatusTak.Assigned ||
+            t.Status == MissionStatusTak.InProgress ||
+            t.Status == MissionStatusTak.Completed)
+            .ToList();
+        var archivedMissions = missions.Where(t =>
+            t.Status == MissionStatusTak.Archived ||
+            t.Status == MissionStatusTak.Canceled)
+            .ToList();
+
+
+        
+        if (createdMissions.Count > 0)
+            navItems = await RetrieveGroupedMissions(
+                navItems, createdMissions, tasksByMission, listTitle, parentId,
+                "Missioni create", IconName.PlusCircle);
+
+        if (activeMissions.Count > 0)
+            navItems = await RetrieveGroupedMissions(
+                navItems, activeMissions, tasksByMission, listTitle, parentId,
+                "Missioni attive", IconName.PlayCircle);
+
+        if (archivedMissions.Count > 0)
+            navItems = await RetrieveGroupedMissions(
+                navItems, archivedMissions, tasksByMission, listTitle, parentId,
+                "Missioni archiviate", IconName.Archive);
+
+
+        return navItems;
+    }
+
+    private async Task<IList<NavItem>> RetrieveGroupedMissions(IList<NavItem> navItems, IList<MissionSuite> missions, Dictionary<Guid, List<TaskEntity>> tasksByMission, string listTitle, string parentId, string groupTitle, IconName icon)
+    {
+        string idFromTitle = groupTitle.Replace(" ", "_");
+        string groupMissionsId = $"{parentId}.{idFromTitle}";
+        navItems.Add(new NavItem
+        {
+            Id = groupMissionsId,
+            IconName = icon,
+            Text = groupTitle,
+            ParentId = parentId,
+        });
+
         foreach (var mission in missions.OrderBy(m => m.Name))
         {
-            var missionMenuId = $"{parentId}.{mission.Id}";
+            var missionMenuId = $"{groupMissionsId}.{mission.Id}";
             navItems.Add(new NavItem
             {
                 Id = missionMenuId,
                 Href = "",
                 IconName = IconName.MapFill,
                 Text = mission.Name,
-                ParentId = parentId
+                ParentId = groupMissionsId
             });
             navItems.Add(new NavItem
             {
@@ -149,6 +181,14 @@ Width="300"/>
                 Href = $"/missiontak/{mission.Id}",
                 IconName = IconName.Activity,
                 Text = "Operativo",
+                ParentId = missionMenuId
+            });
+            navItems.Add(new NavItem
+            {
+                Id = $"{missionMenuId}.gl",
+                Href = $"/missiontak/{mission.Id}/greenlights",
+                IconName = IconName.CircleFill,
+                Text = "Luci Verdi",
                 ParentId = missionMenuId
             });
             navItems.Add(new NavItem
@@ -191,9 +231,33 @@ Width="300"/>
                 Text = "Photo Join",
                 ParentId = missionMenuId
             });
+            navItems.Add(new NavItem
+            {
+                Id = $"{missionMenuId}.radiocontacts",
+                Href = $"/missiontak/{mission.Id}/radiocontacts",
+                IconName = IconName.Headset,
+                Text = "Comunicazioni",
+                ParentId = missionMenuId
+            });
+            navItems.Add(new NavItem
+            {
+                Id = $"{missionMenuId}.phonecontacts",
+                Href = $"/missiontak/{mission.Id}/phonecontacts",
+                IconName = IconName.TelephoneInboundFill,
+                Text = "Contatti",
+                ParentId = missionMenuId
+            });
 
             if (tasksByMission.TryGetValue(mission.Id, out var tasks))
             {
+                string taskParentId = $"{missionMenuId}.tasks";
+                navItems.Add(new NavItem
+                {
+                    Id = taskParentId,
+                    IconName = IconName.CameraFill,
+                    Text = "Tasks",
+                    ParentId = missionMenuId,
+                });
                 int i = 0;
                 foreach (var task in tasks)
                 {
@@ -204,7 +268,7 @@ Width="300"/>
                         Href = "",
                         IconName = IconName.CheckSquareFill,
                         Text = task.Name,
-                        ParentId = missionMenuId
+                        ParentId = taskParentId
                     });
                     navItems.Add(new NavItem
                     {
@@ -233,10 +297,8 @@ Width="300"/>
                 }
             }
         }
-
         return navItems;
     }
-
 
     private async Task<IEnumerable<NavItem>> RetrieveAllTeams(IList<NavItem> navItems, string teamsTitle)
     {

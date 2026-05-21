@@ -66,7 +66,7 @@ else
                         @context.Name
                     </GridColumn>
                     <GridColumn TItem="AtakAttachment" HeaderText="">
-                        <Button Size="ButtonSize.Small" @onclick="() => DownloadWpAttachment(context)">
+                        <Button Size="ButtonSize.Small" @onclick="() => ViewWpAttachment(context)">
                             @if (context.MediaType?.Contains("jpeg") == true)
                             {
                                 <Icon Name="IconName.FileEarmarkImage" Color="IconColor.Primary" />
@@ -145,6 +145,30 @@ else
                             </div>
                         </DropdownMenu>
                     </Dropdown>
+                    @if (missionTak.Status == MissionStatusTak.Created || missionTak.Status == MissionStatusTak.Assigned)
+                    {
+                        <Button Color="ButtonColor.Primary"
+                                @onclick="async () => await SetStatusAsync(MissionStatusTak.InProgress)"
+                                Loading="_savingStatus" LoadingText="...">
+                            <Icon Name="IconName.PlayFill" /> Avvia
+                        </Button>
+                    }
+                    @if (missionTak.Status == MissionStatusTak.InProgress)
+                    {
+                        <Button Color="ButtonColor.Success"
+                                @onclick="async () => await SetStatusAsync(MissionStatusTak.Completed)"
+                                Loading="_savingStatus" LoadingText="...">
+                            <Icon Name="IconName.CheckLg" /> Concludi
+                        </Button>
+                    }
+                    @if (missionTak.Status == MissionStatusTak.InProgress || missionTak.Status == MissionStatusTak.Completed)
+                    {
+                        <Button Color="ButtonColor.Secondary"
+                                @onclick="async () => await SetStatusAsync(MissionStatusTak.Archived)"
+                                Loading="_savingStatus" LoadingText="...">
+                            <Icon Name="IconName.Archive" /> Archivia
+                        </Button>
+                    }
                     <Button Color="ButtonColor.Secondary" Outline="true"
                             @onclick='() => Navigation.NavigateTo($"/missionedit/{MissionTakId}")'>
                         <Icon Name="IconName.GearFill" /> Configura
@@ -404,7 +428,7 @@ else
         </div>
     </div>
 
-    <!-- Waypoints TAK -->
+    <!-- Waypoints -->
     @if (!string.IsNullOrEmpty(missionTak.TakMissionUid))
     {
         <div class="row g-3 mb-4">
@@ -590,6 +614,8 @@ else
     private List<Waypoint> _activeWaypoints = new();
     private List<Waypoint> _completedWaypoints = new();
 
+    private bool _savingStatus;
+
     // Waypoint attachments + POI + AI import
     private Modal _wpAttachmentModal = default!;
     private Grid<AtakAttachment> _wpAttachGrid = default!;
@@ -630,10 +656,28 @@ else
     private DateTime _lastCoTRefreshWp = DateTime.MinValue;
     private DateTime _lastCoTRefreshTasks = DateTime.MinValue;
 
+    private Guid _loadedMissionId = Guid.Empty;
+
     protected override async Task OnInitializedAsync()
     {
         await base.OnInitializedAsync();
         CoTManager.CoTMessageReceived += OnCoTMessage;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (MissionTakId == _loadedMissionId) return;
+        _loadedMissionId = MissionTakId;
+
+        missionTak = null;
+        _tasks = new();
+        _activeObjectives = new();
+        _completedObjectives = new();
+        _activeWaypoints = new();
+        _completedWaypoints = new();
+        _chartData = null;
+        _chartInitialized = false;
+
         missionTak = await entityService.GetAsync(MissionTakId);
         await AutoSubscribeIfNeededAsync(missionTak?.TakMissionUid);
         _tasks = await LoadData();
@@ -729,6 +773,25 @@ else
     }
 
     // --- GL modal ---
+
+    private async Task SetStatusAsync(MissionStatusTak newStatus)
+    {
+        if (missionTak == null) return;
+        _savingStatus = true;
+        try
+        {
+            missionTak.Status = newStatus;
+            missionTak.LastModified = DateTime.UtcNow;
+            if (newStatus == MissionStatusTak.InProgress && !missionTak.StartDateTime.HasValue)
+                missionTak.StartDateTime = DateTime.UtcNow;
+            if ((newStatus == MissionStatusTak.Completed || newStatus == MissionStatusTak.Archived)
+                && !missionTak.EndDateTime.HasValue)
+                missionTak.EndDateTime = DateTime.UtcNow;
+            await entityService.UpdateAsync(missionTak);
+            ToastService.Notify(new(ToastType.Success, "Missione", $"Stato aggiornato: {newStatus.GetDisplayName()}"));
+        }
+        finally { _savingStatus = false; }
+    }
 
     private async Task OpenGlModal(TaskEntity task)
     {
@@ -934,12 +997,12 @@ else
         return request.ApplyTo(list);
     }
 
-    private async Task DownloadWpAttachment(AtakAttachment attach)
+    private async Task ViewWpAttachment(AtakAttachment attach)
     {
         if (attach.FileBytes == null) return;
         var base64 = Convert.ToBase64String(attach.FileBytes);
         var mediaType = attach.MediaType ?? "application/octet-stream";
-        await JS.InvokeVoidAsync("downloadFile", $"data:{mediaType};base64,{base64}", attach.Name);
+        await JS.InvokeVoidAsync("viewFile", base64, mediaType);
     }
 
     private void OnCoTMessage(CoTManager.CoTMessageEventArgs e)

@@ -243,17 +243,66 @@ else
     <div class="card mb-3">
         <div class="card-header fw-bold">POI Riferimento TAK</div>
         <div class="card-body">
-            <div class="row g-3">
-                <div class="col-md-6">
-                    <label class="form-label">POI</label>
-                    <PoiSearchField Value="@_task.PoiUid"
-                                    ValueChanged="@(v => _task.PoiUid = v)"
-                                    NameValue="@_task.PoiName"
-                                    NameValueChanged="@(v => _task.PoiName = v)"
-                                    MissionTakName="@(_mission?.TakMissionUid)"
-                                    OnPoiCreated="Save" />
-                </div>
+
+            <!-- Punto principale -->
+            <div class="mb-1 d-flex align-items-center gap-2">
+                <Icon Name="IconName.GeoAltFill" class="text-danger" />
+                <span class="fw-semibold">Punto Principale</span>
+                <Badge Color="BadgeColor.Danger">Principale</Badge>
             </div>
+            <PoiSearchField Value="@_task.PoiUid"
+                            ValueChanged="@(v => _task.PoiUid = v)"
+                            NameValue="@_task.PoiName"
+                            NameValueChanged="@(v => _task.PoiName = v)"
+                            MissionTakName="@(_mission?.TakMissionUid)"
+                            OnPoiCreated="Save" />
+
+            <!-- Punti secondari -->
+            @if (_secondaryPois.Count > 0)
+            {
+                <hr class="my-3" />
+                <div class="fw-semibold text-muted small mb-2">
+                    <Icon Name="IconName.GeoAlt" /> Punti Secondari
+                </div>
+            }
+            @for (int i = 0; i < _secondaryPois.Count; i++)
+            {
+                var poi = _secondaryPois[i];
+                var idx = i;
+                <div class="border rounded p-2 mb-2">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <Icon Name="IconName.GeoAlt" class="text-secondary" />
+                        <input class="form-control form-control-sm"
+                               style="max-width:200px"
+                               placeholder="Ruolo (es. Ingresso)"
+                               @bind="poi.Role"
+                               list="poi-roles-@idx" />
+                        <datalist id="poi-roles-@idx">
+                            <option value="Ingresso" />
+                            <option value="Uscita" />
+                            <option value="Eliporto" />
+                            <option value="Supporto" />
+                            <option value="Obiettivo secondario" />
+                            <option value="Parcheggio" />
+                        </datalist>
+                        <button class="btn btn-sm btn-outline-danger ms-auto"
+                                type="button"
+                                @onclick="() => RemoveSecondaryPoi(idx)">
+                            <Icon Name="IconName.Trash3" />
+                        </button>
+                    </div>
+                    <PoiSearchField Value="@poi.Uid"
+                                    ValueChanged="@(v => { poi.Uid = v ?? string.Empty; StateHasChanged(); })"
+                                    NameValue="@poi.Name"
+                                    NameValueChanged="@(v => { poi.Name = v ?? string.Empty; StateHasChanged(); })"
+                                    MissionTakName="@(_mission?.TakMissionUid)" />
+                </div>
+            }
+
+            <button class="btn btn-outline-secondary btn-sm mt-2" type="button" @onclick="AddSecondaryPoi">
+                <Icon Name="IconName.PlusCircle" /> Aggiungi punto secondario
+            </button>
+
         </div>
     </div>
 
@@ -268,14 +317,22 @@ else
     private List<TaskPriority> _priorities = new();
     private List<RadioChannel> _radioChannels = new();
     private bool _saving;
+    private List<TaskPoiLink> _secondaryPois = new();
 
     // Finestre temporali: 10 slot pre-allocati
     private List<TaskTimeWindow> _windows = Enumerable.Range(0, 10).Select(_ => new TaskTimeWindow()).ToList();
     private int _visibleCount = 1;
 
-    protected override async Task OnInitializedAsync()
+    private Guid _loadedTaskId = Guid.Empty;
+
+    protected override async Task OnParametersSetAsync()
     {
-        await base.OnInitializedAsync();
+        if (TaskId == _loadedTaskId) return;
+        _loadedTaskId = TaskId;
+
+        _task = null;
+        _mission = null;
+
         _task = await TaskService.GetAsync(TaskId);
         if (_task == null) return;
 
@@ -285,6 +342,8 @@ else
         _teams = (await TeamService.GetAllAsync()).OrderBy(t => t.Name).ToList();
         _priorities = (await PrioritiesService.GetAllAsync()).OrderBy(p => p.Level).ToList();
         _radioChannels = (await RadioChannelService.GetAllAsync()).OrderBy(r => r.Name).ToList();
+
+        _secondaryPois = _task.PoiLinks.Where(p => !p.IsPrimary).ToList();
 
         InitWindows();
     }
@@ -322,6 +381,16 @@ else
         _visibleCount = Math.Max(1, _windows.Take(10).Count(w => !w.IsEmpty));
     }
 
+    private void AddSecondaryPoi()
+    {
+        _secondaryPois.Add(new TaskPoiLink { IsPrimary = false, Role = "Secondario" });
+    }
+
+    private void RemoveSecondaryPoi(int index)
+    {
+        _secondaryPois.RemoveAt(index);
+    }
+
     private async Task Save()
     {
         if (_task == null) return;
@@ -336,7 +405,13 @@ else
             var w0 = toSave.FirstOrDefault();
             _task.StartDateTime = w0?.StartDateTime;
             _task.EndDateTime   = w0?.EndDateTime;
-            // GreenLightDateTime è indipendente dalle finestre, non va sovrascritto
+
+            // Sincronizza PoiLinks: primario + secondari non vuoti
+            var links = new List<TaskPoiLink>();
+            if (!string.IsNullOrEmpty(_task.PoiUid))
+                links.Add(new TaskPoiLink { IsPrimary = true, Role = "Principale", Uid = _task.PoiUid, Name = _task.PoiName ?? "" });
+            links.AddRange(_secondaryPois.Where(p => !string.IsNullOrEmpty(p.Uid)));
+            _task.PoiLinks = links;
 
             _task.LastModified = DateTime.UtcNow;
             await TaskService.UpdateAsync(_task);

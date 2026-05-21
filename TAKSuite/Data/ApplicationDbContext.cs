@@ -30,6 +30,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<TakSettings>     TakSettings     { get; set; }
     public DbSet<TakSubscription> TakSubscriptions { get; set; }
+    public DbSet<CotTemplate>     CotTemplates    { get; set; }
+    public DbSet<MissionRadioContact> MissionRadioContacts { get; set; }
+    public DbSet<PhoneContact> PhoneContacts { get; set; }
+    public DbSet<MissionPhoneContact> MissionPhoneContacts { get; set; }
 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -110,6 +114,42 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .WithMany(c => c.PriorityRules)
             .HasForeignKey(r => r.PhotoJoinConfigId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // MissionRadioContact → MissionSuite (cascade delete)
+        modelBuilder.Entity<MissionRadioContact>()
+            .HasOne(r => r.Mission)
+            .WithMany()
+            .HasForeignKey(r => r.MissionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // MissionRadioContact → RadioChannel (restrict)
+        modelBuilder.Entity<MissionRadioContact>()
+            .HasOne(r => r.RadioChannel)
+            .WithMany()
+            .HasForeignKey(r => r.RadioChannelId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // MissionRadioContact → BackupRadioChannel (restrict, optional)
+        modelBuilder.Entity<MissionRadioContact>()
+            .HasOne(r => r.BackupRadioChannel)
+            .WithMany()
+            .HasForeignKey(r => r.BackupRadioChannelId)
+            .IsRequired(false)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // MissionPhoneContact → MissionSuite (cascade delete)
+        modelBuilder.Entity<MissionPhoneContact>()
+            .HasOne(r => r.Mission)
+            .WithMany()
+            .HasForeignKey(r => r.MissionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // MissionPhoneContact → PhoneContact (restrict)
+        modelBuilder.Entity<MissionPhoneContact>()
+            .HasOne(r => r.PhoneContact)
+            .WithMany()
+            .HasForeignKey(r => r.PhoneContactId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         // model builder for TaskEntity
         modelBuilder.Entity<TaskEntity>()

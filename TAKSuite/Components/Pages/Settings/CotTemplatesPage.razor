@@ -1,0 +1,650 @@
+@page "/settings/cot-templates"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@using TAKSuite.TAK.CoT
+@using System.Text
+@using System.Text.RegularExpressions
+@using System.Xml.Linq
+
+@inject CotTemplateService TemplateService
+@inject RadioChannelService RadioChannelService
+@inject TakSettingsService SettingsService
+@inject MartiApiClient MartiClient
+@inject ToastService ToastService
+
+<PageTitle>Template COT</PageTitle>
+
+<ConfirmDialog @ref="_confirm" />
+
+<!-- Header fisso -->
+<div style="position: fixed; top: 0; left: 300px; right: 0; z-index: 100;
+            background: var(--bs-body-bg); border-bottom: 1px solid var(--bs-border-color);
+            padding: 0.5rem 1.5rem 0;">
+    <div class="d-flex justify-content-between align-items-center pb-2">
+        <div>
+            <h2 class="mb-0 fs-4">Template COT</h2>
+            <p class="text-muted mb-0 small">Modelli per la generazione di punti TAK tipizzati</p>
+        </div>
+        @if (_tab == 0)
+        {
+            <Button Color="ButtonColor.Primary" @onclick="OpenNew">
+                <Icon Name="IconName.PlusLg" /> Nuovo template
+            </Button>
+        }
+        else if (_tab == 1 && _editing != null)
+        {
+            <div class="d-flex gap-2">
+                <Button Color="ButtonColor.Success" @onclick="SaveAsync" Loading="_saving" LoadingText="Salvataggio...">
+                    <Icon Name="IconName.Save" /> Salva
+                </Button>
+                <Button Color="ButtonColor.Secondary" @onclick="CancelEdit">Annulla</Button>
+            </div>
+        }
+        else if (_tab == 2)
+        {
+            <Button Color="ButtonColor.Success" @onclick="SavePromptAsync" Loading="_savingPrompt" LoadingText="Salvataggio...">
+                <Icon Name="IconName.Save" /> Salva prompt
+            </Button>
+        }
+    </div>
+    <ul class="nav nav-tabs border-0">
+        <li class="nav-item">
+            <button class="nav-link @(_tab == 0 ? "active" : "")" @onclick='() => _tab = 0'>
+                <Icon Name="IconName.ListUl" /> Lista
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(_tab == 1 ? "active" : "")" @onclick='() => _tab = 1'>
+                <Icon Name="IconName.PencilSquare" /> Editor
+                @if (_editing != null)
+                {
+                    <span class="badge bg-primary ms-1 rounded-pill" style="font-size:0.65rem;">@(_editing.Title.Length > 0 ? _editing.Title : "nuovo")</span>
+                }
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link @(_tab == 2 ? "active" : "")" @onclick='() => _tab = 2'>
+                <Icon Name="IconName.Robot" /> Prompt AI
+            </button>
+        </li>
+    </ul>
+</div>
+<div style="height: 88px;"></div>
+
+<!-- ═══════════════ TAB LISTA ═══════════════ -->
+@if (_tab == 0)
+{
+    @if (_templates == null)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border" role="status"></div>
+        </div>
+    }
+    else if (_templates.Count == 0)
+    {
+        <div class="text-center py-5 text-muted">
+            <Icon Name="IconName.FileEarmarkCode" Size="IconSize.x3" />
+            <p class="mt-3">Nessun template. Creane uno con il pulsante in alto.</p>
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:48px"></th>
+                        <th>Titolo</th>
+                        <th>Descrizione</th>
+                        <th style="width:80px" class="text-center">Primario</th>
+                        <th>Ultima modifica</th>
+                        <th style="width:120px"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var t in _templates)
+                    {
+                        <tr>
+                            <td class="text-center fs-4">@(t.IconPreview ?? "📄")</td>
+                            <td class="fw-semibold">@t.Title</td>
+                            <td class="text-muted small" style="white-space: pre-wrap;">@t.Description</td>
+                            <td class="text-center">
+                                @if (t.IsPrimary)
+                                {
+                                    <span class="badge bg-warning text-dark">⭐ Primario</span>
+                                }
+                            </td>
+                            <td class="text-muted small">@t.UpdatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                            <td>
+                                <div class="d-flex gap-1">
+                                    <Button Size="ButtonSize.Small" Color="ButtonColor.Secondary" Outline="true"
+                                            @onclick="() => OpenEdit(t)">
+                                        <Icon Name="IconName.PencilFill" />
+                                    </Button>
+                                    <Button Size="ButtonSize.Small" Color="ButtonColor.Danger" Outline="true"
+                                            @onclick="() => DeleteAsync(t)">
+                                        <Icon Name="IconName.Trash3Fill" />
+                                    </Button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+<!-- ═══════════════ TAB EDITOR ═══════════════ -->
+@if (_tab == 1)
+{
+    @if (_editing == null)
+    {
+        <div class="text-center py-5 text-muted">
+            <Icon Name="IconName.PencilSquare" Size="IconSize.x3" />
+            <p class="mt-3">Nessun template selezionato.</p>
+            <Button Color="ButtonColor.Primary" @onclick="OpenNew">
+                <Icon Name="IconName.PlusLg" /> Nuovo template
+            </Button>
+            @if (_templates?.Count > 0)
+            {
+                <p class="mt-2 small">oppure seleziona un template dalla <button class="btn btn-link btn-sm p-0" @onclick='() => _tab = 0'>Lista</button>.</p>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="row g-0" style="height: calc(100vh - 100px); overflow: hidden;">
+
+            <!-- ── Pannello FORM (sx) ── -->
+            <div class="col-md-5 pe-3" style="overflow-y: auto; padding-bottom: 2rem;">
+                <div class="row g-3 pt-2">
+                    <div class="col-md-8">
+                        <label class="form-label fw-semibold">Titolo</label>
+                        <input class="form-control" @bind="_editing.Title" @bind:event="oninput"
+                               placeholder="es. Obiettivo NATO ostile" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Icona</label>
+                        <input class="form-control" @bind="_editing.IconPreview" @bind:event="oninput"
+                               placeholder="es. 🎯 oppure OBJ" />
+                        <small class="text-muted">Emoji consigliata</small>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Descrizione</label>
+                        <textarea class="form-control" rows="2"
+                                  @bind="_editing.Description" @bind:event="oninput"
+                                  placeholder="Descrizione d'uso del template…" />
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" role="switch" id="chkPrimary"
+                                   checked="@_editing.IsPrimary"
+                                   @onchange="e => _editing.IsPrimary = (bool)(e.Value ?? false)" />
+                            <label class="form-check-label fw-semibold" for="chkPrimary">
+                                ⭐ Template primario (punto OBJ)
+                            </label>
+                        </div>
+                        <small class="text-muted d-block mt-1">
+                            Se attivo, l'AI tratterà le coordinate con questo template come punto "principale" dell'obiettivo.
+                        </small>
+                    </div>
+
+                    <!-- ── Import da Missione TAK ── -->
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Importa COT da missione TAK</label>
+                        <div class="d-flex gap-2 align-items-center mb-2">
+                            <select class="form-select form-select-sm" @bind="_selectedMissionName" style="flex:1">
+                                <option value="">— Seleziona missione TAK —</option>
+                                @foreach (var m in _takMissions)
+                                {
+                                    <option value="@m.Name">@m.Name</option>
+                                }
+                            </select>
+                            <Button Size="ButtonSize.Small" Color="ButtonColor.Secondary"
+                                    Disabled="@(string.IsNullOrEmpty(_selectedMissionName))"
+                                    Loading="_loadingCots" LoadingText="..."
+                                    @onclick="LoadMissionCotsAsync">
+                                <Icon Name="IconName.CloudDownload" /> Carica
+                            </Button>
+                        </div>
+
+                        @if (_missionCots != null)
+                        {
+                            @if (_missionCots.Count == 0)
+                            {
+                                <p class="text-muted small fst-italic">Nessun punto trovato in questa missione.</p>
+                            }
+                            else
+                            {
+                                <div class="border rounded" style="max-height: 200px; overflow-y: auto;">
+                                    <table class="table table-sm table-hover mb-0">
+                                        <thead class="table-light sticky-top">
+                                            <tr>
+                                                <th class="small">Callsign</th>
+                                                <th class="small">Tipo</th>
+                                                <th class="small">Lat / Lon</th>
+                                                <th style="width:70px"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var cot in _missionCots)
+                                            {
+                                                <tr>
+                                                    <td class="small">@(cot.Details?.Callsign ?? cot.Data)</td>
+                                                    <td><code class="small">@(cot.Details?.Type ?? "—")</code></td>
+                                                    <td class="small text-muted">
+                                                        @if (cot.Details?.Location != null)
+                                                        {
+                                                            @($"{cot.Details.Location.Lat:F4}, {cot.Details.Location.Lon:F4}")
+                                                        }
+                                                    </td>
+                                                    <td>
+                                                        <Button Size="ButtonSize.Small" Color="ButtonColor.Primary" Outline="true"
+                                                                Loading="_importingUid == cot.Data"
+                                                                @onclick="() => ImportCotAsync(cot)">
+                                                            <Icon Name="IconName.Download" />
+                                                        </Button>
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
+                        }
+                    </div>
+
+                    <!-- ── XML Editor ── -->
+                    <div class="col-12">
+                        <label class="form-label fw-semibold mb-1">XML CoT</label>
+                        <textarea class="form-control font-monospace cot-editor"
+                                  @bind="_editing.CotXml" @bind:event="oninput"
+                                  placeholder="Incolla o scrivi il CoT XML…&#10;Placeholder: {{UID}} {{NAME}} {{LAT}} {{LON}} {{REMARKS}} {{MISSION_UID}} {{TIME}} {{STALE}} {{CREATOR_UID}}" />
+                        <small class="text-muted">
+                            Placeholder:
+                            <code>{{UID}}</code> <code>{{NAME}}</code> <code>{{LAT}}</code> <code>{{LON}}</code>
+                            <code>{{REMARKS}}</code> <code>{{MISSION_UID}}</code> <code>{{TIME}}</code>
+                            <code>{{STALE}}</code> <code>{{CREATOR_UID}}</code>
+                        </small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Pannello ANTEPRIMA (dx) ── -->
+            <div class="col-md-7 ps-3 border-start" style="overflow-y: auto; padding-bottom: 2rem;">
+                <div class="pt-2">
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <h6 class="mb-0 fw-semibold">Anteprima XML</h6>
+                        <span class="badge bg-secondary">valori di esempio</span>
+                    </div>
+                    @if (string.IsNullOrWhiteSpace(_editing.CotXml))
+                    {
+                        <p class="text-muted small fst-italic">Inserisci l'XML a sinistra per vedere l'anteprima.</p>
+                    }
+                    else
+                    {
+                        <pre class="preview-box">@PreviewXml</pre>
+                    }
+                </div>
+            </div>
+
+        </div>
+    }
+}
+
+<!-- ═══════════════ TAB PROMPT AI ═══════════════ -->
+@if (_tab == 2)
+{
+    <div class="row g-0" style="height: calc(100vh - 100px); overflow: hidden;">
+
+        <div class="col-md-5 pe-3" style="overflow-y: auto; padding-bottom: 2rem;">
+            <div class="pt-2">
+                <p class="text-muted small mb-2">
+                    Personalizza il prompt inviato a Claude CLI per l'estrazione di punti da testo.
+                    Usa <code>{{INPUT}}</code> come segnaposto per il testo dell'utente.
+                    Lascia vuoto per usare il prompt di default.
+                </p>
+                <textarea class="form-control font-monospace prompt-editor"
+                          @bind="_promptTemplate" @bind:event="oninput"
+                          placeholder="@AiCoordinatesService.DefaultPromptTemplate" />
+                <div class="d-flex gap-2 mt-2">
+                    <button class="btn btn-outline-secondary btn-sm" @onclick="() => _promptTemplate = string.Empty">
+                        <Icon Name="IconName.ArrowCounterclockwise" /> Ripristina default
+                    </button>
+                </div>
+
+                <hr class="my-3" />
+
+                <h6 class="fw-semibold mb-1">Contesto auto-iniettato</h6>
+                <p class="text-muted small mb-2">
+                    Anteprima di come templates e canali appaiono nel contesto AI:
+                </p>
+                <pre class="preview-box preview-context">@AiContextPreview</pre>
+            </div>
+        </div>
+
+        <div class="col-md-7 ps-3 border-start" style="overflow-y: auto; padding-bottom: 2rem;">
+            <div class="pt-2">
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <h6 class="mb-0 fw-semibold">Anteprima prompt</h6>
+                    <span class="badge bg-secondary">con testo di esempio</span>
+                </div>
+                <pre class="preview-box">@PromptPreview</pre>
+            </div>
+        </div>
+
+    </div>
+}
+
+<style>
+    .cot-editor {
+        height: 300px;
+        resize: vertical;
+        background: #1e1e1e;
+        color: #d4d4d4;
+        border-color: #444;
+        font-size: 0.82rem;
+        line-height: 1.5;
+    }
+
+    .prompt-editor {
+        height: 380px;
+        resize: vertical;
+        background: #1e1e1e;
+        color: #d4d4d4;
+        border-color: #444;
+        font-size: 0.82rem;
+        line-height: 1.5;
+    }
+
+    .preview-box {
+        background: #1e1e1e;
+        color: #9cdcfe;
+        border: 1px solid #444;
+        border-radius: 6px;
+        padding: 0.75rem 1rem;
+        font-size: 0.8rem;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-break: break-all;
+        max-height: 500px;
+        overflow-y: auto;
+        margin: 0;
+    }
+
+    .preview-context { color: #ce9178; }
+</style>
+
+@code {
+    private List<CotTemplate>? _templates;
+    private List<RadioChannel> _radioChannels = new();
+    private List<MissionAtak> _takMissions = new();
+    private CotTemplate? _editing;
+    private ConfirmDialog _confirm = default!;
+    private bool _saving;
+    private int _tab = 0;
+
+    // Prompt AI
+    private string _promptTemplate = string.Empty;
+    private bool _savingPrompt;
+
+    // Import COT da missione
+    private string _selectedMissionName = string.Empty;
+    private List<UidEntry>? _missionCots;
+    private bool _loadingCots;
+    private string? _importingUid;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _templates      = await TemplateService.GetAllAsync();
+        _radioChannels  = await RadioChannelService.GetAllAsync();
+        var settings    = await SettingsService.GetOrCreateAsync();
+        _promptTemplate = settings.AiPromptTemplate ?? string.Empty;
+        _takMissions    = await MartiClient.GetAllMissionsDataAsync() ?? new();
+    }
+
+    // ── Navigazione ──────────────────────────────────────────────────────────
+
+    private void OpenNew()
+    {
+        _editing = new CotTemplate();
+        _tab = 1;
+    }
+
+    private void OpenEdit(CotTemplate t)
+    {
+        _editing = new CotTemplate
+        {
+            Id = t.Id, Title = t.Title, Description = t.Description,
+            CotXml = t.CotXml, IconPreview = t.IconPreview,
+            IsPrimary = t.IsPrimary, CreatedAt = t.CreatedAt, UpdatedAt = t.UpdatedAt
+        };
+        _tab = 1;
+    }
+
+    private void CancelEdit()
+    {
+        _editing = null;
+        _tab = 0;
+    }
+
+    // ── CRUD ─────────────────────────────────────────────────────────────────
+
+    private async Task SaveAsync()
+    {
+        if (_editing == null) return;
+        if (string.IsNullOrWhiteSpace(_editing.Title) || string.IsNullOrWhiteSpace(_editing.CotXml))
+        {
+            ToastService.Notify(new(ToastType.Warning, "Validazione", "Titolo e XML COT sono obbligatori."));
+            return;
+        }
+        _saving = true;
+        try
+        {
+            if (_templates!.Any(t => t.Id == _editing.Id))
+            {
+                await TemplateService.UpdateAsync(_editing);
+                var idx = _templates.FindIndex(t => t.Id == _editing.Id);
+                _templates[idx] = new CotTemplate
+                {
+                    Id = _editing.Id, Title = _editing.Title, Description = _editing.Description,
+                    CotXml = _editing.CotXml, IconPreview = _editing.IconPreview,
+                    IsPrimary = _editing.IsPrimary, CreatedAt = _editing.CreatedAt, UpdatedAt = DateTime.UtcNow
+                };
+            }
+            else
+            {
+                var created = await TemplateService.AddAsync(_editing);
+                _templates!.Add(created);
+                _editing = new CotTemplate
+                {
+                    Id = created.Id, Title = created.Title, Description = created.Description,
+                    CotXml = created.CotXml, IconPreview = created.IconPreview,
+                    IsPrimary = created.IsPrimary, CreatedAt = created.CreatedAt, UpdatedAt = created.UpdatedAt
+                };
+            }
+            ToastService.Notify(new(ToastType.Success, "Template", "Salvato correttamente."));
+        }
+        finally { _saving = false; }
+    }
+
+    private async Task DeleteAsync(CotTemplate t)
+    {
+        var confirmed = await _confirm.ShowAsync(
+            title: "Elimina template",
+            message1: $"Eliminare il template \"{t.Title}\"?",
+            confirmDialogOptions: new ConfirmDialogOptions
+            {
+                YesButtonText = "Elimina", YesButtonColor = ButtonColor.Danger,
+                NoButtonText  = "Annulla",  NoButtonColor  = ButtonColor.Secondary
+            });
+        if (!confirmed) return;
+        await TemplateService.DeleteAsync(t.Id);
+        _templates!.Remove(t);
+        if (_editing?.Id == t.Id) { _editing = null; _tab = 0; }
+        ToastService.Notify(new(ToastType.Success, "Template", $"\"{t.Title}\" eliminato."));
+    }
+
+    // ── Import COT da Missione ────────────────────────────────────────────────
+
+    private async Task LoadMissionCotsAsync()
+    {
+        if (string.IsNullOrEmpty(_selectedMissionName)) return;
+        _loadingCots = true;
+        _missionCots = null;
+        try
+        {
+            _missionCots = await MartiClient.GetAllMissionsUidAsync(_selectedMissionName) ?? new();
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(new(ToastType.Danger, "Errore", $"Impossibile caricare i punti: {ex.Message}"));
+            _missionCots = new();
+        }
+        finally { _loadingCots = false; }
+    }
+
+    private async Task ImportCotAsync(UidEntry cot)
+    {
+        if (_editing == null) return;
+        _importingUid = cot.Data;
+        try
+        {
+            var xml = await MartiClient.GetInfoAsync(cot.Data);
+            if (string.IsNullOrWhiteSpace(xml))
+            {
+                ToastService.Notify(new(ToastType.Warning, "Import", "Nessun XML ricevuto per questo punto."));
+                return;
+            }
+            _editing.CotXml = TemplatizeCotXml(xml);
+            ToastService.Notify(new(ToastType.Success, "Import", $"XML importato da \"{cot.Details?.Callsign ?? cot.Data}\"."));
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(new(ToastType.Danger, "Errore", $"Import fallito: {ex.Message}"));
+        }
+        finally { _importingUid = null; }
+    }
+
+    private static string TemplatizeCotXml(string xml)
+    {
+        try
+        {
+            var doc = XDocument.Parse(xml, LoadOptions.PreserveWhitespace);
+            var evt = doc.Root;
+            if (evt != null)
+            {
+                Templ(evt, "uid",   "{{UID}}");
+                Templ(evt, "time",  "{{TIME}}");
+                Templ(evt, "start", "{{TIME}}");
+                Templ(evt, "stale", "{{STALE}}");
+
+                var point = evt.Element("point");
+                if (point != null)
+                {
+                    Templ(point, "lat", "{{LAT}}");
+                    Templ(point, "lon", "{{LON}}");
+                }
+
+                var contact = evt.Descendants("contact").FirstOrDefault();
+                if (contact != null) Templ(contact, "callsign", "{{NAME}}");
+
+                foreach (var flow in evt.Descendants("flow").ToList())
+                    flow.Remove();
+            }
+            return doc.ToString(SaveOptions.None);
+        }
+        catch
+        {
+            // fallback regex se l'XML è malformato
+            xml = Regex.Replace(xml, @"\buid=""[^""]*""",      @"uid=""{{UID}}""");
+            xml = Regex.Replace(xml, @"\btime=""[^""]*""",     @"time=""{{TIME}}""");
+            xml = Regex.Replace(xml, @"\bstart=""[^""]*""",    @"start=""{{TIME}}""");
+            xml = Regex.Replace(xml, @"\bstale=""[^""]*""",    @"stale=""{{STALE}}""");
+            xml = Regex.Replace(xml, @"\blat=""[^""]*""",      @"lat=""{{LAT}}""");
+            xml = Regex.Replace(xml, @"\blon=""[^""]*""",      @"lon=""{{LON}}""");
+            xml = Regex.Replace(xml, @"\bcallsign=""[^""]*""", @"callsign=""{{NAME}}""");
+            xml = Regex.Replace(xml, @"\s*<flow\b[^>]*>[\s\S]*?</flow\s*>", string.Empty);
+            xml = Regex.Replace(xml, @"\s*<flow\b[^>]*/\s*>", string.Empty);
+            return xml;
+        }
+    }
+
+    private static void Templ(XElement el, string attr, string value)
+    {
+        if (el.Attribute(attr) != null)
+            el.SetAttributeValue(attr, value);
+    }
+
+    // ── Prompt AI ─────────────────────────────────────────────────────────────
+
+    private async Task SavePromptAsync()
+    {
+        _savingPrompt = true;
+        try
+        {
+            var settings = await SettingsService.GetOrCreateAsync();
+            settings.AiPromptTemplate = string.IsNullOrWhiteSpace(_promptTemplate) ? null : _promptTemplate;
+            await SettingsService.SaveAsync(settings);
+            ToastService.Notify(new(ToastType.Success, "Prompt AI", "Template salvato."));
+        }
+        finally { _savingPrompt = false; }
+    }
+
+    // ── Anteprima live ────────────────────────────────────────────────────────
+
+    private string PreviewXml
+    {
+        get
+        {
+            if (_editing == null || string.IsNullOrEmpty(_editing.CotXml)) return string.Empty;
+            var now = DateTime.UtcNow;
+            return _editing.CotXml
+                .Replace("{{UID}}",         "b8f2a1c3-dead-beef-cafe-0123456789ab")
+                .Replace("{{NAME}}",        "OBJ ESEMPIO")
+                .Replace("{{LAT}}",         "45.4642")
+                .Replace("{{LON}}",         "9.1900")
+                .Replace("{{REMARKS}}",     "Note di anteprima")
+                .Replace("{{MISSION_UID}}", "MISSION-SAMPLE-UID")
+                .Replace("{{TIME}}",        now.ToString("yyyy-MM-ddTHH:mm:ss.00Z"))
+                .Replace("{{STALE}}",       now.AddYears(1).ToString("yyyy-MM-ddTHH:mm:ss.00Z"))
+                .Replace("{{CREATOR_UID}}", "TAKSuite-Server-UID");
+        }
+    }
+
+    private string PromptPreview
+    {
+        get
+        {
+            var template = string.IsNullOrWhiteSpace(_promptTemplate)
+                ? AiCoordinatesService.DefaultPromptTemplate
+                : _promptTemplate;
+            return template.Replace("{{INPUT}}", "WP ALFA  32T 452390E 4520000N\nOBJ BRAVO  32T 453100E 4521500N");
+        }
+    }
+
+    private string AiContextPreview
+    {
+        get
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("=== REGOLE DI CLASSIFICAZIONE (template) ===");
+            foreach (var t in _templates ?? new())
+            {
+                var primary = t.IsPrimary ? " ⭐ [PRIMARIO]" : "";
+                sb.AppendLine($"- {t.IconPreview ?? "📄"} {t.Title}{primary}: {t.Description}");
+            }
+            sb.AppendLine("- EMPTY: nessun template corrisponde");
+            sb.AppendLine();
+            sb.AppendLine("=== CANALI RADIO DISPONIBILI ===");
+            if (_radioChannels.Count > 0)
+                sb.AppendLine(string.Join(", ", _radioChannels.OrderBy(c => c.Name).Select(c => $"\"{c.Name}\"")));
+            else
+                sb.AppendLine("(nessun canale configurato)");
+            return sb.ToString();
+        }
+    }
+}

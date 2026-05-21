@@ -1,15 +1,22 @@
 @page "/missiontak/{MissionTakId:guid}/parking"
 @attribute [Authorize]
+@implements IDisposable
 @using Microsoft.AspNetCore.Authorization
 @using TAKSuite.Data.Models
 @using TAKSuite.Data.ModelsTak
 @using TAKSuite.Data.Services
 @using TAKSuite.Data.ServicesTak
 @using TAKSuite.Helper
+@using TAKSuite.TAK.Helper
+@using TAKSuite.TAK.CoT
+@using System.Globalization
 @inject MissionSuiteEntityServices MissionSuiteService
 @inject ParckingService ParckingService
 @inject NavigationManager Navigation
 @inject TAKSuite.Helpers.JsInteropHelper JsHelper
+@inject CoTManager CoTManager
+@inject ToastService ToastService
+@inject IHttpClientFactory HttpClientFactory
 
 <PageTitle>Parking — @(_mission?.Name ?? "Missione")</PageTitle>
 
@@ -19,15 +26,130 @@
 }
 else
 {
+    <ConfirmDialog @ref="_confirmDialog" />
+
+    <!-- Modal: aggiungi parcheggio -->
+    <Modal @ref="_addModal" Title="Aggiungi parcheggio" Size="ModalSize.Large">
+        <BodyTemplate>
+            <div class="mb-3">
+                <label class="form-label">Nome parcheggio <span class="text-danger">*</span></label>
+                <input class="form-control" @bind="_parkName" placeholder="es. Parcheggio auto, Area sosta..." />
+            </div>
+
+            <ul class="nav nav-tabs mb-3">
+                <li class="nav-item">
+                    <button class="nav-link @(_tab == 0 ? "active" : "")" @onclick='() => SwitchTab(0)'>
+                        <Icon Name="IconName.GlobeAmericas" /> Google Maps
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link @(_tab == 1 ? "active" : "")" @onclick='() => SwitchTab(1)'>
+                        <Icon Name="IconName.Compass" /> UTM
+                    </button>
+                </li>
+            </ul>
+
+            @if (_tab == 0)
+            {
+                <div>
+                    <label class="form-label">Link Google Maps</label>
+                    <div class="input-group mb-2">
+                        <input class="form-control font-monospace small"
+                               @bind="_mapsUrl" @bind:event="oninput"
+                               placeholder="https://maps.google.com/... oppure https://maps.app.goo.gl/..." />
+                        <Button Color="ButtonColor.Secondary" @onclick="ParseMapsUrlAsync"
+                                Loading="_parsing" LoadingText="...">
+                            <Icon Name="IconName.Search" /> Analizza
+                        </Button>
+                    </div>
+                    @if (_parseError != null)
+                    {
+                        <div class="alert alert-danger py-2 small">@_parseError</div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div>
+                    <label class="form-label">Coordinate UTM <span class="text-muted small">(WGS84)</span></label>
+                    <div class="input-group mb-2">
+                        <input class="form-control font-monospace" @bind="_utmString" @bind:event="oninput"
+                               placeholder="es. 32T 452390 4520000" />
+                        <Button Color="ButtonColor.Secondary" @onclick="ParseUtm">
+                            <Icon Name="IconName.Search" /> Analizza
+                        </Button>
+                    </div>
+                    <div class="form-text">Formato: Zona+Banda Easting Northing — es. <code>32T 452390 4520000</code></div>
+                    @if (_parseError != null)
+                    {
+                        <div class="alert alert-danger py-2 small mt-2">@_parseError</div>
+                    }
+                </div>
+            }
+
+            @if (_parsedLat.HasValue && _parsedLon.HasValue)
+            {
+                <div class="alert alert-success py-2 mt-3 d-flex align-items-center gap-2">
+                    <Icon Name="IconName.GeoFill" Color="IconColor.Success" />
+                    <div>
+                        <div class="fw-semibold small">Coordinate rilevate</div>
+                        <div class="font-monospace small">
+                            Lat: @_parsedLat.Value.ToString("F6") &nbsp; Lon: @_parsedLon.Value.ToString("F6")
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <hr class="my-3" />
+            @ColorPickerUi(_selectedArgb, _isCustomColor, _customHex,
+                           (argb) => SelectPredefinedColor(argb),
+                           (e)    => OnCustomColorInput(e))
+        </BodyTemplate>
+        <FooterTemplate>
+            <Button Color="ButtonColor.Success" @onclick="CreateParkingAsync"
+                    Loading="_creating" LoadingText="Creazione..."
+                    Disabled="@(!_parsedLat.HasValue || !_parsedLon.HasValue || string.IsNullOrWhiteSpace(_parkName))">
+                <Icon Name="IconName.PCircleFill" /> Crea parcheggio
+            </Button>
+            <Button Color="ButtonColor.Secondary" @onclick="async () => await _addModal.HideAsync()">
+                Annulla
+            </Button>
+        </FooterTemplate>
+    </Modal>
+
+    <!-- Modal: cambia colore parcheggio -->
+    <Modal @ref="_colorModal" Title="Cambia colore">
+        <BodyTemplate>
+            @ColorPickerUi(_cpArgb, _cpIsCustom, _cpHex,
+                           (argb) => CpSelectPredefined(argb),
+                           (e)    => CpOnCustomInput(e))
+        </BodyTemplate>
+        <FooterTemplate>
+            <Button Color="ButtonColor.Success" @onclick="SaveColor"
+                    Loading="_cpSaving" LoadingText="Salvataggio...">
+                <Icon Name="IconName.Save" /> Applica
+            </Button>
+            <Button Color="ButtonColor.Secondary" @onclick="async () => await _colorModal.HideAsync()">Annulla</Button>
+        </FooterTemplate>
+    </Modal>
+
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h2 class="mb-0">Parking TAK</h2>
+            <h2 class="mb-0">Parkings</h2>
             <p class="text-muted mb-0">@_mission.Name</p>
         </div>
-        <Button Color="ButtonColor.Secondary" Outline="true"
-                @onclick='() => Navigation.NavigateTo($"/missiontak/{MissionTakId}")'>
-            <Icon Name="IconName.ArrowLeft" /> Dettagli missione
-        </Button>
+        <div class="d-flex gap-2">
+            @if (!string.IsNullOrEmpty(_mission.TakMissionUid))
+            {
+                <Button Color="ButtonColor.Primary" @onclick="OpenAddModal">
+                    <Icon Name="IconName.PlusLg" /> Aggiungi parcheggio
+                </Button>
+            }
+            <Button Color="ButtonColor.Secondary" Outline="true"
+                    @onclick='() => Navigation.NavigateTo($"/missiontak/{MissionTakId}")'>
+                <Icon Name="IconName.ArrowLeft" /> Dettagli missione
+            </Button>
+        </div>
     </div>
 
     @if (string.IsNullOrEmpty(_mission.TakMissionUid))
@@ -36,40 +158,55 @@ else
             Nessuna missione TAK collegata. Collega un TAK Mission UID dalla pagina dei dettagli.
         </div>
     }
+    else if (_loading)
+    {
+        <div class="d-flex justify-content-center py-5">
+            <div class="spinner-border text-secondary" role="status"></div>
+        </div>
+    }
+    else if (_parkings.Count == 0)
+    {
+        <div class="text-center py-5 text-muted">
+            <Icon Name="IconName.PCircleFill" Size="IconSize.x5" />
+            <p class="mt-3">Nessun parcheggio nella missione TAK.</p>
+        </div>
+    }
     else
     {
-        <Grid TItem="Parking"
-              Class="table table-hover"
-              HeaderRowCssClass="bg-success text-white border-bottom-0 h5"
-              DataProvider="ParkingDataProvider"
-              AllowFiltering="false"
-              AllowPaging="false"
-              AllowSorting="true"
-              Responsive="true">
-            <GridColumns>
-                <GridColumn TItem="Parking" HeaderText="" TextAlignment="Alignment.Center">
-                    @if (context.Color.HasValue)
-                    {
-                        <div style="width: 18px; height: 18px; border-radius: 50%; background-color: @ColorConverterHelper.ArgbToHex(context.Color.Value); border: 1px solid #888; margin: auto;"></div>
-                    }
-                </GridColumn>
-                <GridColumn TItem="Parking" HeaderText="Callsign" SortKeySelector="x => x.Callsign">
-                    @context.Callsign
-                </GridColumn>
-                <GridColumn TItem="Parking" HeaderText="Lat">
-                    @context.Lat
-                </GridColumn>
-                <GridColumn TItem="Parking" HeaderText="Lon">
-                    @context.Lon
-                </GridColumn>
-                <GridColumn TItem="Parking" HeaderText="">
-                    <Button Size="ButtonSize.Small" Color="ButtonColor.Primary"
-                            @onclick="() => OpenMaps(context.Lat, context.Lon)">
-                        <Icon Name="IconName.GeoAltFill" /> Maps
-                    </Button>
-                </GridColumn>
-            </GridColumns>
-        </Grid>
+        <div class="d-flex flex-column gap-2">
+            @foreach (var p in _parkings)
+            {
+                <div class="card">
+                    <div class="card-body py-2 px-3 d-flex align-items-center gap-3">
+                        <button type="button"
+                                title="Cambia colore"
+                                @onclick="() => OpenColorPicker(p.Uid, p.Color)"
+                                style="flex-shrink:0;width:26px;height:26px;border-radius:50%;
+                                       background-color:@ColorConverterHelper.ArgbToHex(p.Color ?? -1);
+                                       border:2px solid var(--bs-border-color);cursor:pointer;padding:0;">
+                        </button>
+                        <div class="flex-grow-1 min-width-0">
+                            <div class="d-flex align-items-baseline gap-2 flex-wrap">
+                                <span class="fw-semibold">@p.Callsign</span>
+                                <span class="text-muted small font-monospace">
+                                    @p.Lat?.ToString("F6", CultureInfo.InvariantCulture) &nbsp; @p.Lon?.ToString("F6", CultureInfo.InvariantCulture)
+                                </span>
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2 flex-shrink-0">
+                            <Button Color="ButtonColor.Primary" Class="px-4"
+                                    @onclick="() => OpenMaps(p.Lat, p.Lon)">
+                                <Icon Name="IconName.GeoAltFill" /> Naviga
+                            </Button>
+                            <Button Color="ButtonColor.Danger" Size="ButtonSize.Small"
+                                    @onclick="() => RemoveParkingAsync(p)">
+                                <Icon Name="IconName.Trash3Fill" />
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
     }
 }
 
@@ -77,22 +214,115 @@ else
     [Parameter] public Guid MissionTakId { get; set; }
 
     private MissionSuite? _mission;
+    private List<Parking> _parkings = new();
+    private bool _loading;
+    private Guid _loadedMissionId = Guid.Empty;
+    private ConfirmDialog _confirmDialog = default!;
+
+    // Modal: aggiungi
+    private Modal _addModal = default!;
+    private int _tab = 0;
+    private string _parkName = "";
+    private string _mapsUrl = "";
+    private string _utmString = "";
+    private double? _parsedLat;
+    private double? _parsedLon;
+    private string? _parseError;
+    private bool _parsing;
+    private bool _creating;
+    private int _selectedArgb = -1;
+    private bool _isCustomColor;
+    private string _customHex = "#ffffff";
+
+    // Modal: cambia colore
+    private Modal _colorModal = default!;
+    private string? _cpUid;
+    private int _cpArgb = -1;
+    private bool _cpIsCustom;
+    private string _cpHex = "#ffffff";
+    private bool _cpSaving;
+
+    // CoT throttle
+    private DateTime _lastCoTRefresh = DateTime.MinValue;
+
+    // ── Lifecycle ────────────────────────────────────────────────────────────
 
     protected override async Task OnInitializedAsync()
     {
-        _mission = await MissionSuiteService.GetAsync(MissionTakId);
+        CoTManager.CoTMessageReceived += OnCoTMessage;
     }
 
-    private async Task<GridDataProviderResult<Parking>> ParkingDataProvider(GridDataProviderRequest<Parking> request)
+    protected override async Task OnParametersSetAsync()
+    {
+        if (MissionTakId == _loadedMissionId) return;
+        _loadedMissionId = MissionTakId;
+        _mission = null;
+        _mission = await MissionSuiteService.GetAsync(MissionTakId);
+        await LoadParkingsAsync();
+    }
+
+    private async Task LoadParkingsAsync()
     {
         var missionUid = _mission?.TakMissionUid ?? string.Empty;
-        var list = string.IsNullOrEmpty(missionUid)
-            ? new List<Parking>()
-            : (await ParckingService.GetAllAsync(missionUid))
+        if (string.IsNullOrEmpty(missionUid)) { _parkings = new(); StateHasChanged(); return; }
+        _loading = true;
+        StateHasChanged();
+        try
+        {
+            _parkings = (await ParckingService.GetAllAsync(missionUid))
                 .OrderBy(p => p.Color ?? 0)
                 .ThenBy(p => p.Callsign)
                 .ToList();
-        return request.ApplyTo(list);
+        }
+        finally { _loading = false; StateHasChanged(); }
+    }
+
+    public void Dispose()
+    {
+        CoTManager.CoTMessageReceived -= OnCoTMessage;
+    }
+
+    // ── CoT real-time refresh ────────────────────────────────────────────────
+
+    private void OnCoTMessage(CoTManager.CoTMessageEventArgs e)
+    {
+        try
+        {
+            var doc = System.Xml.Linq.XDocument.Parse(e.Message);
+            var type = (string?)doc.Root?.Attribute("type") ?? "";
+            if (!type.StartsWith("a-u-G")) return;
+            if (DateTime.UtcNow - _lastCoTRefresh < TimeSpan.FromSeconds(2)) return;
+            _lastCoTRefresh = DateTime.UtcNow;
+            _ = InvokeAsync(LoadParkingsAsync);
+        }
+        catch { }
+    }
+
+    private async Task RemoveParkingAsync(Parking p)
+    {
+        var confirmed = await _confirmDialog.ShowAsync(
+            title: "Rimuovi parcheggio",
+            message1: $"Rimuovere \"{p.Callsign}\" dalla missione TAK?",
+            confirmDialogOptions: new ConfirmDialogOptions
+            {
+                YesButtonText = "Rimuovi",
+                YesButtonColor = ButtonColor.Danger,
+                NoButtonText = "Annulla",
+                NoButtonColor = ButtonColor.Secondary
+            });
+
+        if (!confirmed) return;
+
+        var ok = await CoTManager.DeleteMissionUidAsync(_mission!.TakMissionUid!, p.Uid);
+        if (ok)
+        {
+            ToastService.Notify(new(ToastType.Success, "Parcheggio", $"\"{p.Callsign}\" rimosso."));
+            await LoadParkingsAsync();
+        }
+        else
+        {
+            ToastService.Notify(new(ToastType.Danger, "Errore", $"Impossibile rimuovere \"{p.Callsign}\"."));
+        }
     }
 
     private async Task OpenMaps(double? lat, double? lon)
@@ -101,4 +331,189 @@ else
         var url = $"https://www.google.com/maps?q={lat.ToString()!.Replace(",", ".")},{lon.ToString()!.Replace(",", ".")}";
         await JsHelper.OpenInNewTab(url);
     }
+
+    // ── Modal: aggiungi parcheggio ────────────────────────────────────────────
+
+    private async Task OpenAddModal()
+    {
+        _tab = 0; _parkName = ""; _mapsUrl = ""; _utmString = "";
+        _parsedLat = null; _parsedLon = null; _parseError = null;
+        _selectedArgb = -1; _isCustomColor = false; _customHex = "#ffffff";
+        await _addModal.ShowAsync();
+    }
+
+    private void SwitchTab(int tab)
+    {
+        _tab = tab; _parsedLat = null; _parsedLon = null; _parseError = null;
+    }
+
+    private void SelectPredefinedColor(int argb)
+    {
+        _selectedArgb = argb; _isCustomColor = false;
+        _customHex = ColorConverterHelper.ArgbToHex(argb);
+    }
+
+    private void OnCustomColorInput(ChangeEventArgs e)
+    {
+        var hex = e.Value?.ToString() ?? "#ffffff";
+        try { _selectedArgb = ColorConverterHelper.HexToArgb(hex); _customHex = hex; _isCustomColor = true; }
+        catch { }
+    }
+
+    private async Task ParseMapsUrlAsync()
+    {
+        _parsedLat = null; _parsedLon = null; _parseError = null;
+        var url = _mapsUrl.Trim();
+        if (string.IsNullOrEmpty(url)) return;
+        _parsing = true;
+        try
+        {
+            if (TryExtractFromMapsUrl(url, out var lat, out var lon)) { _parsedLat = lat; _parsedLon = lon; return; }
+            if (url.Contains("goo.gl") || url.Contains("maps.app"))
+            {
+                var resolved = await FollowRedirectAsync(url);
+                if (resolved != null && TryExtractFromMapsUrl(resolved, out lat, out lon)) { _parsedLat = lat; _parsedLon = lon; return; }
+            }
+            _parseError = "Impossibile estrarre le coordinate dal link. Prova a copiare il link dalla barra degli indirizzi di Google Maps.";
+        }
+        finally { _parsing = false; }
+    }
+
+    private static bool TryExtractFromMapsUrl(string url, out double lat, out double lon)
+    {
+        lat = 0; lon = 0;
+        var inv = CultureInfo.InvariantCulture;
+        var style = System.Globalization.NumberStyles.Float;
+        string decoded;
+        try { decoded = Uri.UnescapeDataString(url.Replace("+", " ")); } catch { decoded = url; }
+
+        var m = System.Text.RegularExpressions.Regex.Match(decoded, @"@(-?\d+\.?\d+),\s*(-?\d+\.?\d+)");
+        if (m.Success && double.TryParse(m.Groups[1].Value, style, inv, out lat) && double.TryParse(m.Groups[2].Value, style, inv, out lon)) return true;
+
+        m = System.Text.RegularExpressions.Regex.Match(decoded, @"/maps/\w+/(-?\d+\.?\d+),\s*(-?\d+\.?\d+)");
+        if (m.Success && double.TryParse(m.Groups[1].Value, style, inv, out lat) && double.TryParse(m.Groups[2].Value, style, inv, out lon)) return true;
+
+        m = System.Text.RegularExpressions.Regex.Match(decoded, @"[?&](?:q|query|ll)=(-?\d+\.?\d+),\s*(-?\d+\.?\d+)");
+        if (m.Success && double.TryParse(m.Groups[1].Value, style, inv, out lat) && double.TryParse(m.Groups[2].Value, style, inv, out lon)) return true;
+
+        m = System.Text.RegularExpressions.Regex.Match(decoded, @"(-?\d{1,3}\.\d{4,}),\s*(-?\d{1,3}\.\d{4,})");
+        if (m.Success && double.TryParse(m.Groups[1].Value, style, inv, out lat) && double.TryParse(m.Groups[2].Value, style, inv, out lon)
+            && lat is >= -90 and <= 90 && lon is >= -180 and <= 180) return true;
+
+        return false;
+    }
+
+    private async Task<string?> FollowRedirectAsync(string url)
+    {
+        try
+        {
+            var client = HttpClientFactory.CreateClient();
+            client.Timeout = TimeSpan.FromSeconds(8);
+            var response = await client.GetAsync(url);
+            return response.RequestMessage?.RequestUri?.ToString();
+        }
+        catch { return null; }
+    }
+
+    private void ParseUtm()
+    {
+        _parsedLat = null; _parsedLon = null; _parseError = null;
+        var raw = _utmString.Trim();
+        if (string.IsNullOrEmpty(raw)) return;
+        if (GeoUtils.TryParseCoordinate(raw, out var lat, out var lon)) { _parsedLat = lat; _parsedLon = lon; }
+        else _parseError = "Formato non riconosciuto. Usa il formato: 32T 452390 4520000";
+    }
+
+    private async Task CreateParkingAsync()
+    {
+        if (!_parsedLat.HasValue || !_parsedLon.HasValue || string.IsNullOrWhiteSpace(_parkName)) return;
+        if (string.IsNullOrEmpty(_mission?.TakMissionUid)) return;
+        _creating = true;
+        try
+        {
+            var uid = await CoTManager.CreateParkingAsync(_mission.TakMissionUid, _parkName.Trim(), _parsedLat.Value, _parsedLon.Value, _selectedArgb);
+            if (uid != null)
+            {
+                await _addModal.HideAsync();
+                await Task.Delay(400);
+                await LoadParkingsAsync();
+                ToastService.Notify(new(ToastType.Success, "Parcheggio", $"'{_parkName.Trim()}' creato su TAK."));
+            }
+            else ToastService.Notify(new(ToastType.Danger, "Errore", "Impossibile creare il parcheggio su TAK."));
+        }
+        finally { _creating = false; }
+    }
+
+    // ── Color picker (cambio colore da lista) ─────────────────────────────────
+
+    private async Task OpenColorPicker(string uid, int? currentArgb)
+    {
+        _cpUid = uid;
+        _cpArgb = currentArgb ?? -1;
+        _cpIsCustom = false;
+        _cpHex = ColorConverterHelper.ArgbToHex(_cpArgb);
+        await _colorModal.ShowAsync();
+    }
+
+    private void CpSelectPredefined(int argb)
+    {
+        _cpArgb = argb; _cpIsCustom = false;
+        _cpHex = ColorConverterHelper.ArgbToHex(argb);
+    }
+
+    private void CpOnCustomInput(ChangeEventArgs e)
+    {
+        var hex = e.Value?.ToString() ?? "#ffffff";
+        try { _cpArgb = ColorConverterHelper.HexToArgb(hex); _cpHex = hex; _cpIsCustom = true; }
+        catch { }
+    }
+
+    private async Task SaveColor()
+    {
+        if (string.IsNullOrEmpty(_cpUid) || string.IsNullOrEmpty(_mission?.TakMissionUid)) return;
+        _cpSaving = true;
+        try
+        {
+            await CoTManager.ChangeCotColor(_mission.TakMissionUid, _cpUid, _cpArgb);
+            await _colorModal.HideAsync();
+            await Task.Delay(400);
+            await LoadParkingsAsync();
+        }
+        finally { _cpSaving = false; }
+    }
+
+    // ── Helper: UI color picker condiviso ─────────────────────────────────────
+
+    private RenderFragment ColorPickerUi(int argb, bool isCustom, string hex,
+        Action<int> onSelectPredefined, Action<ChangeEventArgs> onCustomInput) => __builder =>
+    {
+        <label class="form-label d-flex align-items-center gap-2">
+            Colore
+            <span style="display:inline-block;width:22px;height:22px;border-radius:50%;
+                         background-color:@ColorConverterHelper.ArgbToHex(argb);
+                         border:2px solid var(--bs-border-color);vertical-align:middle;"></span>
+            <span class="text-muted small">@(isCustom ? "personalizzato" : (ATAKHelper.ATAKPredefinedColors.FirstOrDefault(c => c.Argb == argb)?.Name ?? "—"))</span>
+        </label>
+        <div class="d-flex flex-wrap gap-2 mb-2">
+            @foreach (var color in ATAKHelper.ATAKPredefinedColors)
+            {
+                var isSel = !isCustom && argb == color.Argb;
+                <button type="button" title="@color.Name"
+                        @onclick="() => onSelectPredefined(color.Argb)"
+                        style="width:30px;height:30px;border-radius:50%;
+                               background-color:@color.ToHex();
+                               border:@(isSel ? "3px solid var(--bs-primary)" : "2px solid var(--bs-border-color)");
+                               box-shadow:@(isSel ? "0 0 0 2px var(--bs-body-bg),0 0 0 4px var(--bs-primary)" : "none");
+                               cursor:pointer;padding:0;">
+                </button>
+            }
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <label class="form-label mb-0 small text-muted">Personalizzato:</label>
+            <input type="color" class="form-control form-control-color"
+                   style="width:40px;height:32px;padding:2px;cursor:pointer;"
+                   value="@hex" @oninput="onCustomInput" />
+            @if (isCustom) { <span class="small font-monospace text-muted">@hex</span> }
+        </div>
+    };
 }

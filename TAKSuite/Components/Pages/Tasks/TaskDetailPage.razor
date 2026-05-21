@@ -236,13 +236,34 @@ else
             <div class="card h-100">
                 <div class="card-header fw-bold">Riferimenti TAK</div>
                 <ul class="list-group list-group-flush">
-                    @if (!string.IsNullOrEmpty(_task.PoiName) || !string.IsNullOrEmpty(_task.PoiUid))
+                    @if (_task.PoiLinks.Count > 0)
                     {
                         <li class="list-group-item">
-                            <div class="text-muted small mb-1">POI Riferimento</div>
+                            <div class="text-muted small mb-2">POI Riferimento TAK</div>
+                            @foreach (var poi in _task.PoiLinks)
+                            {
+                                <div class="d-flex align-items-start gap-2 @(poi != _task.PoiLinks[0] ? "mt-2 pt-2 border-top" : "")">
+                                    <Icon Name="@(poi.IsPrimary ? IconName.GeoAltFill : IconName.GeoAlt)"
+                                          class="@(poi.IsPrimary ? "text-danger mt-1" : "text-secondary mt-1")" />
+                                    <div class="flex-grow-1">
+                                        <div>
+                                            <strong>@(string.IsNullOrEmpty(poi.Name) ? poi.Uid : poi.Name)</strong>
+                                            <Badge Color="@(poi.IsPrimary ? BadgeColor.Danger : BadgeColor.Secondary)"
+                                                   class="ms-1">@poi.Role</Badge>
+                                        </div>
+                                        <div class="text-muted small font-monospace">@poi.Uid</div>
+                                    </div>
+                                </div>
+                            }
+                        </li>
+                    }
+                    else if (!string.IsNullOrEmpty(_task.PoiName) || !string.IsNullOrEmpty(_task.PoiUid))
+                    {
+                        <li class="list-group-item">
+                            <div class="text-muted small mb-1">POI Riferimento TAK</div>
                             @if (!string.IsNullOrEmpty(_task.PoiName))
                             {
-                                <div><Icon Name="IconName.GeoAltFill" /> <strong>@_task.PoiName</strong></div>
+                                <div><Icon Name="IconName.GeoAltFill" class="text-danger" /> <strong>@_task.PoiName</strong></div>
                             }
                             @if (!string.IsNullOrEmpty(_task.PoiUid))
                             {
@@ -338,7 +359,7 @@ else
                                     @context.MediaType
                                 </GridColumn>
                                 <GridColumn TItem="AtakAttachment" HeaderText="" Style="width:100px">
-                                    <Button Size="ButtonSize.Small" @onclick="() => DownloadAttachment(context)">
+                                    <Button Size="ButtonSize.Small" @onclick="() => ViewAttachment(context)">
                                         @if (context.MediaType?.Contains("jpeg") == true || context.MediaType?.Contains("png") == true)
                                         {
                                             <Icon Name="IconName.FileEarmarkImage" Color="IconColor.Primary" />
@@ -449,11 +470,34 @@ else
 
     private System.Timers.Timer? _timer;
 
+    private Guid _loadedTaskId = Guid.Empty;
+
     protected override async Task OnInitializedAsync()
     {
         await base.OnInitializedAsync();
-        _task = await TaskService.GetAsync(TaskId);
-        if (_task == null) return;
+        Navigation.LocationChanged += OnLocationChanged;
+        await LoadDataAsync(TaskId);
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        var path = new Uri(e.Location).AbsolutePath;
+        const string prefix = "/taskdetail/";
+        if (!path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return;
+        if (!Guid.TryParse(path[prefix.Length..].TrimEnd('/'), out var newId) || newId == _loadedTaskId) return;
+        _ = InvokeAsync(() => LoadDataAsync(newId));
+    }
+
+    private async Task LoadDataAsync(Guid id)
+    {
+        _loadedTaskId = id;
+        _task = null;
+        _mission = null;
+        _subteams = new();
+        StateHasChanged();
+
+        _task = await TaskService.GetAsync(id);
+        if (_task == null) { StateHasChanged(); return; }
 
         if (_task.MissionTAKSuiteId.HasValue)
             _mission = await MissionSuiteService.GetAsync(_task.MissionTAKSuiteId.Value);
@@ -464,6 +508,11 @@ else
             _subteams = await TeamService.GetSubTeamsAsync(ConnectedAtakUser.Team);
 
         StartTimerIfNeeded();
+
+        if (_attachGrid is not null)
+            await _attachGrid.RefreshDataAsync();
+
+        StateHasChanged();
     }
 
     private void StartTimerIfNeeded()
@@ -664,16 +713,17 @@ else
         }
     }
 
-    private async Task DownloadAttachment(AtakAttachment attach)
+    private async Task ViewAttachment(AtakAttachment attach)
     {
         if (attach.FileBytes == null) return;
         var base64 = Convert.ToBase64String(attach.FileBytes);
         var mediaType = attach.MediaType ?? "application/octet-stream";
-        await JS.InvokeVoidAsync("downloadFile", $"data:{mediaType};base64,{base64}", attach.Name);
+        await JS.InvokeVoidAsync("viewFile", base64, mediaType);
     }
 
     public void Dispose()
     {
+        Navigation.LocationChanged -= OnLocationChanged;
         _timer?.Stop();
         _timer?.Dispose();
     }

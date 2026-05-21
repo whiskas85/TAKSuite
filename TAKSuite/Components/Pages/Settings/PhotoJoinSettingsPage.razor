@@ -61,15 +61,17 @@
                             <td class="text-center">
                                 <Badge Color="BadgeColor.Primary">@row.Config.PriorityRules.Count</Badge>
                             </td>
-                            <td class="text-center d-flex gap-1 justify-content-center">
-                                <Button Size="ButtonSize.Small" Color="ButtonColor.Success"
-                                        @onclick="() => SaveRowAsync(row)">
-                                    <Icon Name="IconName.Save" />
-                                </Button>
-                                <Button Size="ButtonSize.Small" Color="ButtonColor.Primary"
-                                        @onclick="() => GoToRules(row.Mission.Id)">
-                                    <Icon Name="IconName.PencilFill" /> Regole
-                                </Button>
+                            <td class="text-center">
+                                <div class="d-flex gap-1 justify-content-center">
+                                    <Button Size="ButtonSize.Small" Color="ButtonColor.Success"
+                                            @onclick="() => SaveRowAsync(row)">
+                                        <Icon Name="IconName.Save" />
+                                    </Button>
+                                    <Button Size="ButtonSize.Small" Color="ButtonColor.Primary"
+                                            @onclick="() => GoToRules(row.Mission.Id)">
+                                        <Icon Name="IconName.PencilFill" /> Regole
+                                    </Button>
+                                </div>
                             </td>
                         </tr>
                     }

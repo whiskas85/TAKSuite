@@ -1,5 +1,10 @@
+@using System.Reflection
 @using TAKSuite.Data.Models
 @using TAKSuite.Data.Services
+@using TAKSuite.Data.ServicesTak
+@using TAKSuite.Data.ModelsTak
+@using TAKSuite.TAK.CoT
+@using TAKSuite.TAK.Helper
 @using System.Text.Json
 @using System.Diagnostics
 
@@ -7,6 +12,10 @@
 @inject RadioChannelService radioChannelService
 @inject MissionSuiteEntityServices missionService
 @inject TeamService teamService
+@inject CoTManager CoTManager
+@inject WaypointService WaypointService
+@inject CotTemplateService CotTemplateService
+@inject TakSettingsService SettingsService
 @inject IJSRuntime JS
 
 <Modal @ref="_modal" Title="Importa Task da Testo" Size="ModalSize.ExtraLarge" OnHidden="OnHidden">
@@ -85,7 +94,42 @@
             }
             @if (_claudeSuccess)
             {
-                <div class="alert alert-success mt-2 py-2 small">✓ @_importedCount task importati automaticamente da Claude locale!</div>
+                <div class="alert alert-success mt-2 py-2 small">
+                    ✓ @_importedCount task importati automaticamente da Claude locale!
+                </div>
+            }
+            @if (_coordsCreated + _coordsReused + _coordsStandalone > 0 || _coordWarnings.Count > 0)
+            {
+                <div class="alert alert-info mt-2 py-2 small">
+                    @if (_coordsCreated > 0)
+                    {
+                        <div>📍 <strong>@_coordsCreated POI creati su ATAK:</strong></div>
+                        <ul class="mb-1 ps-3">
+                            @foreach (var p in _coordsCreatedDetails)
+                            {
+                                <li>@p.Name <span class="text-muted">(Template: @p.Template)</span></li>
+                            }
+                        </ul>
+                    }
+                    @if (_coordsReused > 0)
+                    {
+                        <div>♻️ <strong>@_coordsReused POI esistenti riutilizzati:</strong></div>
+                        <ul class="mb-1 ps-3">
+                            @foreach (var p in _coordsReusedDetails)
+                            {
+                                <li>@p.Name</li>
+                            }
+                        </ul>
+                    }
+                    @if (_coordsStandalone > 0)
+                    {
+                        <span class="text-warning">⚠️ @_coordsStandalone coordinate non classificate (nessun obiettivo associato). </span>
+                    }
+                    @foreach (var w in _coordWarnings)
+                    {
+                        <span class="d-block text-warning">• @w</span>
+                    }
+                </div>
             }
         }
 
@@ -109,6 +153,33 @@
             else if (_importSuccess)
             {
                 <div class="alert alert-success mt-2 py-2 small">✓ @_importedCount task creati correttamente!</div>
+            }
+            @if (_coordsCreated + _coordsReused + _coordsStandalone > 0 || _coordWarnings.Count > 0)
+            {
+                <div class="alert alert-info mt-2 py-2 small">
+                    @if (_coordsCreated > 0)
+                    {
+                        <div>📍 <strong>@_coordsCreated POI creati su ATAK:</strong></div>
+                        <ul class="mb-1 ps-3">
+                            @foreach (var p in _coordsCreatedDetails)
+                            {
+                                <li>@p.Name <span class="text-muted">(Template: @p.Template)</span></li>
+                            }
+                        </ul>
+                    }
+                    @if (_coordsReused > 0)
+                    {
+                        <div>♻️ <strong>@_coordsReused POI esistenti riutilizzati:</strong></div>
+                        <ul class="mb-1 ps-3">
+                            @foreach (var p in _coordsReusedDetails)
+                            {
+                                <li>@p.Name</li>
+                            }
+                        </ul>
+                    }
+                    @if (_coordsStandalone > 0) { <span class="text-warning">⚠️ @_coordsStandalone coordinate non classificate. </span> }
+                    @foreach (var w in _coordWarnings) { <span class="d-block text-warning">• @w</span> }
+                </div>
             }
             <div class="mt-3">
                 <Button Color="ButtonColor.Success"
@@ -142,6 +213,7 @@
 @code {
     [Parameter] public EventCallback OnTaskCreated { get; set; }
     [Parameter] public Guid? MissionId { get; set; }
+    [Parameter] public string? MissionTakUid { get; set; }
 
     private Modal _modal = default!;
     private int _tab = 0;
@@ -161,11 +233,25 @@
     private MissionSuite? _mission;
     private List<Team> _teams = new();
     private Guid? _selectedTeamId;
+    private List<CotTemplate> _templates = new();
+    private string _aiPromptTemplate = string.Empty;
+
+    private int _coordsCreated;
+    private int _coordsReused;
+    private int _coordsStandalone;
+    private List<string> _coordWarnings = new();
+
+    private record PoiDetail(string Name, string Template);
+    private List<PoiDetail> _coordsCreatedDetails = new();
+    private List<PoiDetail> _coordsReusedDetails = new();
 
     public async Task ShowAsync()
     {
         _radioChannels = await radioChannelService.GetAllAsync();
         _teams = (await teamService.GetAllAsync()).OrderBy(t => t.Name).ToList();
+        _templates = await CotTemplateService.GetAllAsync();
+        var settings = await SettingsService.GetOrCreateAsync();
+        _aiPromptTemplate = settings.AiPromptTemplate ?? string.Empty;
 
         if (MissionId.HasValue)
         {
@@ -188,12 +274,17 @@
         _claudeError = string.Empty;
         _claudeSuccess = false;
         _importedCount = 0;
-        // Non resettare _selectedTeamId e _teams: restano per la prossima apertura
+        _coordsCreated = 0;
+        _coordsReused = 0;
+        _coordsStandalone = 0;
+        _coordWarnings = new();
+        _coordsCreatedDetails = new();
+        _coordsReusedDetails = new();
     }
 
     private async Task GeneratePrompt()
     {
-        var prompt = BuildPrompt(_rawText.Trim(), _radioChannels);
+        var prompt = BuildPrompt2(_rawText.Trim(), _radioChannels, _templates);
         await JS.InvokeVoidAsync("copyToClipboard", prompt);
         _promptCopied = true;
     }
@@ -207,11 +298,13 @@
         _claudeSuccess = false;
         _importError = string.Empty;
         _importSuccess = false;
+        _coordsCreated = 0; _coordsReused = 0; _coordsStandalone = 0; _coordWarnings = new();
+        _coordsCreatedDetails = new(); _coordsReusedDetails = new();
         StateHasChanged();
 
         try
         {
-            var prompt = BuildPrompt(_rawText.Trim(), _radioChannels);
+            var prompt = BuildPrompt2(_rawText.Trim(), _radioChannels, _templates);
 
             var psi = new ProcessStartInfo
             {
@@ -221,7 +314,10 @@
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
-                CreateNoWindow = true
+                CreateNoWindow = true,
+                StandardInputEncoding = System.Text.Encoding.UTF8,
+                StandardOutputEncoding = System.Text.Encoding.UTF8,
+                StandardErrorEncoding = System.Text.Encoding.UTF8,
             };
 
             using var process = Process.Start(psi);
@@ -301,60 +397,119 @@
             t = t[..^3].TrimEnd();
         t = t.Trim();
 
-        // Preferisci array [...] rispetto a oggetto singolo {...}
-        var arrStart = t.IndexOf('[');
-        var arrEnd   = t.LastIndexOf(']');
-        if (arrStart >= 0 && arrEnd > arrStart)
-            return t[arrStart..(arrEnd + 1)].Trim();
-
+        // Preferisce il tipo di struttura che compare prima nel testo
         var objStart = t.IndexOf('{');
-        var objEnd   = t.LastIndexOf('}');
-        if (objStart >= 0 && objEnd > objStart)
-            return t[objStart..(objEnd + 1)].Trim();
+        var arrStart = t.IndexOf('[');
+
+        if (objStart >= 0 && (arrStart < 0 || objStart < arrStart))
+        {
+            var objEnd = t.LastIndexOf('}');
+            if (objEnd > objStart) return t[objStart..(objEnd + 1)].Trim();
+        }
+
+        if (arrStart >= 0)
+        {
+            var arrEnd = t.LastIndexOf(']');
+            if (arrEnd > arrStart) return t[arrStart..(arrEnd + 1)].Trim();
+        }
 
         return t;
     }
-
-    private string BuildPrompt(string text, List<RadioChannel> channels)
+    private string BuildPrompt2(string text, List<RadioChannel> channels, List<CotTemplate> cotTemplates)
     {
-        var channelList = channels.Count > 0
+        // Base prompt: use DB setting or default role description
+        var basePrompt = string.IsNullOrWhiteSpace(_aiPromptTemplate)
+            ? "Sei un assistente per la pianificazione tattica. Analizza il testo seguente ed estrai TUTTI gli obiettivi/task presenti."
+            : _aiPromptTemplate.Replace("{{INPUT}}", "").Trim();
+
+        // Channels
+        var channelList = channels?.Count > 0
             ? string.Join(", ", channels.OrderBy(c => c.Name).Select(c => $"\"{c.Name}\""))
             : "nessun canale disponibile";
 
-        return $$"""
-Sei un assistente per la pianificazione tattica. Analizza il testo seguente ed estrai TUTTI gli obiettivi/task presenti. Restituisci un array JSON con un elemento per ogni obiettivo trovato.
+        // COT templates
+        var templateTitles = cotTemplates?.Count > 0
+            ? string.Join(", ", cotTemplates.Select(t => $"\"{t.Title}\""))
+            : "\"EMPTY\"";
 
-Restituisci SOLO il JSON (senza markdown, senza backtick, senza spiegazioni). Il formato deve essere ESATTAMENTE questo array:
-[
-  {
-    "name": "titolo breve del task",
-    "sottotitolo": "sottotitolo opzionale",
-    "tipologiaObiettivo": "tipo di obiettivo",
-    "durata": 30,
-    "radioChannel": "scegli da lista canali o null",
-    "description": "descrizione estesa in markdown",
-    "items": [
-      { "type": "Info", "value": "informazione importante" },
-      { "type": "Note", "value": "nota di attenzione" },
-      { "type": "Action", "value": "azione operativa da eseguire" }
-    ]
-  }
-]
+        var templateRules = cotTemplates?.Count > 0
+            ? string.Join("\n", cotTemplates.Select(t =>
+                $"- {t.Title}{(t.IsPrimary ? " ⭐ [PRIMARIO]" : "")}: {t.Description}")) +
+              "\n- EMPTY: nessun template corrisponde"
+            : "- EMPTY: nessun template disponibile";
 
-Regole:
-- Restituisci SEMPRE un array, anche se c'è un solo obiettivo
-- Ogni obiettivo nel testo deve diventare un elemento separato dell'array
-- "type" può essere SOLO uno di: Info, Note, Action
-- "durata" è un numero intero (minuti stimati per quell'obiettivo)
-- "description" può contenere markdown
-- Includi tutti gli elementi Info, Note e Action rilevanti per ciascun obiettivo
-- Per "radioChannel": scegli il nome più simile tra quelli disponibili. Se nessuno corrisponde, metti null.
-- Lista canali disponibili: {{channelList}}
-- Rispondi SOLO con il JSON puro, senza nessun testo aggiuntivo
+        // ATAK colors
+        var colorList = string.Join(", ", ATAKHelper.ATAKPredefinedColors.Select(c => $"\"{c.Name}\""));
 
-Testo da analizzare:
-{{text}}
-""";
+        // Coord examples using real template titles
+        var t0 = cotTemplates?.Count > 0 ? cotTemplates[0].Title : "EMPTY";
+        var t1 = cotTemplates?.Count > 1 ? cotTemplates[1].Title : "EMPTY";
+
+        var coordExample = $"{{ \"name\": \"OBJ ECHO\", \"coordinate\": \"32T 373313 4992906\", \"template\": \"{t0}\" }}";
+
+        var multiCoordExample =
+            "(Esempio multi-coordinata):\n" +
+            "\"coordinates\": [\n" +
+            $"  {{ \"name\": \"OBJ FOXTROT\", \"coordinate\": \"32T 372714 4992403\", \"template\": \"{t0}\" }},\n" +
+            $"  {{ \"name\": \"IN FOXTROT\",  \"coordinate\": \"32T 372841 4992352\", \"template\": \"{t1}\" }},\n" +
+            "  { \"name\": \"DZ FOXTROT\",  \"coordinate\": \"32T 372799 4992282\", \"template\": \"EMPTY\" }\n" +
+            "]";
+
+        var format =
+            "{\n" +
+            "  \"tasks\": [\n" +
+            "    {\n" +
+            "      \"name\": \"titolo breve del task\",\n" +
+            "      \"sottotitolo\": \"sottotitolo opzionale\",\n" +
+            "      \"tipologiaObiettivo\": \"tipo di obiettivo (es: A+E, E, I)\",\n" +
+            "      \"durata\": 30,\n" +
+            "      \"radioChannel\": \"nome canale dalla lista o null\",\n" +
+            "      \"description\": \"descrizione estesa in markdown\",\n" +
+            "      \"color\": \"nome colore ATAK dalla lista o null\",\n" +
+            "      \"coordinates\": [\n" +
+            $"        {coordExample}\n" +
+            "      ],\n" +
+            "      \"items\": [\n" +
+            "        { \"type\": \"Info\",   \"value\": \"informazione importante\" },\n" +
+            "        { \"type\": \"Note\",   \"value\": \"nota di attenzione\" },\n" +
+            "        { \"type\": \"Action\", \"value\": \"azione operativa da eseguire\" }\n" +
+            "      ]\n" +
+            "    }\n" +
+            "  ],\n" +
+            "  \"standalone_coords\": [\n" +
+            "    { \"nome\": \"WP EXTRA\", \"coordinate\": \"32T 123456 4500000\", \"template\": \"EMPTY\" }\n" +
+            "  ]\n" +
+            "}\n\n" +
+            multiCoordExample;
+
+        return
+            basePrompt + "\n\n" +
+            "=== CANALI RADIO DISPONIBILI ===\n" +
+            channelList + "\n\n" +
+            "=== TEMPLATE COT (classificazione punti TAK) ===\n" +
+            templateRules + "\n" +
+            $"Usa SOLO questi template: [{templateTitles}] oppure \"EMPTY\". NON inventare template, NON usare sinonimi.\n\n" +
+            "=== COLORI ATAK DISPONIBILI ===\n" +
+            colorList + "\n\n" +
+            "=== FORMATO OUTPUT ATTESO ===\n" +
+            "Restituisci SOLO il JSON puro (senza markdown, senza backtick, senza spiegazioni):\n" +
+            format + "\n\n" +
+            "Regole:\n" +
+            "- Restituisci SEMPRE la struttura completa, anche se c’è un solo obiettivo\n" +
+            "- Ogni obiettivo nel testo → un elemento dell’array tasks\n" +
+            "- \"type\" negli items: SOLO Info, Note, Action\n" +
+            "- \"durata\": numero intero (minuti stimati)\n" +
+            "- \"description\": può contenere markdown\n" +
+            "- \"radioChannel\": scegli dalla lista canali, oppure null\n" +
+            "- \"color\": scegli dalla lista colori ATAK, oppure null\n" +
+            "- \"template\" nelle coordinate: titolo esatto dalla lista oppure \"EMPTY\" — NON inventare\n" +
+            "- \"coordinate\": copia il testo ESATTAMENTE come appare, NON convertire\n" +
+            "- \"nome\" coordinate: max 20 caratteri, basato sul contesto\n" +
+            "- Coordinate senza obiettivo associato → standalone_coords\n" +
+            "- Se non ci sono coordinate: \"coordinates\":[] e \"standalone_coords\":[]\n" +
+            "- Rispondi SOLO con JSON puro\n\n" +
+            "=== TESTO DA ANALIZZARE ===\n" +
+            text;
     }
 
     private async Task ImportJson()
@@ -362,6 +517,8 @@ Testo da analizzare:
         _importError = string.Empty;
         _importSuccess = false;
         _importedCount = 0;
+        _coordsCreated = 0; _coordsReused = 0; _coordsStandalone = 0; _coordWarnings = new();
+        _coordsCreatedDetails = new(); _coordsReusedDetails = new();
         _importing = true;
         StateHasChanged();
         try
@@ -369,17 +526,25 @@ Testo da analizzare:
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
             var json = _jsonText.Trim();
 
-            // Supporta sia array [...] che oggetto singolo {...}
             List<TaskImportDto> dtos;
-            if (json.StartsWith('['))
+            List<CoordDto> standaloneCoords = new();
+
+            if (json.StartsWith('{'))
+            {
+                // Nuovo formato: { tasks: [...], standalone_coords: [...] }
+                var wrapper = JsonSerializer.Deserialize<ImportWrapper>(json, options);
+                dtos = wrapper?.Tasks ?? new();
+                standaloneCoords = wrapper?.StandaloneCoords ?? new();
+            }
+            else if (json.StartsWith('['))
             {
                 dtos = JsonSerializer.Deserialize<List<TaskImportDto>>(json, options)
                        ?? new List<TaskImportDto>();
             }
             else
             {
-                var single = JsonSerializer.Deserialize<TaskImportDto>(json, options);
-                dtos = single != null ? new List<TaskImportDto> { single } : new List<TaskImportDto>();
+                _importError = "JSON non valido: deve iniziare con { o [.";
+                return;
             }
 
             dtos = dtos.Where(d => !string.IsNullOrWhiteSpace(d.Name)).ToList();
@@ -387,6 +552,17 @@ Testo da analizzare:
             {
                 _importError = "JSON non valido o nessun campo 'name' trovato.";
                 return;
+            }
+
+            // Carica TUTTI i punti con coordinate dalla missione (usati per deduplicazione per prossimità)
+            var existingPoints = new List<TAKSuite.Data.ServicesTak.TakPoint>();
+            if (!string.IsNullOrEmpty(MissionTakUid))
+            {
+                try
+                {
+                    existingPoints = await WaypointService.GetAllMissionPointsAsync(MissionTakUid);
+                }
+                catch (Exception ex) { _coordWarnings.Add($"Impossibile caricare punti esistenti da ATAK: {ex.Message}"); }
             }
 
             var warnings = new List<string>();
@@ -423,7 +599,7 @@ Testo da analizzare:
                     Description = dto.Description?.Trim() ?? string.Empty,
                     CreationDate = DateTime.UtcNow,
                     LastModified = DateTime.UtcNow,
-                    Status = TaskStatusTak.Created  // TaskService.AddAsync lo sovrascrive in base ai flag missione
+                    Status = TaskStatusTak.Created
                 };
 
                 if (dto.Items != null)
@@ -443,10 +619,171 @@ Testo da analizzare:
                 }
 
                 var created = await taskService.AddAsync(task);
-                if (created != null)
-                    saved++;
-                else
+                if (created == null)
+                {
                     warnings.Add($"Errore nel salvataggio del task \"{dto.Name}\".");
+                    continue;
+                }
+                saved++;
+
+                // Sincronizzazione coordinate con ATAK
+                if (!string.IsNullOrEmpty(MissionTakUid) && dto.Coordinates?.Count > 0)
+                {
+                    var validCoords = dto.Coordinates
+                        .Where(c => !string.IsNullOrWhiteSpace(c.ResolvedRaw) || c.Lat != 0 || c.Lon != 0)
+                        .ToList();
+
+                    string? primaryPoiUid = null;
+                    string? primaryPoiName = null;
+                    Guid? primaryTemplateId = null;
+                    var poiLinks = new List<TaskPoiLink>();
+
+                    foreach (var coord in validCoords)
+                    {
+                        var callsign = coord.ResolvedCallsign(dto.Name.Trim());
+                        var rawCoord  = coord.ResolvedRaw;
+
+                        if (dto.Color is not null) coord.Color = ATAKHelper.ATAKPredefinedColors.Where(_ => _.Name.ToLower() == dto.Color.ToLower()).FirstOrDefault()?.Argb;
+
+
+                        try
+                        {
+                            double lat, lon;
+                            if (!string.IsNullOrWhiteSpace(rawCoord))
+                            {
+                                if (!GeoUtils.TryParseCoordinate(rawCoord, out lat, out lon))
+                                {
+                                    warnings.Add($"Impossibile convertire coordinata \"{rawCoord}\" per \"{callsign}\".");
+                                    continue;
+                                }
+                            }
+                            else
+                            {
+                                lat = coord.Lat;
+                                lon = coord.Lon;
+                            }
+
+                            coord.Lat = lat;
+                            coord.Lon = lon;
+                            coord.Callsign = callsign;
+
+                            coord.Radio = dto.RadioChannel;
+                            coord.Durata = dto.Durata;
+                            coord.Tipo = dto.TipologiaObiettivo;
+
+
+
+                            string poiUid;
+                            Guid? usedTemplateId = null;
+                            Data.Models.CotTemplate? resolvedTemplate = null;
+                            var nearbyPoint = existingPoints
+                                .FirstOrDefault(p => GeoUtils.ArePointsClose(p.Lat, p.Lon, lat, lon, 10.0));
+                            if (nearbyPoint != null)
+                            {
+                                poiUid = nearbyPoint.Uid;
+                                _coordsReused++;
+                                _coordsReusedDetails.Add(new PoiDetail(callsign, "esistente"));
+                            }
+                            else
+                            {
+                                string? newUid = null;
+
+                                // Risolvi template: prima UUID legacy, poi titolo stringa (nuovo formato)
+                                if (!string.IsNullOrEmpty(coord.TemplateId) &&
+                                    Guid.TryParse(coord.TemplateId, out var tmplGuid))
+                                {
+                                    resolvedTemplate = _templates.FirstOrDefault(t => t.Id == tmplGuid);
+                                }
+                                else if (!string.IsNullOrEmpty(coord.Template) &&
+                                         !string.Equals(coord.Template, "EMPTY", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    var tName = coord.Template.Trim();
+                                    // Exact match, poi partial (es. "IN/OUT" trova "IN" e viceversa)
+                                    resolvedTemplate =
+                                        _templates.FirstOrDefault(t => string.Equals(t.Title, tName, StringComparison.OrdinalIgnoreCase))
+                                        ?? _templates.FirstOrDefault(t => t.Title.Contains(tName, StringComparison.OrdinalIgnoreCase))
+                                        ?? _templates.FirstOrDefault(t => tName.Contains(t.Title, StringComparison.OrdinalIgnoreCase));
+
+                                    if (resolvedTemplate == null)
+                                    {
+                                        var available = _templates.Count > 0
+                                            ? "Titoli disponibili: " + string.Join(", ", _templates.Select(t => $"\"{t.Title}\""))
+                                            : "Nessun template configurato in Impostazioni › Template COT";
+                                        warnings.Add($"⚠ Template \"{tName}\" non trovato per \"{callsign}\" → punto bianco. {available}.");
+                                    }
+                                }
+
+                                if (resolvedTemplate != null)
+                                {
+                                    var dicName = ToLowerDictionary(coord);
+                                    
+                                    newUid = await CoTManager.CreateFromTemplateAsync(
+                                        resolvedTemplate, MissionTakUid,dicName);
+                                    if (!string.IsNullOrEmpty(newUid))
+                                        usedTemplateId = resolvedTemplate.Id;
+                                }
+
+                                if (string.IsNullOrEmpty(newUid))
+                                    newUid = await CoTManager.CreateAndPublishPoiAsync(
+                                        MissionTakUid, callsign, PoiType.Spotmap, lat, lon);
+
+                                if (string.IsNullOrEmpty(newUid))
+                                {
+                                    warnings.Add($"Impossibile creare POI \"{callsign}\" su ATAK.");
+                                    continue;
+                                }
+                                poiUid = newUid;
+                                existingPoints.Add(new TAKSuite.Data.ServicesTak.TakPoint(poiUid, callsign, lat, lon));
+                                _coordsCreated++;
+                                var tmplLabel = resolvedTemplate?.Title ?? (!string.IsNullOrEmpty(coord.Template) ? coord.Template : "bianco");
+                                _coordsCreatedDetails.Add(new PoiDetail(callsign, tmplLabel));
+                            }
+
+                            // Primario: template marcato IsPrimary nel DB, oppure Primary==true (legacy), oppure primo in assoluto
+                            bool isPrimary = (resolvedTemplate?.IsPrimary == true && primaryPoiUid == null)
+                                             || (coord.Primary == true && primaryPoiUid == null)
+                                             || primaryPoiUid == null;
+                            if (isPrimary)
+                            {
+                                primaryPoiUid = poiUid;
+                                primaryPoiName = callsign;
+                                primaryTemplateId = usedTemplateId;
+                            }
+
+                            var role = !string.IsNullOrEmpty(coord.Template) ? coord.Template
+                                     : !string.IsNullOrEmpty(coord.Label)    ? coord.Label
+                                     : isPrimary ? "Principale" : "Secondario";
+
+                            poiLinks.Add(new TaskPoiLink
+                            {
+                                Uid = poiUid,
+                                Name = callsign,
+                                IsPrimary = isPrimary,
+                                Role = role,
+                                TemplateId = usedTemplateId
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            warnings.Add($"Errore POI \"{callsign}\": {ex.Message}");
+                        }
+                    }
+
+                    if (primaryPoiUid != null)
+                    {
+                        created.PoiUid = primaryPoiUid;
+                        created.PoiName = primaryPoiName;
+                        created.MissionUid = MissionTakUid;
+                        created.PoiLinks = poiLinks;
+                        await taskService.UpdateAsync(created);
+                    }
+                }
+            }
+
+            // Coordinate standalone (non associate a nessun obiettivo)
+            foreach (var coord in standaloneCoords.Where(c => !string.IsNullOrWhiteSpace(c.ResolvedRaw) || c.Lat != 0 || c.Lon != 0))
+            {
+                _coordsStandalone++;
             }
 
             if (saved > 0)
@@ -456,6 +793,7 @@ Testo da analizzare:
                 _jsonText = string.Empty;
                 if (warnings.Count > 0)
                     _importError = string.Join(" ", warnings);
+                _coordWarnings.AddRange(warnings.Except(_coordWarnings));
                 await OnTaskCreated.InvokeAsync();
             }
             else
@@ -477,6 +815,37 @@ Testo da analizzare:
         }
     }
 
+
+    
+    public static Dictionary<string, object> ToLowerDictionary(object dto)
+    {
+        if (dto == null)
+            throw new ArgumentNullException(nameof(dto));
+
+        var result = new Dictionary<string, object>();
+
+        var properties = dto.GetType()
+                            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                            .Where(p => p.CanRead);
+
+        foreach (var prop in properties)
+        {
+            var key = prop.Name.ToLowerInvariant();
+            var value = prop.GetValue(dto);
+
+            result[key] = value; // nessuna conversione
+        }
+
+        return result;
+    }
+
+
+    private class ImportWrapper
+    {
+        public List<TaskImportDto> Tasks { get; set; } = new();
+        public List<CoordDto> StandaloneCoords { get; set; } = new();
+    }
+
     private class TaskImportDto
     {
         public string Name { get; set; } = string.Empty;
@@ -485,7 +854,37 @@ Testo da analizzare:
         public int? Durata { get; set; }
         public string? RadioChannel { get; set; }
         public string? Description { get; set; }
+        public string? Color { get; set; }
+        public List<CoordDto>? Coordinates { get; set; }
         public List<TaskItemDto>? Items { get; set; }
+    }
+
+    private class CoordDto
+    {
+        // Nuovo formato
+        public string? Name { get; set; }
+        public string? Coordinate { get; set; }
+        public string? Template { get; set; }   // "OBJ" | "IN/OUT" | "PARK" | "RECON" | "WP" | "EMPTY" | titolo template
+
+        // Formato legacy (retrocompatibile)
+        public string? Callsign { get; set; }
+        public string? Label { get; set; }
+        public string? Raw { get; set; }
+        public double Lat { get; set; }
+        public double Lon { get; set; }
+        public bool? Primary { get; set; }
+        public string? TemplateId { get; set; }
+        public int? Color { get; set; }
+        
+        
+        public string? Radio { get; set; }
+        public int? Durata { get; set; }
+        public string? Tipo { get; set; }
+
+
+        public string ResolvedCallsign(string fallback) => Name?.Trim() ?? Callsign?.Trim() ?? fallback;
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string? ResolvedRaw => Coordinate ?? Raw;
     }
 
     private class TaskItemDto

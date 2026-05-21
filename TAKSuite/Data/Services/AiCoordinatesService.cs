@@ -2,15 +2,36 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using TAKSuite.Data.Models;
+using TAKSuite.TAK.Helper;
 
 namespace TAKSuite.Data.Services
 {
-    public class AiCoordinatesService
+    public class AiCoordinatesService(TakSettingsService settingsService)
     {
+        public static readonly string DefaultPromptTemplate =
+            "Sei un assistente per operazioni tattiche. Analizza il contenuto e individua TUTTI i punti di interesse con coordinate.\n\n" +
+            "Per ogni punto restituisci:\n" +
+            "- name: nome/callsign del punto\n" +
+            "- type: \"WP\" se è un waypoint (parole chiave: WP, Waypoint, PL, Phase Line, punto di passaggio)\n" +
+            "        \"OBJ\" se è un obiettivo o ricognizione (parole chiave: OBJ, Obiettivo, RECON, Target, Goal, OP)\n" +
+            "- raw: la stringa di coordinate ESATTAMENTE come appare nel testo (es: \"32T 452390 4520000\" oppure \"45.123, 8.456\")\n" +
+            "  NON convertire le coordinate — copia il testo originale nel campo raw.\n" +
+            "- color: colore TAK suggerito in base al contesto. Valori ammessi (usa il nome esatto):\n" +
+            "  White, Yellow, Orange, Magenta, Red, Maroon, Purple, Dark Blue, Blue, Cyan, Teal, Green, Dark Green, Grey, Black\n" +
+            "  Linea guida: OBJ/Target/Goal → Red, WP/checkpoint → Green, RECON/ISR → Blue,\n" +
+            "  PL/Phase Line → Yellow, OP → Orange. Se incerto, usa Red per OBJ e Green per WP.\n" +
+            "- notes: informazioni aggiuntive opzionali (stringa vuota se assente)\n\n" +
+            "Rispondi ESCLUSIVAMENTE con JSON valido, zero testo aggiuntivo:\n" +
+            "{\"points\":[{\"name\":\"ALFA\",\"type\":\"WP\",\"raw\":\"32T 452390 4520000\",\"color\":\"Green\",\"notes\":\"\"}]}\n" +
+            "Se non ci sono punti: {\"points\":[]}\n\n" +
+            "--- TESTO DA ANALIZZARE ---\n" +
+            "{{INPUT}}";
+
         public async Task<List<AiExtractedPoint>> ExtractPointsAsync(
             string? text, string? imageBase64, string? imageMimeType)
         {
-            var prompt = BuildPrompt(text);
+            var settings = await settingsService.GetOrCreateAsync();
+            var prompt = BuildPrompt(text, settings.AiPromptTemplate);
 
             string? tempImagePath = null;
             try
@@ -65,32 +86,12 @@ namespace TAKSuite.Data.Services
             }
         }
 
-        private static string BuildPrompt(string? userText)
+        private static string BuildPrompt(string? userText, string? customTemplate)
         {
-            var sb = new StringBuilder();
-            sb.AppendLine("Sei un assistente per operazioni tattiche. Analizza il contenuto e individua TUTTI i punti di interesse con coordinate.");
-            sb.AppendLine();
-            sb.AppendLine("Per ogni punto restituisci:");
-            sb.AppendLine("- name: nome/callsign del punto");
-            sb.AppendLine("- type: \"WP\" se è un waypoint (parole chiave: WP, Waypoint, PL, Phase Line, punto di passaggio)");
-            sb.AppendLine("        \"OBJ\" se è un obiettivo o ricognizione (parole chiave: OBJ, Obiettivo, RECON, Target, Goal, OP)");
-            sb.AppendLine("- lat/lon: coordinate WGS84 in gradi decimali.");
-            sb.AppendLine("  Le coordinate sono spesso in formato UTM WGS84 (es: 32T 452390E 4520000N oppure 32T 452390 4520000).");
-            sb.AppendLine("  Convertile SEMPRE in lat/lon decimali. Zona UTM tipica per l'Italia: 32T o 33T.");
-            sb.AppendLine("- notes: informazioni aggiuntive opzionali (stringa vuota se assente)");
-            sb.AppendLine();
-            sb.AppendLine("Rispondi ESCLUSIVAMENTE con JSON valido, zero testo aggiuntivo:");
-            sb.AppendLine("{\"points\":[{\"name\":\"ALFA\",\"type\":\"WP\",\"lat\":45.12,\"lon\":9.65,\"notes\":\"\"}]}");
-            sb.AppendLine("Se non ci sono punti: {\"points\":[]}");
-
-            if (!string.IsNullOrWhiteSpace(userText))
-            {
-                sb.AppendLine();
-                sb.AppendLine("--- TESTO DA ANALIZZARE ---");
-                sb.Append(userText);
-            }
-
-            return sb.ToString();
+            var template = string.IsNullOrWhiteSpace(customTemplate)
+                ? DefaultPromptTemplate
+                : customTemplate;
+            return template.Replace("{{INPUT}}", userText ?? string.Empty);
         }
 
         private static string StripJsonFences(string text)
@@ -118,20 +119,47 @@ namespace TAKSuite.Data.Services
             {
                 var name  = p.TryGetProperty("name",  out var n) ? n.GetString() ?? "Punto" : "Punto";
                 var type  = p.TryGetProperty("type",  out var t) ? t.GetString() ?? "" : "";
-                var lat   = p.TryGetProperty("lat",   out var la) ? la.GetDouble() : 0;
-                var lon   = p.TryGetProperty("lon",   out var lo) ? lo.GetDouble() : 0;
                 var notes = p.TryGetProperty("notes", out var no) ? no.GetString() : null;
+
+                double lat = 0, lon = 0;
+
+                // Try server-side conversion from raw coordinate string (accurate)
+                if (p.TryGetProperty("raw", out var rawEl) && !string.IsNullOrWhiteSpace(rawEl.GetString()))
+                {
+                    GeoUtils.TryParseCoordinate(rawEl.GetString()!, out lat, out lon);
+                }
+
+                // Fall back to lat/lon fields if raw is missing or unparseable
+                if (lat == 0 && lon == 0)
+                {
+                    lat = p.TryGetProperty("lat", out var la) ? la.GetDouble() : 0;
+                    lon = p.TryGetProperty("lon", out var lo) ? lo.GetDouble() : 0;
+                }
+
+                var isObj = type.Equals("OBJ", StringComparison.OrdinalIgnoreCase);
+
+                // Default smart color: Red for objectives, Green for waypoints
+                var argbColor = isObj ? -65536 : -16711936;
+                if (p.TryGetProperty("color", out var colorEl))
+                {
+                    var colorName = colorEl.GetString();
+                    if (!string.IsNullOrWhiteSpace(colorName))
+                    {
+                        var found = ATAKHelper.ATAKPredefinedColors
+                            .FirstOrDefault(c => c.Name.Equals(colorName, StringComparison.OrdinalIgnoreCase));
+                        if (found != null) argbColor = found.Argb;
+                    }
+                }
 
                 result.Add(new AiExtractedPoint
                 {
-                    Name  = name,
-                    Type  = type.Equals("OBJ", StringComparison.OrdinalIgnoreCase)
-                                ? AiPointType.Objective
-                                : AiPointType.Waypoint,
-                    Lat   = lat,
-                    Lon   = lon,
-                    Notes = string.IsNullOrWhiteSpace(notes) ? null : notes,
-                    Selected = true
+                    Name      = name,
+                    Type      = isObj ? AiPointType.Objective : AiPointType.Waypoint,
+                    Lat       = lat,
+                    Lon       = lon,
+                    Notes     = string.IsNullOrWhiteSpace(notes) ? null : notes,
+                    Selected  = true,
+                    ArgbColor = argbColor
                 });
             }
 
