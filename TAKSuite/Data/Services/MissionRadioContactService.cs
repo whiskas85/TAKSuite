@@ -6,15 +6,16 @@ namespace TAKSuite.Data.Services
 {
     public class MissionRadioContactService : DataServiceAbstract<MissionRadioContact>
     {
-        public MissionRadioContactService(ApplicationDbContext context, IMemoryCache cache)
-            : base(context.MissionRadioContacts, context, cache)
+        public MissionRadioContactService(IDbContextFactory<ApplicationDbContext> factory, IMemoryCache cache)
+            : base(factory, ctx => ctx.MissionRadioContacts, cache)
         {
             Includes = [_ => _.RadioChannel, _ => _.BackupRadioChannel!];
         }
 
         public async Task<List<MissionRadioContact>> GetByMissionAsync(Guid missionId)
         {
-            return await _context.MissionRadioContacts
+            using var ctx = _factory.CreateDbContext();
+            return await ctx.MissionRadioContacts
                 .Include(_ => _.RadioChannel)
                 .Include(_ => _.BackupRadioChannel)
                 .Where(_ => _.MissionId == missionId)

@@ -9,12 +9,9 @@ namespace TAKSuite.Data.ServicesTak
     public class ParckingService
     {
         private readonly MartiApiClient _client;
-        private readonly ApplicationDbContext _context;
-        public ParckingService(ApplicationDbContext context, MartiApiClient client)
+        public ParckingService(MartiApiClient client)
         {
-
             _client = client;
-            _context = context;
         }
         public async Task<List<Parking>> GetAllAsync(String missionUid)
         {

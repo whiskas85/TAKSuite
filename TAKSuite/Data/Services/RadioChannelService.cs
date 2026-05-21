@@ -8,7 +8,7 @@ namespace TAKSuite.Data.Services
     public class RadioChannelService : DataServiceAbstract<RadioChannel>
     {
 
-        public RadioChannelService(ApplicationDbContext context, IMemoryCache cache) : base(context.RadioChannels, context, cache)
+        public RadioChannelService(IDbContextFactory<ApplicationDbContext> factory, IMemoryCache cache) : base(factory, ctx => ctx.RadioChannels, cache)
         {
 
         }

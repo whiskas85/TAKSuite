@@ -163,15 +163,9 @@ namespace TAKSuite.TAK.Helper
 
         internal static void CleanFlowTags(XmlDocument doc)
         {
-            // Seleziona il nodo '_flow-tags_'
-            XmlNode? flowTagsNode = doc.SelectSingleNode("//_flow-tags_");
-
-            // Rimuovi il nodo se trovato
-            if (flowTagsNode != null)
-            {
-                flowTagsNode.ParentNode?.RemoveChild(flowTagsNode);
-                Console.WriteLine("Elemento '_flow-tags_' rimosso.");
-            }
+            // _flow-tags_ is injected by ATAK clients and must be stripped before re-sending CoT
+            var node = doc.SelectSingleNode("//_flow-tags_");
+            node?.ParentNode?.RemoveChild(node);
         }
     }
 

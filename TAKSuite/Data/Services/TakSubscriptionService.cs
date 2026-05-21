@@ -6,29 +6,37 @@ namespace TAKSuite.Data.Services
 {
     public class TakSubscriptionService
     {
-        private readonly ApplicationDbContext _db;
+        private readonly IDbContextFactory<ApplicationDbContext> _factory;
 
-        public TakSubscriptionService(ApplicationDbContext db) => _db = db;
+        public TakSubscriptionService(IDbContextFactory<ApplicationDbContext> factory) => _factory = factory;
 
-        public Task<List<TakSubscription>> GetAllAsync() =>
-            _db.TakSubscriptions.OrderBy(s => s.MissionName).ToListAsync();
+        public async Task<List<TakSubscription>> GetAllAsync()
+        {
+            using var db = _factory.CreateDbContext();
+            return await db.TakSubscriptions.OrderBy(s => s.MissionName).ToListAsync();
+        }
 
-        public async Task<bool> IsSubscribedAsync(string missionName) =>
-            await _db.TakSubscriptions.AnyAsync(s => s.MissionName == missionName);
+        public async Task<bool> IsSubscribedAsync(string missionName)
+        {
+            using var db = _factory.CreateDbContext();
+            return await db.TakSubscriptions.AnyAsync(s => s.MissionName == missionName);
+        }
 
         public async Task AddAsync(string missionName)
         {
-            if (await IsSubscribedAsync(missionName)) return;
-            _db.TakSubscriptions.Add(new TakSubscription { MissionName = missionName });
-            await _db.SaveChangesAsync();
+            using var db = _factory.CreateDbContext();
+            if (await db.TakSubscriptions.AnyAsync(s => s.MissionName == missionName)) return;
+            db.TakSubscriptions.Add(new TakSubscription { MissionName = missionName });
+            await db.SaveChangesAsync();
         }
 
         public async Task RemoveAsync(string missionName)
         {
-            var sub = await _db.TakSubscriptions.FirstOrDefaultAsync(s => s.MissionName == missionName);
+            using var db = _factory.CreateDbContext();
+            var sub = await db.TakSubscriptions.FirstOrDefaultAsync(s => s.MissionName == missionName);
             if (sub == null) return;
-            _db.TakSubscriptions.Remove(sub);
-            await _db.SaveChangesAsync();
+            db.TakSubscriptions.Remove(sub);
+            await db.SaveChangesAsync();
         }
     }
 }

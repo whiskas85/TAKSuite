@@ -6,15 +6,16 @@ namespace TAKSuite.Data.Services
 {
     public class MissionPhoneContactService : DataServiceAbstract<MissionPhoneContact>
     {
-        public MissionPhoneContactService(ApplicationDbContext context, IMemoryCache cache)
-            : base(context.MissionPhoneContacts, context, cache)
+        public MissionPhoneContactService(IDbContextFactory<ApplicationDbContext> factory, IMemoryCache cache)
+            : base(factory, ctx => ctx.MissionPhoneContacts, cache)
         {
             Includes = [_ => _.PhoneContact];
         }
 
         public async Task<List<MissionPhoneContact>> GetByMissionAsync(Guid missionId)
         {
-            return await _context.MissionPhoneContacts
+            using var ctx = _factory.CreateDbContext();
+            return await ctx.MissionPhoneContacts
                 .Include(_ => _.PhoneContact)
                 .Where(_ => _.MissionId == missionId)
                 .OrderBy(_ => _.Role)

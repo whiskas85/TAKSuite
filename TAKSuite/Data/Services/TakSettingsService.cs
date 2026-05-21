@@ -6,18 +6,19 @@ namespace TAKSuite.Data.Services
 {
     public class TakSettingsService
     {
-        private readonly ApplicationDbContext _db;
+        private readonly IDbContextFactory<ApplicationDbContext> _factory;
 
-        public TakSettingsService(ApplicationDbContext db) => _db = db;
+        public TakSettingsService(IDbContextFactory<ApplicationDbContext> factory) => _factory = factory;
 
         public async Task<TakSettings> GetOrCreateAsync()
         {
-            var s = await _db.TakSettings.FindAsync(1);
+            using var db = _factory.CreateDbContext();
+            var s = await db.TakSettings.FindAsync(1);
             if (s != null) return s;
 
             s = new TakSettings { Id = 1 };
-            _db.TakSettings.Add(s);
-            await _db.SaveChangesAsync();
+            db.TakSettings.Add(s);
+            await db.SaveChangesAsync();
             return s;
         }
 
@@ -26,28 +27,33 @@ namespace TAKSuite.Data.Services
             settings.Id = 1;
             settings.LastModified = DateTime.UtcNow;
 
-            var existing = await _db.TakSettings.FindAsync(1);
+            using var db = _factory.CreateDbContext();
+            var existing = await db.TakSettings.FindAsync(1);
             if (existing == null)
             {
-                _db.TakSettings.Add(settings);
+                db.TakSettings.Add(settings);
             }
             else
             {
-                _db.Entry(existing).CurrentValues.SetValues(settings);
-                // CertificateP12 non viene copiato da SetValues se è null (non sovrascrive)
+                db.Entry(existing).CurrentValues.SetValues(settings);
                 if (settings.CertificateP12 != null)
                     existing.CertificateP12 = settings.CertificateP12;
             }
-            await _db.SaveChangesAsync();
+            await db.SaveChangesAsync();
         }
 
-        /// <summary>Salva solo i bytes del certificato senza toccare il resto.</summary>
         public async Task SaveCertificateAsync(byte[] p12Bytes)
         {
-            var s = await GetOrCreateAsync();
+            using var db = _factory.CreateDbContext();
+            var s = await db.TakSettings.FindAsync(1);
+            if (s == null)
+            {
+                s = new TakSettings { Id = 1 };
+                db.TakSettings.Add(s);
+            }
             s.CertificateP12 = p12Bytes;
-            s.LastModified   = DateTime.UtcNow;
-            await _db.SaveChangesAsync();
+            s.LastModified = DateTime.UtcNow;
+            await db.SaveChangesAsync();
         }
     }
 }
