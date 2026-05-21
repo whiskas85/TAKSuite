@@ -10,7 +10,7 @@ namespace TAKSuite.Data.Services
 {
     public class MissionSuiteService : DataServiceAbstract<MissionSuite>
     {
-        public MissionSuiteService(ApplicationDbContext context, IMemoryCache cache) : base(context.MissionsTakSuite, context, cache)
+        public MissionSuiteService(IDbContextFactory<ApplicationDbContext> factory, IMemoryCache cache) : base(factory, ctx => ctx.MissionsTakSuite, cache)
         {
             
         }

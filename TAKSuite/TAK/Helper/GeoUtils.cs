@@ -122,16 +122,9 @@ namespace TAKSuite.TAK.Helper
             if (west)  lon = -lon;
             return lat is >= -90 and <= 90 && lon is >= -180 and <= 180;
         }
-        private const double EarthRadius = 6371000; // Raggio della Terra in metri
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="lat1"></param>
-        /// <param name="lon1"></param>
-        /// <param name="lat2"></param>
-        /// <param name="lon2"></param>
-        /// <param name="threshold">La distanza in metri</param>
-        /// <returns></returns>
+        private const double EarthRadius = 6371000;
+
+        // Returns true if the haversine distance between the two points is within threshold metres
         public static bool ArePointsClose(double lat1, double lon1, double lat2, double lon2, double threshold = 10.0)
         {
             double dLat = DegreesToRadians(lat2 - lat1);

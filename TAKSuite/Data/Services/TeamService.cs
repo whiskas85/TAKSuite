@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using TAKSuite.Data.Models;
 
@@ -6,7 +6,7 @@ namespace TAKSuite.Data.Services
 {
     public class TeamService : DataServiceAbstract<Team>, IDataProvider
     {
-        public TeamService(ApplicationDbContext context, IMemoryCache cache) : base(context.Teams, context, cache)
+        public TeamService(IDbContextFactory<ApplicationDbContext> factory, IMemoryCache cache) : base(factory, ctx => ctx.Teams, cache)
         {
             Includes = [_ => _.TeamLeader];
         }
@@ -16,25 +16,10 @@ namespace TAKSuite.Data.Services
         {
             try
             {
-                var subTeams = await _context.Teams
-                    .Where(t => t.ParentTeamId == team.Id)
-                    .ToListAsync();
-
-                // Lista totale di tutti i sotto-team (inclusi quelli annidati)
-                List<Team> allSubTeams = new(subTeams);
-
-                // Per ogni sotto-team, recupera ricorsivamente i suoi sotto-team
-                foreach (var subTeam in subTeams)
-                {
-                    allSubTeams.AddRange(await GetSubTeamsAsync(subTeam));
-                }
-
+                using var ctx = _factory.CreateDbContext();
+                var allSubTeams = await GetSubTeamsRecursiveAsync(ctx, team.Id);
                 if (includeMyTeam)
-                {
-                    // Aggiungi il team corrente alla lista se includeMyTeam è true
-                    allSubTeams.Insert(0,team);
-                }
-
+                    allSubTeams.Insert(0, team);
                 return allSubTeams;
             }
             catch (Exception ex)
@@ -42,6 +27,15 @@ namespace TAKSuite.Data.Services
                 Console.WriteLine($"Errore nella richiesta: {ex.Message}");
                 return new List<Team>();
             }
+        }
+
+        private async Task<List<Team>> GetSubTeamsRecursiveAsync(ApplicationDbContext ctx, Guid teamId)
+        {
+            var subTeams = await ctx.Teams.Where(t => t.ParentTeamId == teamId).ToListAsync();
+            var result = new List<Team>(subTeams);
+            foreach (var subTeam in subTeams)
+                result.AddRange(await GetSubTeamsRecursiveAsync(ctx, subTeam.Id));
+            return result;
         }
     }
 }

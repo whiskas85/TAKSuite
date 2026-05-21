@@ -123,6 +123,7 @@ namespace TAKSuite.TAK.CoT
             }
 
             await TakClient.SendCotAsync(cotXml);
+            // TAK server must ingest the CoT via TCP before the REST uid-association call succeeds
             await Task.Delay(200);
 
             try
@@ -149,20 +150,7 @@ namespace TAKSuite.TAK.CoT
             var now  = DateTime.UtcNow;
             var stale = now.AddYears(1);
 
-            //var inv = System.Globalization.CultureInfo.InvariantCulture;
-            //var cotXml = template.CotXml
-            //    .Replace("{{UID}}", uid)
-            //    .Replace("{{NAME}}", dicName["callsign"].ToString())
-            //    .Replace("{{LAT}}", ((int)dicName["lat"]).ToString(inv))
-            //    .Replace("{{LON}}", ((int)dicName["lon"]).ToString(inv))
-            //    .Replace("{{REMARKS}}", (dicName.TryGetValue("remarks", out var remarks)? remarks?.ToString() ?? string.Empty: string.Empty)
-            //    .Replace("{{MISSION_UID}}", missionUid)
-            //    .Replace("{{TIME}}", now.ToString("yyyy-MM-ddTHH:mm:ss.00Z"))
-            //    .Replace("{{STALE}}", stale.ToString("yyyy-MM-ddTHH:mm:ss.00Z"))
-            //    .Replace("{{CREATOR_UID}}", CreatorUid)
-            //    .Replace("{{COLOR}}", dicName.TryGetValue("color", out var color) && color is int c ? c.ToString(inv) : "-1"));
-
-            // ✅ aggiungo i valori extra non nel dizionario
+            // Inject runtime values not provided by the caller (UID, timestamps, server identity)
             var extra = new Dictionary<string, object>
             {
                 { "UID", uid },
@@ -177,6 +165,7 @@ namespace TAKSuite.TAK.CoT
 
 
             await TakClient.SendCotAsync(cotXml);
+            // TAK server must ingest the CoT via TCP before the REST uid-association call succeeds
             await Task.Delay(200);
 
             try
@@ -215,6 +204,8 @@ namespace TAKSuite.TAK.CoT
                 $"</detail></event>";
 
             await TakClient.SendCotAsync(cotXml);
+            // TAK server must ingest the CoT via TCP before the REST uid-association call succeeds;
+            // parking uses 300 ms instead of 200 ms because the iconset lookup is slightly slower
             await Task.Delay(300);
 
             try
@@ -241,6 +232,7 @@ namespace TAKSuite.TAK.CoT
                     staleAfter:  TimeSpan.FromDays(365));
 
                 await TakClient.SendCotAsync(modified);
+                // TAK server must ingest the updated CoT via TCP before the REST uid-association call succeeds
                 await Task.Delay(300);
 
                 if (!string.IsNullOrEmpty(missionUID))

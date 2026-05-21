@@ -7,7 +7,7 @@ namespace TAKSuite.Data.Services
 {
     public class UserServiceAtak : DataServiceAbstract<UserAtak>
     {
-        public UserServiceAtak(ApplicationDbContext context, IMemoryCache cache) : base(context.UsersAtak, context, cache)
+        public UserServiceAtak(IDbContextFactory<ApplicationDbContext> factory, IMemoryCache cache) : base(factory, ctx => ctx.UsersAtak, cache)
         {
             Includes = [_ => _.Team];
         }
