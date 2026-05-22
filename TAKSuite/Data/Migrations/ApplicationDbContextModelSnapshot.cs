@@ -288,6 +288,24 @@ namespace TAKSuite.Migrations
                     b.ToTable("CotTemplates");
                 });
 
+            modelBuilder.Entity("TAKSuite.Data.Models.DocumentType", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Target")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DocumentTypes");
+                });
+
             modelBuilder.Entity("TAKSuite.Data.Models.Documentation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -296,6 +314,9 @@ namespace TAKSuite.Migrations
 
                     b.Property<DateTime>("CreationDate")
                         .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("DocumentTypeId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<bool>("IsValid")
                         .HasColumnType("bit");
@@ -319,6 +340,8 @@ namespace TAKSuite.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("DocumentTypeId");
 
                     b.HasIndex("TaskEntityId");
 
@@ -1061,9 +1084,16 @@ namespace TAKSuite.Migrations
 
             modelBuilder.Entity("TAKSuite.Data.Models.Documentation", b =>
                 {
+                    b.HasOne("TAKSuite.Data.Models.DocumentType", "DocumentType")
+                        .WithMany()
+                        .HasForeignKey("DocumentTypeId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("TAKSuite.Data.Models.TaskEntity", null)
                         .WithMany("Documents")
                         .HasForeignKey("TaskEntityId");
+
+                    b.Navigation("DocumentType");
                 });
 
             modelBuilder.Entity("TAKSuite.Data.Models.DocumentationOwner", b =>

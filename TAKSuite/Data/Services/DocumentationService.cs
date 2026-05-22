@@ -19,7 +19,7 @@ namespace TAKSuite.Data.Services
             throw new NotSupportedException("Use AddDocumentationAsync instead");
         }
 
-        public async Task<Documentation?> AddDocumentationAsync(IBrowserFile file)
+        public async Task<Documentation?> AddDocumentationAsync(IBrowserFile file, Guid? documentTypeId = null)
         {
             Documentation documentation = new Documentation { Id = Guid.NewGuid() };
             var trustedFileName = documentation.Id.ToString();
@@ -37,6 +37,7 @@ namespace TAKSuite.Data.Services
                 documentation.Path = path;
                 documentation.Name = file.Name;
                 documentation.Type = file.ContentType;
+                documentation.DocumentTypeId = documentTypeId;
 
                 using var ctx = _factory.CreateDbContext();
                 ctx.Documents.Add(documentation);
@@ -47,6 +48,55 @@ namespace TAKSuite.Data.Services
             {
                 Console.WriteLine(e.Message);
                 return null;
+            }
+        }
+
+        public async Task<bool> RenameAsync(Guid id, string newName)
+        {
+            if (string.IsNullOrWhiteSpace(newName)) return false;
+            using var ctx = _factory.CreateDbContext();
+            var doc = await ctx.Documents.FindAsync(id);
+            if (doc == null) return false;
+            doc.Name = newName.Trim();
+            doc.LastModified = DateTime.Now;
+            await ctx.SaveChangesAsync();
+            _cache.Remove(_cacheKey);
+            return true;
+        }
+
+        public async Task<bool> SetDocumentTypeAsync(Guid docId, Guid? typeId)
+        {
+            using var ctx = _factory.CreateDbContext();
+            var doc = await ctx.Documents.FindAsync(docId);
+            if (doc == null) return false;
+            doc.DocumentTypeId = typeId;
+            await ctx.SaveChangesAsync();
+            _cache.Remove(_cacheKey);
+            return true;
+        }
+
+        public async Task<bool> UpdateDocumentAsync(Guid id, IBrowserFile file)
+        {
+            using var ctx = _factory.CreateDbContext();
+            var doc = await ctx.Documents.FindAsync(id);
+            if (doc == null) return false;
+
+            try
+            {
+                await using var fs = new FileStream(doc.Path, FileMode.Create);
+                await file.OpenReadStream(maxFileSize).CopyToAsync(fs);
+
+                doc.Name         = file.Name;
+                doc.Type         = file.ContentType;
+                doc.LastModified = DateTime.Now;
+                await ctx.SaveChangesAsync();
+                _cache.Remove(_cacheKey);
+                return true;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.Message);
+                return false;
             }
         }
 
@@ -126,6 +176,7 @@ namespace TAKSuite.Data.Services
                 .ToListAsync();
 
             return await ctx.Documents
+                .Include(d => d.DocumentType)
                 .Where(d => documentIds.Contains(d.Id))
                 .ToListAsync();
         }

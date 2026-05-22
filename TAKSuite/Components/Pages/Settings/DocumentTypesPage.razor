@@ -1,0 +1,350 @@
+@page "/settings/document-types"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+
+@inject DocumentTypeService DocTypeService
+@inject ToastService ToastService
+
+<style>
+    .icon-picker-trigger {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        background: var(--bs-body-bg);
+        border: 1px solid var(--bs-border-color);
+        border-radius: .375rem;
+        padding: .375rem .75rem;
+        font-size: .875rem;
+        cursor: pointer;
+        user-select: none;
+        transition: border-color .15s;
+        width: 100%;
+    }
+    .icon-picker-trigger:hover { border-color: var(--bs-primary); }
+    .icon-picker-trigger .label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+    .icon-picker-trigger.sm { padding: .25rem .5rem; font-size: .8125rem; border-radius: .25rem; }
+    .icon-picker-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 3px;
+        padding: .25rem 0;
+        max-height: 380px;
+        overflow-y: auto;
+    }
+    .icon-picker-item {
+        width: 2.25rem;
+        height: 2.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: .25rem;
+        cursor: pointer;
+        font-size: 1.1rem;
+        transition: background .1s;
+        flex-shrink: 0;
+    }
+    .icon-picker-item:hover { background: var(--bs-secondary-bg); }
+    .icon-picker-item.selected { background: var(--bs-primary); color: #fff; }
+</style>
+
+<!-- Icon Picker Modal -->
+<Modal @ref="_iconPickerModal" Title="Scegli icona" Size="ModalSize.Large">
+    <BodyTemplate>
+        <input type="text" class="form-control mb-3"
+               placeholder="Cerca tra @(_allIconNames.Length) icone..."
+               @bind="_iconSearch" @bind:event="oninput" />
+        <div class="icon-picker-grid">
+            <div class="icon-picker-item @(CurrentIcon == "" ? "selected" : "")"
+                 title="Nessuna"
+                 @onclick='() => SelectIcon("")'>
+                <span style="font-size:.65rem;color:var(--bs-secondary-color)">—</span>
+            </div>
+            @foreach (var n in GetFilteredIconNames())
+            {
+                var name = n;
+                <div class="icon-picker-item @(CurrentIcon == name ? "selected" : "")"
+                     title="@name"
+                     @onclick="() => SelectIcon(name)">
+                    <Icon Name="@ToIconName(name)" />
+                </div>
+            }
+        </div>
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Secondary" @onclick="() => _iconPickerModal.HideAsync()">Chiudi</Button>
+    </FooterTemplate>
+</Modal>
+
+<PageTitle>Tipologie Documento</PageTitle>
+
+<div class="page-sticky-header d-flex justify-content-between align-items-center">
+    <div>
+        <h3 class="mb-0"><Icon Name="IconName.TagFill" /> Tipologie Documento</h3>
+        <p class="text-muted mb-0 small">Gestisci le categorie per classificare i documenti</p>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header fw-semibold">Aggiungi tipologia</div>
+    <div class="card-body">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label small">Descrizione</label>
+                <input type="text" class="form-control" placeholder="es. Ordine operativo"
+                       @bind="_newDescription" @bind:event="oninput"
+                       @onkeydown="OnAddKeyDown" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small">Contesto (Target)</label>
+                <select class="form-select" @bind="_newTarget">
+                    <option value="@DocumentTypeTarget.Mission">Missione</option>
+                    <option value="@DocumentTypeTarget.Task">Task</option>
+                    <option value="@DocumentTypeTarget.Team">Team</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small">Icona</label>
+                <button type="button" class="icon-picker-trigger" @onclick='() => OpenIconPicker("add")'>
+                    @{ var pa = ParseIcon(_newIcon); }
+                    @if (pa.HasValue) { <Icon Name="@pa.Value" /> }
+                    <span class="label">@(string.IsNullOrEmpty(_newIcon) ? "— Nessuna —" : _newIcon)</span>
+                    <Icon Name="IconName.ChevronExpand" />
+                </button>
+            </div>
+            <div class="col-md-2">
+                <Button Color="ButtonColor.Primary" @onclick="AddAsync"
+                        Disabled="@string.IsNullOrWhiteSpace(_newDescription)">
+                    <Icon Name="IconName.PlusLg" /> Aggiungi
+                </Button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header fw-semibold">
+        Tipologie esistenti
+        <Badge Color="BadgeColor.Secondary" Class="ms-1">@_types.Count</Badge>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead class="bg-success text-white">
+                <tr>
+                    <th style="width:3rem">Icona</th>
+                    <th>Descrizione</th>
+                    <th style="width:160px">Contesto</th>
+                    <th style="width:80px"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (_types.Count == 0)
+                {
+                    <tr>
+                        <td colspan="4" class="text-center text-muted py-4">Nessuna tipologia definita.</td>
+                    </tr>
+                }
+                @foreach (var t in _types)
+                {
+                    <tr>
+                        @if (_editingId == t.Id)
+                        {
+                            <td class="align-middle">
+                                <button type="button" class="icon-picker-trigger sm" @onclick='() => OpenIconPicker("edit")'>
+                                    @{ var pe = ParseIcon(_editIcon); }
+                                    @if (pe.HasValue) { <Icon Name="@pe.Value" /> }
+                                    else { <span style="font-size:.7rem;color:var(--bs-secondary-color)">—</span> }
+                                    <Icon Name="IconName.ChevronExpand" />
+                                </button>
+                            </td>
+                            <td>
+                                <input type="text" class="form-control form-control-sm"
+                                       @bind="_editDescription" @bind:event="oninput"
+                                       @onkeydown="e => OnEditKeyDown(e, t)" />
+                            </td>
+                            <td>
+                                <select class="form-select form-select-sm" @bind="_editTarget">
+                                    <option value="@DocumentTypeTarget.Mission">Missione</option>
+                                    <option value="@DocumentTypeTarget.Task">Task</option>
+                                    <option value="@DocumentTypeTarget.Team">Team</option>
+                                </select>
+                            </td>
+                            <td>
+                                <div class="d-flex gap-1">
+                                    <Button Size="ButtonSize.Small" Color="ButtonColor.Success"
+                                            @onclick="() => SaveEditAsync(t)">
+                                        <Icon Name="IconName.CheckLg" />
+                                    </Button>
+                                    <Button Size="ButtonSize.Small" Color="ButtonColor.Secondary"
+                                            @onclick="CancelEdit">
+                                        <Icon Name="IconName.X" />
+                                    </Button>
+                                </div>
+                            </td>
+                        }
+                        else
+                        {
+                            <td class="align-middle">
+                                @{ var ic = ParseIcon(t.Icon); }
+                                @if (ic.HasValue) { <Icon Name="@ic.Value" /> }
+                                else { <span class="text-body-secondary">—</span> }
+                            </td>
+                            <td class="align-middle fw-semibold">@t.Description</td>
+                            <td class="align-middle">
+                                <span class="badge @TargetBadge(t.Target)">@TargetLabel(t.Target)</span>
+                            </td>
+                            <td>
+                                <div class="d-flex gap-1">
+                                    <Button Size="ButtonSize.Small" Color="ButtonColor.Secondary" Outline="true"
+                                            @onclick="() => StartEdit(t)">
+                                        <Icon Name="IconName.PencilFill" />
+                                    </Button>
+                                    <Button Size="ButtonSize.Small" Color="ButtonColor.Danger" Outline="true"
+                                            @onclick="() => DeleteAsync(t)">
+                                        <Icon Name="IconName.Trash3Fill" />
+                                    </Button>
+                                </div>
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    private List<DocumentType> _types = new();
+    private string _newDescription = "";
+    private DocumentTypeTarget _newTarget = DocumentTypeTarget.Mission;
+    private string _newIcon = "";
+
+    private Guid? _editingId;
+    private string _editDescription = "";
+    private DocumentTypeTarget _editTarget;
+    private string _editIcon = "";
+
+    // Icon picker modal
+    private Modal _iconPickerModal = default!;
+    private string _iconPickerTarget = "add"; // "add" | "edit"
+    private string _iconSearch = "";
+
+    private string CurrentIcon => _iconPickerTarget == "edit" ? _editIcon : _newIcon;
+
+    private static readonly string[] _allIconNames =
+        Enum.GetNames<IconName>().OrderBy(n => n).ToArray();
+
+    private IEnumerable<string> GetFilteredIconNames() =>
+        string.IsNullOrWhiteSpace(_iconSearch)
+            ? _allIconNames
+            : _allIconNames.Where(n => n.Contains(_iconSearch, StringComparison.OrdinalIgnoreCase));
+
+    private async Task OpenIconPicker(string target)
+    {
+        _iconPickerTarget = target;
+        _iconSearch = "";
+        await _iconPickerModal.ShowAsync();
+    }
+
+    private async Task SelectIcon(string name)
+    {
+        if (_iconPickerTarget == "edit")
+            _editIcon = name;
+        else
+            _newIcon = name;
+
+        await _iconPickerModal.HideAsync();
+    }
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _types = await DocTypeService.GetAllAsync();
+        _types = _types.OrderBy(t => t.Target).ThenBy(t => t.Order).ThenBy(t => t.Description).ToList();
+    }
+
+    private async Task AddAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newDescription)) return;
+        var maxOrder = _types.Where(t => t.Target == _newTarget).Select(t => (int?)t.Order).Max() ?? -1;
+        await DocTypeService.AddAsync(new DocumentType
+        {
+            Id          = Guid.NewGuid(),
+            Description = _newDescription.Trim(),
+            Target      = _newTarget,
+            Icon        = string.IsNullOrEmpty(_newIcon) ? null : _newIcon,
+            Order       = maxOrder + 1
+        });
+        _newDescription = "";
+        _newIcon = "";
+        await LoadAsync();
+        ToastService.Notify(new(ToastType.Success, "Tipologie", "Tipologia aggiunta."));
+    }
+
+    private void StartEdit(DocumentType t)
+    {
+        _editingId       = t.Id;
+        _editDescription = t.Description;
+        _editTarget      = t.Target;
+        _editIcon        = t.Icon ?? "";
+    }
+
+    private void CancelEdit() => _editingId = null;
+
+    private async Task SaveEditAsync(DocumentType t)
+    {
+        if (string.IsNullOrWhiteSpace(_editDescription)) return;
+        t.Description = _editDescription.Trim();
+        t.Target      = _editTarget;
+        t.Icon        = string.IsNullOrEmpty(_editIcon) ? null : _editIcon;
+        await DocTypeService.UpdateAsync(t);
+        _editingId = null;
+        await LoadAsync();
+        ToastService.Notify(new(ToastType.Success, "Tipologie", "Tipologia aggiornata."));
+    }
+
+    private async Task DeleteAsync(DocumentType t)
+    {
+        await DocTypeService.DeleteAsync(t.Id);
+        await LoadAsync();
+        ToastService.Notify(new(ToastType.Success, "Tipologie", "Tipologia eliminata."));
+    }
+
+    private async Task OnAddKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await AddAsync();
+    }
+
+    private async Task OnEditKeyDown(KeyboardEventArgs e, DocumentType t)
+    {
+        if (e.Key == "Enter") await SaveEditAsync(t);
+        if (e.Key == "Escape") CancelEdit();
+    }
+
+    private static IconName ToIconName(string name) => Enum.Parse<IconName>(name);
+
+    private static IconName? ParseIcon(string? name)
+    {
+        if (string.IsNullOrEmpty(name)) return null;
+        return Enum.TryParse<IconName>(name, out var result) ? result : null;
+    }
+
+    private static string TargetLabel(DocumentTypeTarget t) => t switch
+    {
+        DocumentTypeTarget.Mission => "Missione",
+        DocumentTypeTarget.Task    => "Task",
+        DocumentTypeTarget.Team    => "Team",
+        _                          => t.ToString()
+    };
+
+    private static string TargetBadge(DocumentTypeTarget t) => t switch
+    {
+        DocumentTypeTarget.Mission => "bg-success",
+        DocumentTypeTarget.Task    => "bg-primary",
+        DocumentTypeTarget.Team    => "bg-secondary",
+        _                          => "bg-secondary"
+    };
+}

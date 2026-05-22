@@ -1,0 +1,137 @@
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Identity
+@using TAKSuite.Data
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IServiceScopeFactory ScopeFactory
+@inject IJSRuntime JS
+
+<div class="user-avatar-container">
+    <div class="dropdown">
+        <button type="button"
+                class="avatar-circle-btn dropdown-toggle"
+                data-bs-toggle="dropdown"
+                data-bs-auto-close="outside"
+                aria-expanded="false"
+                title="@_displayName">
+            @_initials
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end avatar-dropdown-menu mt-1">
+            <li class="px-3 py-2 border-bottom">
+                <div class="fw-semibold">@_displayName</div>
+                @if (!string.IsNullOrEmpty(_nick) && !string.IsNullOrEmpty(_email))
+                {
+                    <div class="text-muted small">@_email</div>
+                }
+            </li>
+
+            <li>
+                <a class="dropdown-item" href="account/personal">
+                    <Icon Name="IconName.PersonFill" Class="me-2" /> Profilo
+                </a>
+            </li>
+
+            <li><hr class="dropdown-divider" /></li>
+
+            <li class="px-3 py-2">
+                <span class="text-muted small d-block mb-2">Tema</span>
+                <div class="d-flex gap-1">
+                    <button type="button"
+                            class="btn btn-sm @(_currentTheme == "light" ? "btn-success" : "btn-outline-secondary") flex-fill"
+                            @onclick='() => SetThemeAsync("light")'
+                            @onclick:stopPropagation="true">
+                        <Icon Name="IconName.BrightnessHighFill" /> Chiaro
+                    </button>
+                    <button type="button"
+                            class="btn btn-sm @(_currentTheme == "dark" ? "btn-success" : "btn-outline-secondary") flex-fill"
+                            @onclick='() => SetThemeAsync("dark")'
+                            @onclick:stopPropagation="true">
+                        <Icon Name="IconName.MoonFill" /> Scuro
+                    </button>
+                    <button type="button"
+                            class="btn btn-sm @(_currentTheme == "auto" ? "btn-success" : "btn-outline-secondary") flex-fill"
+                            @onclick='() => SetThemeAsync("auto")'
+                            @onclick:stopPropagation="true">
+                        <Icon Name="IconName.CircleHalf" /> Auto
+                    </button>
+                </div>
+            </li>
+
+            <li><hr class="dropdown-divider" /></li>
+
+            <li>
+                <form action="Account/Logout" method="post">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="ReturnUrl" value="/" />
+                    <button type="submit" class="dropdown-item text-danger">
+                        <Icon Name="IconName.BoxArrowRight" Class="me-2" /> Logout
+                    </button>
+                </form>
+            </li>
+        </ul>
+    </div>
+</div>
+
+@code {
+    private string? _nick;
+    private string? _email;
+    private string _initials = "?";
+    private string _displayName = "";
+    private string _currentTheme = "auto";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var appUser = await userManager.GetUserAsync(authState.User);
+        if (appUser == null) return;
+
+        _email = appUser.Email;
+
+        try
+        {
+            var userService = scope.ServiceProvider.GetRequiredService<UserServiceAtak>();
+            var atakUser = await userService.GetAsync(appUser.UserId);
+            if (!string.IsNullOrWhiteSpace(atakUser?.Nick))
+                _nick = atakUser.Nick;
+        }
+        catch { }
+
+        _displayName = _nick ?? _email ?? "Utente";
+        _initials = ComputeInitials(_nick ?? _email ?? "?");
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                _currentTheme = await JS.InvokeAsync<string>("avatarGetTheme");
+            }
+            catch
+            {
+                _currentTheme = "auto";
+            }
+            StateHasChanged();
+        }
+    }
+
+    private async Task SetThemeAsync(string theme)
+    {
+        _currentTheme = theme;
+        await JS.InvokeVoidAsync("avatarSetTheme", theme);
+    }
+
+    private static string ComputeInitials(string input)
+    {
+        var local = input.Contains('@') ? input.Split('@')[0] : input;
+        var parts = local.Split(new[] { '.', '_', '-', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return "?";
+        if (parts.Length == 1) return parts[0][0..1].ToUpper();
+        return $"{char.ToUpper(parts[0][0])}{char.ToUpper(parts[1][0])}";
+    }
+}

@@ -95,6 +95,7 @@ builder.Services.AddTransient<RadioChannelService>();
 builder.Services.AddTransient<TeamRadioChannelService>();
 builder.Services.AddTransient<UserServiceAtak>();
 builder.Services.AddTransient<DocumentationService>();
+builder.Services.AddTransient<DocumentTypeService>();
 builder.Services.AddTransient<TaskService>();
 builder.Services.AddTransient<TaskPrioritiesService>();
 builder.Services.AddTransient<EventEntityService>();

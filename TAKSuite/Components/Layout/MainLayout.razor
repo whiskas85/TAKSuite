@@ -1,67 +1,52 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
+@inject NavigationManager NavigationManager
+@implements IDisposable
 
 <MediaQueryList>
     <div class="page">
         <AuthorizeView>
             <Authorized>
-                <div class="sidebar">
+                @if (_mobileSidebarOpen)
+                {
+                    <div class="mobile-sidebar-overlay" @onclick="CloseSidebar"></div>
+                }
+                <div class="sidebar @(_mobileSidebarOpen ? "mobile-sidebar-open" : "")">
                     <NavMenu />
                 </div>
             </Authorized>
         </AuthorizeView>
 
         <main>
-            <!-- Top bar con sfondo -->
-            <div class="top-row bg-body shadow-sm px-3 py-2 d-flex justify-content-between align-items-center border-bottom">
-                <AuthorizeView>
-                    <Authorized>
-                        <!-- Spazio vuoto per mantenere struttura -->
-                        <div></div>
-                    </Authorized>
-
-                    <NotAuthorized>
-                        <!-- Logo + Titolo visibili solo se non loggato -->
-                        <div class="d-flex align-items-center">
-                            <img src="images/tak trasp.png" alt="TAK Logo" style="height: 40px;" class="me-2" />
-                            <span class="fw-bold fs-5">TAK Suite</span>
-                        </div>
-                    </NotAuthorized>
-                </AuthorizeView>
-
-                <div class="d-flex align-items-center">
-                    <AuthorizeView>
-                        <Authorized>
-                            <div class="d-flex align-items-center">
-                                <NavLink class="nav-link me-3" href="account/personal">
-                                    <span class="bi bi-person-fill" aria-hidden="true"></span>
-                                    @context.User.Identity?.Name
-                                </NavLink>
-                                <form action="Account/Logout" method="post" class="m-0">
-                                    <AntiforgeryToken />
-                                    <input type="hidden" name="ReturnUrl" value="@currentUrl" />
-                                    <Button Type="ButtonType.Submit">
-                                        <Icon CustomIconName="bi bi-box-arrow-right" Style="font-size: 1.5rem;" />
-                                    </Button>
-                                </form>
-                            </div>
-                        </Authorized>
-                        <NotAuthorized>
-                            <div class="d-flex">
-                                <NavLink class="nav-link me-3" href="Account/Register">
-                                    <span class="bi bi-person" aria-hidden="true"></span> Register
-                                </NavLink>
-                                <NavLink class="nav-link" href="Account/Login">
-                                    <span class="bi bi-person-badge" aria-hidden="true"></span> Login
-                                </NavLink>
-                            </div>
-                        </NotAuthorized>
-                    </AuthorizeView>
-
-                    <div class="ms-3">
-                        <ThemeSwitcher Position="DropdownMenuPosition.End" />
+            <AuthorizeView>
+                <Authorized>
+                    <div class="mobile-topbar">
+                        <button type="button" class="mobile-topbar-hamburger" @onclick="ToggleSidebar">
+                            @if (_mobileSidebarOpen)
+                            {<span class="bi bi-x-lg"></span>}
+                            else
+                            {<span class="bi bi-list"></span>}
+                        </button>
+                        <span class="mobile-topbar-title">TAK Suite</span>
                     </div>
-                </div>
-            </div>
+                    <UserAvatarButton />
+                </Authorized>
+                <NotAuthorized>
+                    <div class="guest-topbar d-flex align-items-center justify-content-between px-3 py-2 border-bottom">
+                        <div class="d-flex align-items-center">
+                            <img src="images/tak trasp.png" alt="TAK Logo" style="height: 32px;" class="me-2" />
+                            <span class="fw-bold">TAK Suite</span>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <NavLink class="nav-link" href="Account/Register">
+                                <span class="bi bi-person" aria-hidden="true"></span> Register
+                            </NavLink>
+                            <NavLink class="nav-link" href="Account/Login">
+                                <span class="bi bi-person-badge" aria-hidden="true"></span> Login
+                            </NavLink>
+                        </div>
+                    </div>
+                </NotAuthorized>
+            </AuthorizeView>
 
             <article class="content px-4">
                 @Body
@@ -79,21 +64,22 @@
 </MediaQueryList>
 
 @code {
-    private string? currentUrl;
-
-    [Inject] private NavigationManager NavigationManager { get; set; } = default!;
     [Inject] protected ToastService ToastService { get; set; } = default!;
+
+    private bool _mobileSidebarOpen;
+
+    private void ToggleSidebar() => _mobileSidebarOpen = !_mobileSidebarOpen;
+    private void CloseSidebar()  => _mobileSidebarOpen = false;
 
     protected override void OnInitialized()
     {
-        currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
         NavigationManager.LocationChanged += OnLocationChanged;
     }
 
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
-        currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
-        StateHasChanged();
+        _mobileSidebarOpen = false;
+        InvokeAsync(StateHasChanged);
     }
 
     public void Dispose()

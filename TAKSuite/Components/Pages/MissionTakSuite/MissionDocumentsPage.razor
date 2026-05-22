@@ -1,0 +1,1090 @@
+@page "/missiontak/{MissionTakId:guid}/documents"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@inject MissionSuiteEntityServices MissionService
+@inject DocumentationService DocService
+@inject DocumentTypeService DocTypeService
+@inject ToastService ToastService
+@inject IJSRuntime JS
+
+<style>
+    .doc-drop-zone {
+        position: relative;
+        border: 2px dashed var(--bs-border-color);
+        border-radius: .5rem;
+        background: var(--bs-tertiary-bg);
+        padding: 2.5rem 1rem;
+        text-align: center;
+        transition: background .15s, border-color .15s, color .15s;
+        cursor: pointer;
+        color: var(--bs-secondary-color);
+    }
+    .doc-drop-zone.doc-drop-zone--active {
+        border-color: var(--bs-primary);
+        background: var(--bs-primary-bg-subtle);
+        color: var(--bs-primary);
+    }
+    .doc-drop-zone__link { color: var(--bs-primary); text-decoration: underline; }
+
+    .doc-tab-bar {
+        display: flex;
+        gap: 0.25rem;
+        border-bottom: 2px solid var(--bs-border-color);
+        padding-bottom: 0;
+        margin-bottom: 1rem;
+        flex-wrap: nowrap;
+        align-items: flex-end;
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+    .doc-tab-bar::-webkit-scrollbar { display: none; }
+    .doc-tab-btn {
+        padding: 0.4rem 0.85rem;
+        border: 1px solid var(--bs-border-color);
+        border-bottom: none;
+        border-radius: 0.375rem 0.375rem 0 0;
+        background: var(--bs-tertiary-bg);
+        color: var(--bs-body-color);
+        cursor: pointer;
+        font-size: 0.875rem;
+        transition: background .15s;
+        position: relative;
+        bottom: -2px;
+        white-space: nowrap;
+        user-select: none;
+        flex-shrink: 0;
+    }
+    .doc-tab-btn:hover { background: var(--bs-secondary-bg); }
+    .doc-tab-btn.active {
+        background: var(--bs-body-bg);
+        border-color: var(--bs-border-color);
+        border-bottom-color: var(--bs-body-bg);
+        color: var(--bs-primary);
+        font-weight: 600;
+        z-index: 1;
+    }
+    .doc-tab-btn.tab-drag-over {
+        background: var(--bs-primary-bg-subtle);
+        border-color: var(--bs-primary);
+        color: var(--bs-primary);
+    }
+    .doc-tab-btn.tab-reorder-target {
+        border-left: 3px solid var(--bs-warning);
+    }
+    .doc-tab-add-btn {
+        padding: 0.4rem 0.6rem;
+        color: var(--bs-secondary-color);
+        border-color: transparent;
+    }
+    .doc-tab-grip {
+        cursor: grab;
+        color: var(--bs-secondary-color);
+        opacity: 0.35;
+        margin-right: 0.2rem;
+        font-size: 0.75rem;
+        display: inline-block;
+    }
+    .doc-tab-grip:hover { opacity: 0.75; }
+    .doc-tab-search {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding-bottom: 6px;
+        flex-shrink: 0;
+    }
+    tr.doc-row-dragging { opacity: 0.4; }
+    tr[draggable="true"] { cursor: grab; }
+    .bb-icon-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 3px;
+        max-height: 220px;
+        overflow-y: auto;
+        padding: .25rem 0;
+    }
+    .bb-icon-item {
+        width: 2.25rem;
+        height: 2.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: .25rem;
+        cursor: pointer;
+        font-size: 1.1rem;
+        flex-shrink: 0;
+    }
+    .bb-icon-item:hover { background: var(--bs-secondary-bg); }
+    .bb-icon-item.selected { background: var(--bs-primary); color: #fff; }
+</style>
+
+<PageTitle>Documenti — @(_mission?.Name ?? "Missione")</PageTitle>
+
+@if (_mission == null)
+{
+    <p>Caricamento...</p>
+}
+else
+{
+    <!-- Upload Modal -->
+    <Modal @ref="_uploadModal" Title="Carica documenti" Size="ModalSize.Large" OnHiding="OnUploadModalHiding">
+        <BodyTemplate>
+            <div class="doc-drop-zone @(_dragCounter > 0 ? "doc-drop-zone--active" : "")"
+                 @ondragenter="OnDragEnter"
+                 @ondragleave="OnDragLeave"
+                 @ondragover:preventDefault="true"
+                 @ondrop:preventDefault="true"
+                 @ondrop="OnDragDrop">
+                <InputFile OnChange="OnUploadFilesSelected" multiple
+                           accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.txt,.md,.csv,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp"
+                           style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:1;" />
+                @if (_dragCounter > 0)
+                {
+                    <div style="pointer-events:none;">
+                        <Icon Name="IconName.CloudArrowDownFill" Size="IconSize.x3" />
+                        <p class="fw-semibold mt-2 mb-0">Rilascia per caricare</p>
+                    </div>
+                }
+                else if (_uploadFiles.Any())
+                {
+                    <div style="pointer-events:none;">
+                        <Icon Name="IconName.FileEarmarkCheckFill" Size="IconSize.x3" Color="IconColor.Success" />
+                        <p class="fw-semibold mt-2 mb-1 text-success">@_uploadFiles.Count file selezionati</p>
+                        <p class="small mb-0">Trascina altri file o clicca per cambiare selezione</p>
+                    </div>
+                }
+                else
+                {
+                    <div style="pointer-events:none;">
+                        <Icon Name="IconName.CloudUploadFill" Size="IconSize.x3" />
+                        <p class="fw-semibold mt-2 mb-1">Trascina i file qui</p>
+                        <p class="small mb-0">oppure <span class="doc-drop-zone__link">clicca per sfogliare</span></p>
+                        <p class="small mb-0 mt-1">PDF · Immagini · Word · Excel · PowerPoint · Testo</p>
+                    </div>
+                }
+            </div>
+            @if (_uploadFiles.Any())
+            {
+                <ul class="list-unstyled mt-3 mb-0 small">
+                    @foreach (var f in _uploadFiles)
+                    {
+                        <li class="d-flex align-items-center gap-2 py-1 border-bottom">
+                            <Icon Name="@GetIcon(GetMimeFromName(f.Name))" Color="@GetIconColor(GetMimeFromName(f.Name))" />
+                            <span class="fw-semibold">@f.Name</span>
+                            <span class="ms-auto text-body-secondary">@FormatSize(f.Size)</span>
+                        </li>
+                    }
+                </ul>
+                @if (_activeTab.HasValue)
+                {
+                    <p class="text-muted small mt-2 mb-0">
+                        <Icon Name="IconName.TagFill" /> Tipologia: <strong>@(_docTypes.FirstOrDefault(t => t.Id == _activeTab.Value)?.Description)</strong>
+                    </p>
+                }
+            }
+        </BodyTemplate>
+        <FooterTemplate>
+            <Button Color="ButtonColor.Primary" @onclick="UploadFilesAsync"
+                    Loading="_uploading" LoadingText="Caricamento..."
+                    Disabled="@(!_uploadFiles.Any() || _uploading)">
+                <Icon Name="IconName.CloudUploadFill" /> Carica @(_uploadFiles.Any() ? $"{_uploadFiles.Count} file" : "")
+            </Button>
+            <Button Color="ButtonColor.Secondary" @onclick="() => _uploadModal.HideAsync()" Disabled="_uploading">Chiudi</Button>
+        </FooterTemplate>
+    </Modal>
+
+    <!-- Add Type Modal -->
+    <Modal @ref="_addTypeModal" Title="Nuova tipologia documento" Size="ModalSize.Large">
+        <BodyTemplate>
+            <div class="mb-3">
+                <label class="form-label">Descrizione</label>
+                <input type="text" class="form-control" @bind="_newTypeName" @bind:event="oninput"
+                       @onkeydown="OnAddTypeKeyDown" placeholder="es. Ordine operativo" />
+            </div>
+            <div>
+                <label class="form-label d-flex align-items-center gap-2">
+                    Icona
+                    @if (!string.IsNullOrEmpty(_newTypeIcon))
+                    {
+                        <span class="badge bg-primary d-flex align-items-center gap-1">
+                            @{ var selIcon = ParseIconName(_newTypeIcon); }
+                            @if (selIcon.HasValue) { <Icon Name="@selIcon.Value" /> }
+                            @_newTypeIcon
+                            <button type="button" class="btn-close btn-close-white ms-1" style="font-size:.6rem"
+                                    @onclick='() => _newTypeIcon = ""'></button>
+                        </span>
+                    }
+                </label>
+                <input type="text" class="form-control form-control-sm mb-2"
+                       placeholder="Cerca icona..."
+                       @bind="_newTypeIconSearch" @bind:event="oninput" />
+                <div class="bb-icon-grid">
+                    <div class="bb-icon-item @(string.IsNullOrEmpty(_newTypeIcon) ? "selected" : "")"
+                         title="Nessuna" @onclick='() => _newTypeIcon = ""'>
+                        <span style="font-size:.65rem;color:var(--bs-secondary-color)">—</span>
+                    </div>
+                    @foreach (var n in GetTypeIconNames())
+                    {
+                        var name = n;
+                        <div class="bb-icon-item @(_newTypeIcon == name ? "selected" : "")"
+                             title="@name" @onclick="() => _newTypeIcon = name">
+                            <Icon Name="@ParseIconName(name)!.Value" />
+                        </div>
+                    }
+                </div>
+            </div>
+        </BodyTemplate>
+        <FooterTemplate>
+            <Button Color="ButtonColor.Primary" @onclick="AddTypeAsync" Disabled="@string.IsNullOrWhiteSpace(_newTypeName)">
+                <Icon Name="IconName.PlusLg" /> Aggiungi
+            </Button>
+            <Button Color="ButtonColor.Secondary" @onclick="() => _addTypeModal.HideAsync()">Annulla</Button>
+        </FooterTemplate>
+    </Modal>
+
+    <!-- Conflict Modal -->
+    <Modal @ref="_conflictModal" Size="ModalSize.Large"
+           Title="@(_conflictIsOlder ? "Attenzione: file più vecchio" : "Documento già esistente")">
+        <BodyTemplate>
+            @if (_conflictFile != null && _conflictDoc != null)
+            {
+                @if (_conflictIsOlder)
+                {
+                    <Alert Color="AlertColor.Warning">
+                        <Icon Name="IconName.ExclamationTriangleFill" />
+                        Il file che stai caricando è <strong>più vecchio</strong> di quello già presente.
+                    </Alert>
+                }
+                <div class="row g-3">
+                    <div class="col-6">
+                        <div class="card h-100 @(!_conflictIsOlder ? "border-success" : "")">
+                            <div class="card-header small fw-semibold @(!_conflictIsOlder ? "bg-success text-white" : "")">
+                                In caricamento @(!_conflictIsOlder ? " — più recente" : "")
+                            </div>
+                            <div class="card-body">
+                                <p class="fw-bold mb-1">@_conflictFile.Name</p>
+                                <p class="text-body-secondary small mb-0">@_conflictFile.LastModified.LocalDateTime.ToString("dd/MM/yyyy HH:mm")</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="card h-100 @(_conflictIsOlder ? "border-success" : "")">
+                            <div class="card-header small fw-semibold @(_conflictIsOlder ? "bg-success text-white" : "")">
+                                Esistente @(_conflictIsOlder ? " — più recente" : "")
+                            </div>
+                            <div class="card-body">
+                                <p class="fw-bold mb-1">@_conflictDoc.Name</p>
+                                <p class="text-body-secondary small mb-0">@_conflictDoc.LastModified.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </BodyTemplate>
+        <FooterTemplate>
+            <Button Color="ButtonColor.Primary" @onclick='() => ResolveConflict("replace")'>
+                <Icon Name="IconName.ArrowRepeat" /> Sostituisci
+            </Button>
+            <Button Color="ButtonColor.Secondary" @onclick='() => ResolveConflict("keep")'>
+                <Icon Name="IconName.PlusCircle" /> Mantieni entrambi
+            </Button>
+            <Button Color="ButtonColor.Light" @onclick='() => ResolveConflict("skip")'>Salta</Button>
+        </FooterTemplate>
+    </Modal>
+
+    <!-- Delete Modal -->
+    <Modal @ref="_deleteModal" Title="Conferma eliminazione">
+        <BodyTemplate>
+            <p>Eliminare <strong>@_deletingDoc?.Name</strong>? L'operazione è irreversibile.</p>
+        </BodyTemplate>
+        <FooterTemplate>
+            <Button Color="ButtonColor.Danger" @onclick="ConfirmDeleteAsync"
+                    Loading="_deleting" LoadingText="Eliminazione...">
+                <Icon Name="IconName.Trash3Fill" /> Elimina
+            </Button>
+            <Button Color="ButtonColor.Secondary" @onclick="() => _deleteModal.HideAsync()">Annulla</Button>
+        </FooterTemplate>
+    </Modal>
+
+    <!-- Sticky Header -->
+    <div class="page-sticky-header d-flex justify-content-between align-items-center">
+        <div>
+            <h5 class="mb-0"><Icon Name="IconName.FolderFill" /> Documenti — @_mission.Name</h5>
+            <p class="text-muted mb-0 small">
+                @if (_draggingDocId.HasValue)
+                {<span class="text-primary fw-semibold">Trascina sulla scheda per cambiare tipologia</span>}
+                else if (_draggingTypeId.HasValue)
+                {<span class="text-warning fw-semibold">Trascina sulla scheda di destinazione per riordinare</span>}
+                else
+                {<span>Trascina i file sulla tabella · Trascina i documenti sulle schede per cambiare tipologia</span>}
+            </p>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <Button Size="ButtonSize.Small" Color="ButtonColor.Secondary" Outline="true"
+                    @onclick="LoadDocsAsync" title="Aggiorna lista">
+                <Icon Name="IconName.ArrowRepeat" />
+            </Button>
+            <Button Size="ButtonSize.Small" Color="ButtonColor.Primary" @onclick="OpenUploadModal">
+                <Icon Name="IconName.CloudUploadFill" /> Carica
+            </Button>
+        </div>
+    </div>
+
+    <!-- Tab Bar (search inline) -->
+    <div class="doc-tab-bar">
+
+        <!-- Generale tab (hidden when every doc has a type) -->
+        @if (ShowGenerale)
+        {
+            <button type="button"
+                    class="doc-tab-btn @(_activeTab == null ? "active" : "") @GetGeneraleTabClass()"
+                    @onclick='() => SetActiveTab(null)'
+                    @ondragenter="OnGeneraleTabDragEnter"
+                    @ondragover:preventDefault="true"
+                    @ondrop:preventDefault="true"
+                    @ondrop="OnGeneraleTabDrop">
+                <Icon Name="IconName.Inbox" Class="me-1" />Generale
+                <span class="badge bg-secondary ms-1">@_docs.Count(d => d.DocumentTypeId == null)</span>
+            </button>
+        }
+
+        @foreach (var docType in _docTypes)
+        {
+            var t = docType;
+            var tabIcon = ParseIconName(t.Icon);
+            <button type="button"
+                    class="doc-tab-btn @(_activeTab == t.Id ? "active" : "") @GetTypeTabClass(t.Id)"
+                    @onclick="() => SetActiveTab(t.Id)"
+                    @ondragenter="() => OnTabDragEnterHandler(t.Id)"
+                    @ondragover:preventDefault="true"
+                    @ondrop:preventDefault="true"
+                    @ondrop="() => OnTabDropHandler(t.Id)">
+                <!-- Grip handle for reorder -->
+                <span class="doc-tab-grip" draggable="true"
+                      @ondragstart="() => OnTabButtonDragStart(t.Id)"
+                      @ondragend="OnTabButtonDragEnd">
+                    <Icon Name="IconName.GripVertical" />
+                </span>
+                @if (tabIcon.HasValue)
+                {
+                    <Icon Name="@tabIcon.Value" Class="me-1" />
+                }
+                @t.Description
+                <span class="badge bg-secondary ms-1">@_docs.Count(d => d.DocumentTypeId == t.Id)</span>
+            </button>
+        }
+
+        <button type="button" class="doc-tab-btn doc-tab-add-btn"
+                @onclick="() => _addTypeModal.ShowAsync()" title="Aggiungi tipologia">
+            <Icon Name="IconName.PlusLg" />
+        </button>
+
+        <!-- Search inline with tabs -->
+        <div class="doc-tab-search">
+            <input type="text" class="form-control form-control-sm" style="width:180px;"
+                   placeholder="Cerca per nome..." @bind="_nameFilter" @bind:event="oninput" />
+        </div>
+    </div>
+
+    <!-- Tab Content -->
+    <div class="card">
+        <div class="position-relative"
+             @ref="_tableDropContainer"
+             @ondragenter="OnTableDragEnter"
+             @ondragleave="OnTableDragLeave"
+             @ondragover:preventDefault="true"
+             @ondrop:preventDefault="true"
+             @ondrop="OnTableDrop">
+
+            <InputFile OnChange="OnTableFilesDropped" multiple
+                       accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.txt,.md,.csv,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp"
+                       style="position:absolute;inset:0;width:100%;height:100%;opacity:0;z-index:5;pointer-events:none;" />
+
+            @if (_tableDragCounter > 0 && !_draggingDocId.HasValue && !_draggingTypeId.HasValue)
+            {
+                <div class="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+                     style="background:rgba(var(--bs-primary-rgb),.12);border:2px dashed var(--bs-primary);border-radius:.375rem;z-index:10;pointer-events:none;">
+                    <div class="text-center text-primary fw-semibold">
+                        <Icon Name="IconName.CloudArrowDownFill" Size="IconSize.x3" />
+                        <p class="mt-2 mb-0">Rilascia per caricare</p>
+                        @if (_activeTab.HasValue)
+                        {
+                            <p class="small mb-0">Tipologia: <strong>@(_docTypes.FirstOrDefault(t => t.Id == _activeTab.Value)?.Description)</strong></p>
+                        }
+                    </div>
+                </div>
+            }
+
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="bg-success text-white">
+                        @if (_activeTab == null)
+                        {
+                            <tr>
+                                <th style="width:3rem"></th>
+                                <th>Nome</th>
+                                <th>Tipologia</th>
+                                <th>Tipo</th>
+                                <th>Dimensione</th>
+                                <th>Ultima modifica</th>
+                                <th style="width:10rem"></th>
+                            </tr>
+                        }
+                        else
+                        {
+                            <tr>
+                                <th style="width:3rem"></th>
+                                <th>Nome</th>
+                                <th>Tipo</th>
+                                <th>Dimensione</th>
+                                <th>Ultima modifica</th>
+                                <th style="width:10rem"></th>
+                            </tr>
+                        }
+                    </thead>
+                    <tbody>
+                        @{
+                            var filteredDocs = GetFilteredDocs().ToList();
+                        }
+                        @if (!filteredDocs.Any())
+                        {
+                            <tr>
+                                <td colspan="@(_activeTab == null ? 7 : 6)" class="text-center text-muted py-4">
+                                    @if (_draggingDocId.HasValue)
+                                    {<span>Trascina sulla scheda per cambiare tipologia</span>}
+                                    else
+                                    {<span>Nessun documento.</span>}
+                                </td>
+                            </tr>
+                        }
+                        @foreach (var doc in filteredDocs)
+                        {
+                            var isRenaming = _renamingDocId == doc.Id;
+                            <tr draggable="@(isRenaming ? "false" : "true")"
+                                class="@(_draggingDocId == doc.Id ? "doc-row-dragging" : "")"
+                                @ondragstart="() => OnRowDragStart(doc.Id)"
+                                @ondragend="OnRowDragEnd">
+                                <td class="align-middle"><Icon Name="@GetIcon(doc.Type)" Color="@GetIconColor(doc.Type)" /></td>
+                                <td class="align-middle">
+                                    @if (isRenaming)
+                                    {
+                                        <input type="text" class="form-control form-control-sm"
+                                               style="min-width:180px"
+                                               @bind="_renameValue" @bind:event="oninput"
+                                               @onkeydown="OnRenameKeyDown" />
+                                    }
+                                    else
+                                    {
+                                        <span class="fw-semibold">@doc.Name</span>
+                                    }
+                                </td>
+                                @if (_activeTab == null)
+                                {
+                                    <td class="align-middle">
+                                        @if (doc.DocumentType != null)
+                                        {
+                                            <span class="badge bg-primary">
+                                                @if (ParseIconName(doc.DocumentType.Icon) is IconName di)
+                                                {<Icon Name="@di" Class="me-1" />}
+                                                @doc.DocumentType.Description
+                                            </span>
+                                        }
+                                        else
+                                        {<span class="text-body-secondary small">—</span>}
+                                    </td>
+                                }
+                                <td class="align-middle"><span class="text-body-secondary small">@GetTypeLabel(doc.Type)</span></td>
+                                <td class="align-middle"><span class="text-body-secondary small">@GetFileSize(doc)</span></td>
+                                <td class="align-middle"><span class="text-body-secondary small">@doc.LastModified.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</span></td>
+                                <td class="align-middle">
+                                    @if (isRenaming)
+                                    {
+                                        <div class="d-flex gap-1 justify-content-end">
+                                            <Button Size="ButtonSize.Small" Color="ButtonColor.Success"
+                                                    @onclick="CommitRenameAsync" title="Salva">
+                                                <Icon Name="IconName.CheckLg" />
+                                            </Button>
+                                            <Button Size="ButtonSize.Small" Color="ButtonColor.Secondary"
+                                                    @onclick="CancelRename" title="Annulla">
+                                                <Icon Name="IconName.X" />
+                                            </Button>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="d-flex gap-1 justify-content-end">
+                                            <Button Size="ButtonSize.Small" Color="ButtonColor.Primary" Outline="true"
+                                                    @onclick="() => OpenDocAsync(doc)" title="Apri">
+                                                <Icon Name="IconName.BoxArrowUpRight" />
+                                            </Button>
+                                            <Button Size="ButtonSize.Small" Color="ButtonColor.Secondary" Outline="true"
+                                                    @onclick="() => StartRename(doc)" title="Rinomina">
+                                                <Icon Name="IconName.PencilFill" />
+                                            </Button>
+                                            <Button Size="ButtonSize.Small" Color="ButtonColor.Danger" Outline="true"
+                                                    @onclick="() => OpenDeleteModal(doc)" title="Elimina">
+                                                <Icon Name="IconName.Trash3Fill" />
+                                            </Button>
+                                        </div>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid MissionTakId { get; set; }
+
+    private static readonly Guid _generaleTabSentinel = Guid.Empty;
+
+    private MissionSuite? _mission;
+    private List<Documentation> _docs = new();
+    private List<DocumentType> _docTypes = new();
+    private string _nameFilter = string.Empty;
+
+    // Tabs
+    private bool ShowGenerale => !_docTypes.Any() || _docs.Any(d => d.DocumentTypeId == null);
+
+    private Guid? _activeTab;
+    private Guid? _tabDragOver;      // type-assignment hover (Guid.Empty = Generale)
+    private Guid? _tabReorderTarget; // reorder drop target
+
+    // Doc row drag
+    private Guid? _draggingDocId;
+
+    // Tab button drag (reorder)
+    private Guid? _draggingTypeId;
+
+    // Upload modal
+    private Modal _uploadModal = default!;
+    private IReadOnlyList<IBrowserFile> _uploadFiles = Array.Empty<IBrowserFile>();
+    private bool _uploading;
+
+    // Add type modal
+    private Modal _addTypeModal = default!;
+    private string _newTypeName = "";
+    private string _newTypeIcon = "";
+    private string _newTypeIconSearch = "";
+
+    private static readonly string[] _allTypeIconNames =
+        Enum.GetNames<IconName>().OrderBy(n => n).ToArray();
+
+    private IEnumerable<string> GetTypeIconNames() =>
+        string.IsNullOrWhiteSpace(_newTypeIconSearch)
+            ? _allTypeIconNames
+            : _allTypeIconNames.Where(n => n.Contains(_newTypeIconSearch, StringComparison.OrdinalIgnoreCase));
+
+
+    // Drag counter (modal)
+    private int _dragCounter;
+    private void OnDragEnter() => _dragCounter++;
+    private void OnDragLeave() => _dragCounter = Math.Max(0, _dragCounter - 1);
+    private void OnDragDrop()  => _dragCounter = 0;
+
+    // Table drag (OS file drop)
+    private int _tableDragCounter;
+    private ElementReference _tableDropContainer;
+    private bool _dropZoneInitialized;
+
+    private void OnTableDragEnter() { if (!_draggingDocId.HasValue && !_draggingTypeId.HasValue) _tableDragCounter++; }
+    private void OnTableDragLeave() => _tableDragCounter = Math.Max(0, _tableDragCounter - 1);
+    private void OnTableDrop()      => _tableDragCounter = 0;
+
+    // Conflict modal
+    private Modal _conflictModal = default!;
+    private IBrowserFile? _conflictFile;
+    private Documentation? _conflictDoc;
+    private bool _conflictIsOlder;
+    private TaskCompletionSource<string>? _conflictTcs;
+
+    // Rename
+    private Guid? _renamingDocId;
+    private string _renameValue = "";
+
+    private void StartRename(Documentation doc)
+    {
+        _renamingDocId = doc.Id;
+        _renameValue   = doc.Name;
+    }
+
+    private void CancelRename()
+    {
+        _renamingDocId = null;
+        _renameValue   = "";
+    }
+
+    private async Task CommitRenameAsync()
+    {
+        if (!_renamingDocId.HasValue || string.IsNullOrWhiteSpace(_renameValue)) return;
+        var ok = await DocService.RenameAsync(_renamingDocId.Value, _renameValue);
+        _renamingDocId = null;
+        if (ok)
+        {
+            await LoadDocsAsync();
+            ToastService.Notify(new(ToastType.Success, "Documenti", "File rinominato."));
+        }
+    }
+
+    private async Task OnRenameKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")  await CommitRenameAsync();
+        if (e.Key == "Escape") CancelRename();
+    }
+
+    // Delete modal
+    private Modal _deleteModal = default!;
+    private Documentation? _deletingDoc;
+    private bool _deleting;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _mission = await MissionService.GetAsync(MissionTakId);
+        await LoadDataAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_dropZoneInitialized && !string.IsNullOrEmpty(_tableDropContainer.Id))
+        {
+            _dropZoneInitialized = true;
+            await JS.InvokeVoidAsync("initTableDropZone", _tableDropContainer);
+        }
+    }
+
+    private async Task LoadDataAsync()
+    {
+        if (_mission == null) return;
+        _docTypes = await DocTypeService.GetByTargetAsync(DocumentTypeTarget.Mission);
+        await LoadDocsAsync();
+    }
+
+    private async Task LoadDocsAsync()
+    {
+        if (_mission == null) return;
+        _docs = await DocService.GetAllByOwnerIdAsync(_mission);
+        if (_activeTab == null && !ShowGenerale && _docTypes.Any())
+            _activeTab = _docTypes[0].Id;
+        StateHasChanged();
+    }
+
+    private void SetActiveTab(Guid? typeId)
+    {
+        _activeTab = typeId;
+        _tableDragCounter = 0;
+    }
+
+    // ── CSS helpers ───────────────────────────────────────────────────────────
+
+    private string GetGeneraleTabClass()
+    {
+        if (_draggingDocId.HasValue && _tabDragOver == _generaleTabSentinel) return "tab-drag-over";
+        return "";
+    }
+
+    private string GetTypeTabClass(Guid tabId)
+    {
+        if (_draggingDocId.HasValue && _tabDragOver == tabId) return "tab-drag-over";
+        if (_draggingTypeId.HasValue && _tabReorderTarget == tabId) return "tab-reorder-target";
+        return "";
+    }
+
+    // ── Doc row drag ──────────────────────────────────────────────────────────
+
+    private void OnRowDragStart(Guid docId)
+    {
+        _draggingDocId  = docId;
+        _draggingTypeId = null;
+        _tableDragCounter = 0;
+    }
+
+    private void OnRowDragEnd()
+    {
+        _draggingDocId = null;
+        _tabDragOver   = null;
+    }
+
+    // ── Tab button drag (reorder) ─────────────────────────────────────────────
+
+    private void OnTabButtonDragStart(Guid typeId)
+    {
+        _draggingTypeId = typeId;
+        _draggingDocId  = null;
+        _tableDragCounter = 0;
+    }
+
+    private void OnTabButtonDragEnd()
+    {
+        _draggingTypeId  = null;
+        _tabReorderTarget = null;
+    }
+
+    // ── Tab drag enter / drop (unified for both drag types) ───────────────────
+
+    private void OnGeneraleTabDragEnter()
+    {
+        if (_draggingDocId.HasValue) _tabDragOver = _generaleTabSentinel;
+        // Generale is always first — no reorder target needed
+    }
+
+    private async Task OnGeneraleTabDrop()
+    {
+        if (_draggingDocId.HasValue)
+        {
+            _tabDragOver = null;
+            await OnDropDocOnTab(null);
+        }
+        // dropping a type tab before Generale = first position
+        else if (_draggingTypeId.HasValue)
+        {
+            _tabReorderTarget = null;
+            await OnTabReorderDrop(null);
+        }
+    }
+
+    private void OnTabDragEnterHandler(Guid tabId)
+    {
+        if (_draggingDocId.HasValue)
+            _tabDragOver = tabId;
+        else if (_draggingTypeId.HasValue && _draggingTypeId != tabId)
+            _tabReorderTarget = tabId;
+    }
+
+    private async Task OnTabDropHandler(Guid tabId)
+    {
+        if (_draggingDocId.HasValue)
+        {
+            _tabDragOver = null;
+            await OnDropDocOnTab(tabId);
+        }
+        else if (_draggingTypeId.HasValue)
+        {
+            _tabReorderTarget = null;
+            await OnTabReorderDrop(tabId);
+        }
+    }
+
+    // ── Type assignment ───────────────────────────────────────────────────────
+
+    private async Task OnDropDocOnTab(Guid? typeId)
+    {
+        if (!_draggingDocId.HasValue) return;
+        var docId = _draggingDocId.Value;
+        _draggingDocId = null;
+
+        var ok = await DocService.SetDocumentTypeAsync(docId, typeId);
+        if (ok)
+        {
+            await LoadDocsAsync();
+            var label = typeId.HasValue
+                ? _docTypes.FirstOrDefault(t => t.Id == typeId.Value)?.Description ?? "tipologia"
+                : "Generale (nessuna tipologia)";
+            ToastService.Notify(new(ToastType.Success, "Documenti", $"Tipologia aggiornata: {label}."));
+        }
+    }
+
+    // ── Tab reorder ───────────────────────────────────────────────────────────
+
+    private async Task OnTabReorderDrop(Guid? targetTabId)
+    {
+        if (!_draggingTypeId.HasValue) return;
+        var draggedId = _draggingTypeId.Value;
+        _draggingTypeId   = null;
+        _tabReorderTarget = null;
+
+        if (targetTabId.HasValue && draggedId == targetTabId.Value) return;
+
+        var orderedIds = _docTypes.Select(t => t.Id).ToList();
+        orderedIds.Remove(draggedId);
+
+        if (!targetTabId.HasValue)
+        {
+            orderedIds.Insert(0, draggedId);
+        }
+        else
+        {
+            var idx = orderedIds.IndexOf(targetTabId.Value);
+            if (idx >= 0) orderedIds.Insert(idx, draggedId);
+            else          orderedIds.Add(draggedId);
+        }
+
+        await DocTypeService.ReorderAsync(orderedIds);
+        await LoadDataAsync();
+    }
+
+    // ── Filtering ─────────────────────────────────────────────────────────────
+
+    private IEnumerable<Documentation> GetFilteredDocs()
+    {
+        IEnumerable<Documentation> docs = _activeTab == null
+            ? _docs
+            : _docs.Where(d => d.DocumentTypeId == _activeTab);
+
+        if (!string.IsNullOrWhiteSpace(_nameFilter))
+            docs = docs.Where(d => d.Name.Contains(_nameFilter, StringComparison.OrdinalIgnoreCase));
+
+        return docs.OrderByDescending(d => d.LastModified);
+    }
+
+    // ── Add type ──────────────────────────────────────────────────────────────
+
+    private async Task AddTypeAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newTypeName)) return;
+        var maxOrder = _docTypes.Any() ? _docTypes.Max(t => t.Order) : -1;
+        var newType = new DocumentType
+        {
+            Id          = Guid.NewGuid(),
+            Description = _newTypeName.Trim(),
+            Target      = DocumentTypeTarget.Mission,
+            Icon        = string.IsNullOrEmpty(_newTypeIcon) ? null : _newTypeIcon,
+            Order       = maxOrder + 1
+        };
+        await DocTypeService.AddAsync(newType);
+        _newTypeName       = "";
+        _newTypeIcon       = "";
+        _newTypeIconSearch = "";
+        await _addTypeModal.HideAsync();
+        await LoadDataAsync();
+        _activeTab = newType.Id;
+        ToastService.Notify(new(ToastType.Success, "Tipologie", $"Tipologia \"{newType.Description}\" aggiunta."));
+    }
+
+    private async Task OnAddTypeKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await AddTypeAsync();
+    }
+
+    // ── Upload ────────────────────────────────────────────────────────────────
+
+    private async Task OpenUploadModal()
+    {
+        _uploadFiles = Array.Empty<IBrowserFile>();
+        _dragCounter = 0;
+        await _uploadModal.ShowAsync();
+    }
+
+    private void OnUploadFilesSelected(InputFileChangeEventArgs e)
+    {
+        _uploadFiles = e.GetMultipleFiles(20);
+        _dragCounter = 0;
+    }
+
+    private void OnUploadModalHiding()
+    {
+        _uploadFiles = Array.Empty<IBrowserFile>();
+        _dragCounter = 0;
+    }
+
+    private async Task UploadFilesAsync()
+    {
+        if (_mission == null || !_uploadFiles.Any()) return;
+        await ProcessFilesAsync(_uploadFiles, _activeTab);
+        _uploadFiles = Array.Empty<IBrowserFile>();
+        await _uploadModal.HideAsync();
+    }
+
+    private async Task OnTableFilesDropped(InputFileChangeEventArgs e)
+    {
+        _tableDragCounter = 0;
+        if (_draggingDocId.HasValue || _draggingTypeId.HasValue) return;
+        var files = e.GetMultipleFiles(20);
+        if (!files.Any()) return;
+        await ProcessFilesAsync(files, _activeTab);
+    }
+
+    private async Task ProcessFilesAsync(IReadOnlyList<IBrowserFile> files, Guid? documentTypeId)
+    {
+        if (_mission == null) return;
+        _uploading = true;
+        int uploaded = 0, replaced = 0, skipped = 0;
+        try
+        {
+            foreach (var file in files)
+            {
+                var existing = _docs.FirstOrDefault(d =>
+                    d.Name.Equals(file.Name, StringComparison.OrdinalIgnoreCase));
+
+                if (existing != null)
+                {
+                    var choice = await AskConflictAsync(file, existing);
+                    switch (choice)
+                    {
+                        case "replace":
+                            await DocService.UpdateDocumentAsync(existing.Id, file);
+                            replaced++;
+                            break;
+                        case "keep":
+                            var newDoc = await DocService.AddDocumentationAsync(file, documentTypeId);
+                            if (newDoc != null) { await DocService.LinkDocumentAsync(newDoc, _mission); uploaded++; }
+                            break;
+                        default:
+                            skipped++;
+                            break;
+                    }
+                }
+                else
+                {
+                    var doc = await DocService.AddDocumentationAsync(file, documentTypeId);
+                    if (doc != null) { await DocService.LinkDocumentAsync(doc, _mission); uploaded++; }
+                }
+            }
+
+            await LoadDocsAsync();
+            var msg = new System.Text.StringBuilder();
+            if (uploaded > 0) msg.Append($"{uploaded} caricati");
+            if (replaced > 0) msg.Append($"{(msg.Length > 0 ? ", " : "")}{replaced} aggiornati");
+            if (skipped  > 0) msg.Append($"{(msg.Length > 0 ? ", " : "")}{skipped} saltati");
+            ToastService.Notify(new(ToastType.Success, "Documenti", msg.ToString() + "."));
+        }
+        finally { _uploading = false; }
+    }
+
+    // ── Conflict ──────────────────────────────────────────────────────────────
+
+    private async Task<string> AskConflictAsync(IBrowserFile file, Documentation existing)
+    {
+        _conflictFile    = file;
+        _conflictDoc     = existing;
+        _conflictIsOlder = file.LastModified.DateTime < existing.LastModified;
+        _conflictTcs     = new TaskCompletionSource<string>();
+        await _conflictModal.ShowAsync();
+        StateHasChanged();
+        return await _conflictTcs.Task;
+    }
+
+    private async Task ResolveConflict(string choice)
+    {
+        await _conflictModal.HideAsync();
+        _conflictTcs?.TrySetResult(choice);
+    }
+
+    // ── Delete ────────────────────────────────────────────────────────────────
+
+    private async Task OpenDeleteModal(Documentation doc)
+    {
+        _deletingDoc = doc;
+        await _deleteModal.ShowAsync();
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_deletingDoc == null) return;
+        _deleting = true;
+        try
+        {
+            var ok = await DocService.DeleteAsync(_deletingDoc.Id);
+            if (ok)
+            {
+                await _deleteModal.HideAsync();
+                await LoadDocsAsync();
+                ToastService.Notify(new(ToastType.Success, "Documenti", "Documento eliminato."));
+            }
+            else
+                ToastService.Notify(new(ToastType.Danger, "Errore", "Impossibile eliminare il documento."));
+        }
+        finally { _deleting = false; }
+    }
+
+    // ── Open / view ───────────────────────────────────────────────────────────
+
+    private async Task OpenDocAsync(Documentation doc)
+    {
+        if (!File.Exists(doc.Path))
+        {
+            ToastService.Notify(new(ToastType.Warning, "Documento", "File non trovato sul server."));
+            return;
+        }
+        var bytes  = await File.ReadAllBytesAsync(doc.Path);
+        var base64 = Convert.ToBase64String(bytes);
+        var mime   = string.IsNullOrWhiteSpace(doc.Type) ? "application/octet-stream" : doc.Type;
+        await JS.InvokeVoidAsync("viewFile", base64, mime, doc.Name);
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private static IconName? ParseIconName(string? name)
+    {
+        if (string.IsNullOrEmpty(name)) return null;
+        return Enum.TryParse<IconName>(name, out var r) ? r : null;
+    }
+
+    private static string GetFileSize(Documentation doc)
+    {
+        try   { return File.Exists(doc.Path) ? FormatSize(new FileInfo(doc.Path).Length) : "—"; }
+        catch { return "—"; }
+    }
+
+    private static string GetMimeFromName(string name) =>
+        Path.GetExtension(name).ToLowerInvariant() switch
+        {
+            ".pdf"            => "application/pdf",
+            ".png"            => "image/png",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".gif"            => "image/gif",
+            ".webp"           => "image/webp",
+            ".doc"            => "application/msword",
+            ".docx"           => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ".xls"            => "application/vnd.ms-excel",
+            ".xlsx"           => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ".ppt"            => "application/vnd.ms-powerpoint",
+            ".pptx"           => "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            ".odt"            => "application/vnd.oasis.opendocument.text",
+            ".ods"            => "application/vnd.oasis.opendocument.spreadsheet",
+            ".odp"            => "application/vnd.oasis.opendocument.presentation",
+            ".txt" or ".md" or ".csv" => "text/plain",
+            _                 => "application/octet-stream"
+        };
+
+    private static string FormatSize(long bytes) => bytes switch
+    {
+        < 1024        => $"{bytes} B",
+        < 1024 * 1024 => $"{bytes / 1024.0:F1} KB",
+        _             => $"{bytes / (1024.0 * 1024):F1} MB"
+    };
+
+    private static IconName GetIcon(string? mime) => mime switch
+    {
+        var m when m?.StartsWith("image/") == true                                              => IconName.FileEarmarkImageFill,
+        "application/pdf"                                                                        => IconName.FileEarmarkPdfFill,
+        var m when m?.Contains("word") == true || m?.Contains("odt") == true                   => IconName.FileEarmarkWordFill,
+        var m when m?.Contains("sheet") == true || m?.Contains("excel") == true ||
+                   m?.Contains("ods") == true                                                   => IconName.FileEarmarkExcelFill,
+        var m when m?.Contains("presentation") == true || m?.Contains("powerpoint") == true ||
+                   m?.Contains("odp") == true                                                   => IconName.FileEarmarkPptFill,
+        var m when m?.StartsWith("text/") == true                                               => IconName.FileEarmarkTextFill,
+        _                                                                                       => IconName.FileEarmarkFill
+    };
+
+    private static IconColor GetIconColor(string? mime) => mime switch
+    {
+        "application/pdf"                                                                        => IconColor.Danger,
+        var m when m?.StartsWith("image/") == true                                              => IconColor.Success,
+        var m when m?.Contains("word") == true || m?.Contains("odt") == true                   => IconColor.Primary,
+        var m when m?.Contains("sheet") == true || m?.Contains("excel") == true ||
+                   m?.Contains("ods") == true                                                   => IconColor.Success,
+        var m when m?.Contains("presentation") == true || m?.Contains("powerpoint") == true ||
+                   m?.Contains("odp") == true                                                   => IconColor.Warning,
+        _                                                                                       => IconColor.Secondary
+    };
+
+    private static string GetTypeLabel(string? mime) => mime switch
+    {
+        "application/pdf"                                                                        => "PDF",
+        var m when m?.StartsWith("image/") == true                                              => "Immagine",
+        var m when m?.Contains("word") == true || m?.Contains("odt") == true                   => "Word",
+        var m when m?.Contains("sheet") == true || m?.Contains("excel") == true ||
+                   m?.Contains("ods") == true                                                   => "Excel",
+        var m when m?.Contains("presentation") == true || m?.Contains("powerpoint") == true ||
+                   m?.Contains("odp") == true                                                   => "PowerPoint",
+        "text/plain" or "text/csv"                                                               => "Testo",
+        _                                                                                       => mime ?? "—"
+    };
+}

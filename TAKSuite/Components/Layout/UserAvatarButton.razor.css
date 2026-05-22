@@ -1,0 +1,38 @@
+.user-avatar-container {
+    position: fixed;
+    top: 0.6rem;
+    right: 1rem;
+    z-index: 1050;
+}
+
+.avatar-circle-btn {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 50% !important;
+    background-color: #198754;
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 700;
+    border: none;
+    padding: 0;
+    line-height: 1;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.avatar-circle-btn:hover,
+.avatar-circle-btn:focus {
+    background-color: #157347;
+    outline: none;
+}
+
+/* Nascondi la freccina dropdown di Bootstrap */
+.avatar-circle-btn::after {
+    display: none !important;
+}
+
+.avatar-dropdown-menu {
+    min-width: 270px;
+    z-index: 1060;
+}

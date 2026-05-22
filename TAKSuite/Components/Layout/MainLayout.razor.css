@@ -8,61 +8,135 @@ main {
     flex: 1;
 }
 
-
-.top-row {
-    /*background-color: #f7f7f7;*/
+.guest-topbar {
     border-bottom: 1px solid var(--bs-border-color);
-    justify-content: flex-end;
-    height: 3.5rem;
-    display: flex;
-    align-items: center;
+    background: var(--bs-body-bg);
 }
 
-    .top-row ::deep a, .top-row ::deep .btn-link {
-        white-space: nowrap;
-        margin-left: 1.5rem;
-        text-decoration: none;
-    }
+.page-sticky-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background-color: var(--bs-body-bg);
+    padding-top: 0.875rem;
+    padding-bottom: 0.75rem;
+    padding-right: 3.75rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 2px 8px -4px rgba(0,0,0,0.18);
+}
 
-        .top-row ::deep a:hover, .top-row ::deep .btn-link:hover {
-            text-decoration: underline;
-        }
-
-        .top-row ::deep a:first-child {
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
+/* ── Mobile ── */
 @media (max-width: 640.98px) {
-    .top-row {
-        justify-content: space-between;
+
+    /* Fixed topbar: hamburger + title */
+    .mobile-topbar {
+        display: flex;
+        align-items: center;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3.25rem;
+        z-index: 1040;
+        background-color: #198754;
+        color: white;
+        padding: 0 0.75rem;
+        padding-right: 3.5rem; /* room for avatar button */
+        gap: 0.75rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,.2);
     }
 
-        .top-row ::deep a, .top-row ::deep .btn-link {
-            margin-left: 0;
-        }
+    .mobile-topbar-hamburger {
+        background: transparent;
+        border: none;
+        color: white;
+        font-size: 1.4rem;
+        line-height: 1;
+        cursor: pointer;
+        padding: 0.2rem 0.35rem;
+        flex-shrink: 0;
+    }
+
+    .mobile-topbar-title {
+        font-weight: 700;
+        font-size: 1.05rem;
+        flex: 1;
+    }
+
+    /* Push all content below the fixed topbar */
+    main {
+        padding-top: 3.25rem;
+    }
+
+    .page-sticky-header {
+        top: 3.25rem;
+        margin-left: -1rem;
+        margin-right: -1rem;
+        padding-left: 1rem;
+        padding-right: 1rem; /* avatar is in the topbar, not here */
+    }
+
+    /* Sidebar: offcanvas overlay from left */
+    .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100dvh;
+        width: 300px;
+        z-index: 1050;
+        transform: translateX(-110%);
+        transition: transform 0.25s ease;
+        overflow-y: auto;
+        background-color: var(--bs-body-bg);
+    }
+
+    .sidebar.mobile-sidebar-open {
+        transform: translateX(0);
+        box-shadow: 4px 0 24px rgba(0,0,0,.3);
+    }
+
+    /* Force nav items visible — bypass BlazorBootstrap collapse */
+    .sidebar ::deep .collapse {
+        display: block !important;
+    }
+
+    /* Hide BlazorBootstrap's own hamburger toggler */
+    .sidebar ::deep .navbar-toggler {
+        display: none !important;
+    }
+
+    /* Semi-transparent backdrop */
+    .mobile-sidebar-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.45);
+        z-index: 1035;
+    }
 }
 
+/* ── Desktop ── */
 @media (min-width: 641px) {
+
+    .mobile-topbar,
+    .mobile-topbar-hamburger,
+    .mobile-sidebar-overlay {
+        display: none !important;
+    }
+
     .page {
         flex-direction: row;
     }
 
-    .top-row {
-        position: sticky;
-        top: 0;
-        z-index: 1;
-    }
-
-        .top-row.auth ::deep a:first-child {
-            flex: 1;
-            text-align: right;
-            width: 0;
-        }
-
-    .top-row, article {
+    article {
         padding-left: 2rem !important;
         padding-right: 1.5rem !important;
+    }
+
+    .page-sticky-header {
+        margin-left: -2rem;
+        margin-right: -1.5rem;
+        padding-left: 2rem;
+        padding-right: 3.75rem;
     }
 }
 

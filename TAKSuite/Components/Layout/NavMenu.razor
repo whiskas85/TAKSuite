@@ -11,7 +11,7 @@
 <Sidebar2 Href="/"
 ImageSrc="images/tak trasp.png"
 Title="TAK Suite"
-BadgeText="v3.5.6"
+BadgeText="v3.6.7"
 DataProvider="Sidebar2DataProvider"
 WidthUnit="Unit.Px"
 Width="300"/>
@@ -74,6 +74,7 @@ Width="300"/>
                 new NavItem { Id = $"8.{counter++}", Href = "/settings/photo-join", IconName = IconName.CameraFill, Text = "Photo Auto-Join", ParentId = "8" },
                 new NavItem { Id = $"8.{counter++}", Href = "/settings/cot-templates", IconName = IconName.FileEarmarkCode, Text = "Template COT", ParentId = "8" },
                 new NavItem { Id = $"8.{counter++}", Href = "/settings/phone-contacts", IconName = IconName.TelephoneInboundFill, Text = "Rubrica Telefonica", ParentId = "8" },
+                new NavItem { Id = $"8.{counter++}", Href = "/settings/document-types", IconName = IconName.TagFill, Text = "Tipologie Documento", ParentId = "8" },
 
 
 
@@ -245,6 +246,14 @@ Width="300"/>
                 Href = $"/missiontak/{mission.Id}/phonecontacts",
                 IconName = IconName.TelephoneInboundFill,
                 Text = "Contatti",
+                ParentId = missionMenuId
+            });
+            navItems.Add(new NavItem
+            {
+                Id = $"{missionMenuId}.documents",
+                Href = $"/missiontak/{mission.Id}/documents",
+                IconName = IconName.FolderFill,
+                Text = "Documenti",
                 ParentId = missionMenuId
             });
 

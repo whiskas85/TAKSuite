@@ -11,6 +11,9 @@
         public DateTime CreationDate { get; set; } = DateTime.Now;
         public bool IsValid { get; set; } = true;
 
+        public Guid? DocumentTypeId { get; set; }
+        public DocumentType? DocumentType { get; set; }
+
         // Relazione molti-a-molti con Owner (Team, Person, etc.)
         public List<DocumentationOwner> DocumentationOwners { get; set; } = new();
 

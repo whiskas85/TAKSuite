@@ -15,6 +15,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<Documentation> Documents { get; set; }
     public DbSet<DocumentationOwner> DocumentationOwners { get; set; }
+    public DbSet<DocumentType> DocumentTypes { get; set; }
 
     public DbSet<TaskEntity> Tasks { get; set; }
     public DbSet<TaskStringItem> TaskStringItems { get; set; }
@@ -85,6 +86,13 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasOne(_ => _.Documentation)
             .WithMany(d => d.DocumentationOwners)
             .HasForeignKey(_ => _.DocumentationId);
+
+        modelBuilder.Entity<Documentation>()
+            .HasOne(d => d.DocumentType)
+            .WithMany()
+            .HasForeignKey(d => d.DocumentTypeId)
+            .IsRequired(false)
+            .OnDelete(DeleteBehavior.SetNull);
 
 
 

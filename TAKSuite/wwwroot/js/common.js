@@ -12,13 +12,24 @@ window.openNewTab = (url, title) => {
     newTab.document.body.innerHTML = '<img src="' + url + '" style="width:100%; height:auto;">';  // Scrive l'immagine nel body
 }
 
-window.viewFile = (base64Data, mediaType) => {
+window.viewFile = (base64Data, mediaType, filename) => {
     const bytes = atob(base64Data);
     const arr = new Uint8Array(bytes.length);
     for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
     const blob = new Blob([arr], { type: mediaType || 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
-    window.open(url, '_blank');
+    const viewable = mediaType && (mediaType.startsWith('image/') || mediaType === 'application/pdf' || mediaType.startsWith('text/'));
+    if (viewable) {
+        window.open(url, '_blank');
+    } else {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename || 'documento';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
 };
 
 window.downloadFile = (fileDataUrl, filename) => {
@@ -96,4 +107,35 @@ window.resetPanelPosition = (tabId, editorSelector) => {
     const editor = document.querySelector(editorSelector);
     if (tab) tab.style.right = '';
     if (editor) editor.style.marginRight = '';
+};
+
+window.avatarSetTheme = (theme) => {
+    const html = document.documentElement;
+    if (theme === 'auto') {
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        html.setAttribute('data-bs-theme', prefersDark ? 'dark' : 'light');
+    } else {
+        html.setAttribute('data-bs-theme', theme);
+    }
+    try { localStorage.setItem('blazor-bs-theme', theme); } catch {}
+};
+
+window.avatarGetTheme = () => {
+    try { return localStorage.getItem('blazor-bs-theme') || 'auto'; } catch { return 'auto'; }
+};
+
+window.initTableDropZone = function (container) {
+    const input = container.querySelector('input[type="file"]');
+    if (!input) return;
+
+    // Drop fires on the container (input has pointer-events:none).
+    // Forward the files by assigning them to the input and firing a synthetic change,
+    // which Blazor's InputFile picks up via its native change listener.
+    container.addEventListener('drop', function (e) {
+        if (!e.dataTransfer?.files?.length) return;
+        const dt = new DataTransfer();
+        for (const file of e.dataTransfer.files) dt.items.add(file);
+        input.files = dt.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+    }, true); // capture: fires before Blazor's ondrop handler
 };
