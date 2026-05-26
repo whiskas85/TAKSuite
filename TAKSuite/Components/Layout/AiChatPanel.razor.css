@@ -1,0 +1,224 @@
+.ai-chat-messages {
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+    min-height: 200px;
+    max-height: calc(100dvh - 240px);
+    overflow-y: auto;
+    padding-bottom: .5rem;
+}
+
+.ai-msg {
+    display: flex;
+}
+
+.ai-msg--user {
+    justify-content: flex-end;
+}
+
+.ai-msg--assistant {
+    justify-content: flex-start;
+}
+
+.ai-msg-bubble {
+    max-width: 85%;
+    padding: .5rem .75rem;
+    border-radius: 1rem;
+    font-size: .9rem;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.ai-msg--user .ai-msg-bubble {
+    background-color: var(--bs-primary);
+    color: #000;
+    border-bottom-right-radius: .25rem;
+}
+
+.ai-msg--assistant .ai-msg-bubble {
+    background-color: var(--bs-secondary-bg);
+    color: var(--bs-body-color);
+    border-bottom-left-radius: .25rem;
+}
+
+/* (resize handle e footer override sono in app.css perché fuori dallo scope del componente) */
+
+/* Nuova conversazione — piccolo in alto */
+.ai-new-chat-btn {
+    background: none;
+    border: none;
+    color: var(--bs-secondary-color);
+    font-size: .85rem;
+    padding: .2rem .35rem;
+    border-radius: .35rem;
+    cursor: pointer;
+    line-height: 1;
+    transition: color .15s, background .15s;
+}
+.ai-new-chat-btn:hover {
+    color: var(--bs-body-color);
+    background: var(--bs-secondary-bg);
+}
+
+/* Hint comandi tastiera sopra il container */
+.ai-kbd-hints {
+    font-size: .72rem;
+    color: var(--bs-secondary-color);
+    padding: .25rem .25rem .25rem 0;
+    user-select: none;
+}
+
+.ai-kbd-hints kbd {
+    font-size: .7rem;
+    padding: .1em .35em;
+    border-radius: .25rem;
+    background: var(--bs-tertiary-bg);
+    border: 1px solid var(--bs-border-color);
+    font-family: inherit;
+}
+
+/* Container principale — replicato da Claude.ai */
+.ai-input-container {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 14px;
+    background: var(--bs-body-bg);
+    box-shadow: 0 1px 6px rgba(0,0,0,.08);
+    overflow: hidden;
+    width: 100%;
+}
+
+.ai-textarea {
+    display: block;
+    width: 100%;
+    background: transparent;
+    border: none;
+    outline: none;
+    resize: none;
+    font-size: .9rem;
+    line-height: 1.5;
+    min-height: 2.75rem;
+    height: 2.75rem;
+    overflow-y: hidden;
+    color: var(--bs-body-color);
+    padding: .75rem .85rem .5rem;
+    box-sizing: border-box;
+}
+
+.ai-textarea::placeholder { color: var(--bs-secondary-color); }
+
+/* Toolbar inferiore */
+.ai-toolbar {
+    display: flex;
+    align-items: center;
+    padding: .4rem .5rem .4rem .5rem;
+    border-top: 1px solid var(--bs-border-color);
+    gap: .35rem;
+}
+
+.ai-toolbar-btn {
+    background: none;
+    border: none;
+    color: var(--bs-secondary-color);
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background .15s;
+}
+.ai-toolbar-btn:hover:not(:disabled) { background: var(--bs-secondary-bg); }
+.ai-toolbar-btn:disabled { opacity: .35; cursor: default; }
+
+.ai-model-label {
+    flex: 1;
+    text-align: center;
+    font-size: .78rem;
+    color: var(--bs-secondary-color);
+    user-select: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Send button circolare nella toolbar */
+.ai-send-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .9rem;
+    cursor: pointer;
+    transition: background .15s, opacity .15s;
+    padding: 0;
+    flex-shrink: 0;
+}
+.ai-send-btn--active {
+    background: var(--bs-primary);
+    color: #000;
+}
+.ai-send-btn--active:hover { opacity: .85; }
+.ai-send-btn--disabled {
+    background: var(--bs-tertiary-bg);
+    color: var(--bs-secondary-color);
+    border: 1px solid var(--bs-border-color);
+    cursor: default;
+}
+
+/* Markdown dentro le bolle assistente */
+.ai-msg--assistant .ai-msg-bubble p:last-child { margin-bottom: 0; }
+.ai-msg--assistant .ai-msg-bubble p { margin-bottom: .4rem; }
+.ai-msg--assistant .ai-msg-bubble ul,
+.ai-msg--assistant .ai-msg-bubble ol { padding-left: 1.25rem; margin-bottom: .4rem; }
+.ai-msg--assistant .ai-msg-bubble code {
+    background: var(--bs-tertiary-bg);
+    border-radius: .25rem;
+    padding: .1em .35em;
+    font-size: .85em;
+}
+.ai-msg--assistant .ai-msg-bubble pre {
+    background: var(--bs-tertiary-bg);
+    border-radius: .4rem;
+    padding: .6rem .75rem;
+    overflow-x: auto;
+    font-size: .82em;
+    margin-bottom: .4rem;
+}
+.ai-msg--assistant .ai-msg-bubble pre code {
+    background: none;
+    padding: 0;
+}
+.ai-msg--assistant .ai-msg-bubble h1,
+.ai-msg--assistant .ai-msg-bubble h2,
+.ai-msg--assistant .ai-msg-bubble h3 { font-size: 1rem; font-weight: 700; margin-bottom: .3rem; }
+
+/* Thinking dots */
+.ai-msg-bubble--thinking {
+    display: flex;
+    gap: .35rem;
+    align-items: center;
+    padding: .6rem .9rem;
+}
+
+.ai-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--bs-secondary);
+    animation: ai-bounce .9s infinite ease-in-out;
+}
+
+.ai-dot:nth-child(2) { animation-delay: .15s; }
+.ai-dot:nth-child(3) { animation-delay: .30s; }
+
+@keyframes ai-bounce {
+    0%, 80%, 100% { transform: translateY(0); }
+    40%           { transform: translateY(-6px); }
+}

@@ -389,6 +389,54 @@ namespace TAKSuite.Data.Services
         public async Task<List<TaskEntity>> GetAllTaskAssignedToTeamAsync(Team team) =>
             await GetAllTaskAssignedToTeamAsync(team.Id);
 
+        public async Task SetGreenLightAsync(Guid taskId, DateTime greenLightUtc)
+        {
+            using var ctx = _factory.CreateDbContext();
+            var task = await ctx.Tasks.FindAsync(taskId);
+            if (task == null) return;
+            task.GreenLightDateTime = greenLightUtc;
+            task.LastModified = DateTime.UtcNow;
+            await ctx.SaveChangesAsync();
+            _cache.Remove(typeof(TaskEntity).Name);
+            _cache.Remove($"{typeof(TaskEntity).Name}_{taskId}");
+        }
+
+        public async Task UpdateTaskDatesAsync(Guid taskId, DateTime? startUtc, DateTime? endUtc)
+        {
+            using var ctx = _factory.CreateDbContext();
+            var task = await ctx.Tasks.FindAsync(taskId);
+            if (task == null) return;
+            task.StartDateTime = startUtc;
+            task.EndDateTime   = endUtc;
+            task.LastModified  = DateTime.UtcNow;
+            await ctx.SaveChangesAsync();
+            _cache.Remove(typeof(TaskEntity).Name);
+            _cache.Remove($"{typeof(TaskEntity).Name}_{taskId}");
+        }
+
+        public async Task<List<TaskTimeWindow>> GetTaskTimeWindowsAsync(Guid taskId)
+        {
+            using var ctx = _factory.CreateDbContext();
+            var task = await ctx.Tasks.FindAsync(taskId);
+            if (task?.TimeWindowsJson == null) return new();
+            try { return System.Text.Json.JsonSerializer.Deserialize<List<TaskTimeWindow>>(task.TimeWindowsJson) ?? new(); }
+            catch { return new(); }
+        }
+
+        public async Task UpdateTaskTimeWindowsAsync(Guid taskId, List<TaskTimeWindow> windows)
+        {
+            using var ctx = _factory.CreateDbContext();
+            var task = await ctx.Tasks.FindAsync(taskId);
+            if (task == null) return;
+            task.TimeWindowsJson = windows.Any()
+                ? System.Text.Json.JsonSerializer.Serialize(windows)
+                : null;
+            task.LastModified = DateTime.UtcNow;
+            await ctx.SaveChangesAsync();
+            _cache.Remove(typeof(TaskEntity).Name);
+            _cache.Remove($"{typeof(TaskEntity).Name}_{taskId}");
+        }
+
         private static Task<bool> CheckTeamAutoacceptAsync(Team team) => Task.FromResult(false);
 
         private static void PushTaskScheduled(ApplicationDbContext ctx, TaskEntity task, Team team)

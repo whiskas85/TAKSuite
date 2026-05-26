@@ -6,18 +6,21 @@
 @inject TeamService TeamService
 @inject MissionSuiteEntityServices MissionSuiteService
 @inject TaskService TaskService
+@inject NavRefreshService NavRefreshService
 
 
-<Sidebar2 Href="/"
+<Sidebar2 @key="_navVersion"
+Href="/"
 ImageSrc="images/tak trasp.png"
 Title="TAK Suite"
-BadgeText="v3.6.7"
+BadgeText="v3.9.52"
 DataProvider="Sidebar2DataProvider"
 WidthUnit="Unit.Px"
 Width="300"/>
 
 @code {
     IEnumerable<NavItem>? navItems;
+    private int _navVersion;
 
     private async Task<Sidebar2DataProviderResult> Sidebar2DataProvider(Sidebar2DataProviderRequest request)
     {
@@ -75,8 +78,10 @@ Width="300"/>
                 new NavItem { Id = $"8.{counter++}", Href = "/settings/cot-templates", IconName = IconName.FileEarmarkCode, Text = "Template COT", ParentId = "8" },
                 new NavItem { Id = $"8.{counter++}", Href = "/settings/phone-contacts", IconName = IconName.TelephoneInboundFill, Text = "Rubrica Telefonica", ParentId = "8" },
                 new NavItem { Id = $"8.{counter++}", Href = "/settings/document-types", IconName = IconName.TagFill, Text = "Tipologie Documento", ParentId = "8" },
+                new NavItem { Id = $"8.{counter++}", Href = "/settings/ai", IconName = IconName.Robot, Text = "Impostazioni AI", ParentId = "8" },
 
-
+            new NavItem { Id = "10", Href = "", IconName = IconName.Display, Text = "System" },
+                new NavItem { Id = "10.0", Href = "/system/log", IconName = IconName.FileTextFill, Text = "Log", ParentId = "10" },
 
         };
 
@@ -289,6 +294,22 @@ Width="300"/>
                     });
                     navItems.Add(new NavItem
                     {
+                        Id = $"{taskMenuId}.docs",
+                        Href = $"/taskdetail/{task.Id}/documents",
+                        IconName = IconName.FolderFill,
+                        Text = "Documenti",
+                        ParentId = taskMenuId
+                    });
+                    navItems.Add(new NavItem
+                    {
+                        Id = $"{taskMenuId}.score",
+                        Href = $"/taskdetail/{task.Id}/score",
+                        IconName = IconName.TrophyFill,
+                        Text = "Punteggio",
+                        ParentId = taskMenuId
+                    });
+                    navItems.Add(new NavItem
+                    {
                         Id = $"{taskMenuId}.cfg",
                         Href = $"/taskedit/{task.Id}",
                         IconName = IconName.GearFill,
@@ -365,17 +386,27 @@ Width="300"/>
     {
         currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
         NavigationManager.LocationChanged += OnLocationChanged;
+        NavRefreshService.OnNavChanged += OnNavRefreshed;
+    }
+
+    private void OnNavRefreshed()
+    {
+        navItems = null;
+        _navVersion++;
+        _ = InvokeAsync(StateHasChanged);
     }
 
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
         currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
+        navItems = null;
         StateHasChanged();
     }
 
     public void Dispose()
     {
         NavigationManager.LocationChanged -= OnLocationChanged;
+        NavRefreshService.OnNavChanged -= OnNavRefreshed;
     }
 }
 

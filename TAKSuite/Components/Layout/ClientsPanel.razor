@@ -1,0 +1,374 @@
+@using TAKSuite.TAK.CoT
+@using TAKSuite.TAK.MartiApi
+@using TAKSuite.Data.Services
+@using TAKSuite.Data.Models
+@using TAKSuite.TAK.Helper
+@using System.Xml.Linq
+@inject SubscriptionApiClient SubscriptionClient
+@inject CoTManager CoTManager
+@inject MartiApiClient MartiClient
+@inject NavigationManager Nav
+@inject MissionSuiteEntityServices MissionSuiteService
+@inject TaskService TaskService
+@implements IDisposable
+
+<Offcanvas @ref="_panel"
+           Title="Client connessi"
+           Placement="Placement.End"
+           Size="OffcanvasSize.Regular"
+           UseStaticBackdrop="false">
+    <BodyTemplate>
+        <div class="clients-toolbar d-flex align-items-center justify-content-between mb-2">
+            @if (!string.IsNullOrEmpty(_contextLabel))
+            {
+                <span class="badge bg-secondary rounded-pill small">@_contextLabel</span>
+            }
+            else { <span></span> }
+            <div class="d-flex align-items-center gap-2">
+                @if (_loading)
+                {
+                    <span class="spinner-border spinner-border-sm text-secondary" role="status"></span>
+                }
+                else
+                {
+                    <span class="text-muted small">@_clients.Count client</span>
+                }
+                <button class="btn btn-sm btn-outline-secondary py-0 px-2" @onclick="RefreshAsync" title="Aggiorna">
+                    <Icon Name="IconName.ArrowRepeat" />
+                </button>
+            </div>
+        </div>
+
+        @if (_error != null)
+        {
+            <Alert Color="AlertColor.Warning">@_error</Alert>
+        }
+
+        @if (!_loading && _clients.Count == 0)
+        {
+            <div class="text-center text-muted py-5">
+                <Icon Name="IconName.PersonSlash" Size="IconSize.x3" />
+                <p class="mt-2 small">Nessun client connesso.</p>
+            </div>
+        }
+
+        <div class="clients-list">
+            @foreach (var group in _clients
+                .GroupBy(c => c.Team ?? "")
+                .OrderBy(g => string.IsNullOrEmpty(g.Key) ? "zzz" : g.Key))
+            {
+                var teamKey = group.Key;
+                var teamColor = TeamColor(teamKey);
+                <div class="team-group mb-3">
+                    <div class="team-group-header" style="border-left: 4px solid @teamColor; padding-left: .5rem;">
+                        <span class="team-dot" style="background:@teamColor"></span>
+                        <span class="team-name fw-semibold small text-uppercase">
+                            @(string.IsNullOrEmpty(teamKey) ? "Nessun team" : teamKey)
+                        </span>
+                        <span class="text-muted small ms-1">(@group.Count())</span>
+                    </div>
+                    @foreach (var c in group.OrderBy(x => x.Callsign))
+                    {
+                        var battPct  = GetBattery(c);
+                        var battColor = BatteryColor(battPct);
+                        var lastSec  = (DateTimeOffset.UtcNow - DateTimeOffset.FromUnixTimeMilliseconds(c.LastReportMilliseconds)).TotalSeconds;
+                        var lastLabel = FormatLastReport(lastSec);
+                        var pos      = GetPosition(c);
+                        string? utmStr = pos.HasValue ? FormatUtm(pos.Value.Lat, pos.Value.Lon) : null;
+                        <div class="client-card mb-1 mt-1">
+                            <div class="client-card-header d-flex align-items-center gap-2" style="border-left: 3px solid @teamColor">
+                                <Icon Name="IconName.PersonFill" />
+                                <span class="fw-bold flex-grow-1">@(c.Callsign ?? c.ClientUid)</span>
+                                @if (battPct.HasValue)
+                                {
+                                    <span class="client-battery" title="Batteria @battPct%">
+                                        <Icon Name="@BatteryIcon(battPct)" class="@battColor" />
+                                        <span class="client-battery-pct small @battColor">@battPct%</span>
+                                    </span>
+                                }
+                                else if (!string.IsNullOrWhiteSpace(c.Battery))
+                                {
+                                    <span class="small text-muted" title="raw: @c.Battery">
+                                        <Icon Name="IconName.BatteryHalf" /> @c.Battery
+                                    </span>
+                                }
+                            </div>
+                            <div class="client-card-body">
+                                @if (!string.IsNullOrEmpty(c.Role))
+                                {
+                                    <div class="client-row">
+                                        <span class="text-muted small">@c.Role</span>
+                                    </div>
+                                }
+                                <div class="client-row d-flex gap-3 flex-wrap">
+                                    @if (!string.IsNullOrEmpty(c.TakClient))
+                                    {
+                                        <span class="small text-muted"><Icon Name="IconName.Phone" /> @c.TakClient @c.TakVersion</span>
+                                    }
+                                    <span class="small @(lastSec > 600 ? "text-danger" : lastSec > 120 ? "text-warning" : "text-success")">
+                                        <Icon Name="IconName.Clock" /> @lastLabel
+                                    </span>
+                                </div>
+                                @if (!string.IsNullOrEmpty(c.IpAddress))
+                                {
+                                    <div class="client-row">
+                                        <span class="small text-muted"><Icon Name="IconName.Wifi" /> @c.IpAddress@(string.IsNullOrEmpty(c.Port) ? "" : $":{c.Port}") — @(c.Protocol ?? "—")</span>
+                                    </div>
+                                }
+                                @if (utmStr != null)
+                                {
+                                    <div class="client-row">
+                                        <span class="small text-muted"><Icon Name="IconName.GeoAltFill" /> @utmStr</span>
+                                    </div>
+                                }
+                                @if (!string.IsNullOrEmpty(c.Username) && c.Username != c.Callsign)
+                                {
+                                    <div class="client-row">
+                                        <span class="small text-muted"><Icon Name="IconName.PersonBadge" /> @c.Username</span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </BodyTemplate>
+</Offcanvas>
+
+@code {
+    private Offcanvas _panel = default!;
+    private List<SubscriptionInfo> _clients = new();
+    private bool _loading;
+    private string? _error;
+    private string _contextLabel = "";
+    private int _pendingRefresh;
+    private System.Threading.Timer? _clockTimer;
+    private readonly Dictionary<string, int> _batteryCache = new();
+    private readonly Dictionary<string, (double Lat, double Lon)> _positionCache = new();
+
+    public async Task OpenAsync()
+    {
+        _contextLabel = await BuildContextLabelAsync(Nav.Uri);
+        await _panel.ShowAsync();
+        await RefreshAsync();
+        _clockTimer ??= new System.Threading.Timer(_ =>
+            InvokeAsync(StateHasChanged), null,
+            TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+    }
+
+    protected override void OnInitialized()
+    {
+        CoTManager.CoTMessageReceived += OnCoTMessage;
+    }
+
+    public void Dispose()
+    {
+        CoTManager.CoTMessageReceived -= OnCoTMessage;
+        _clockTimer?.Dispose();
+    }
+
+    private void OnCoTMessage(CoTManager.CoTMessageEventArgs e)
+    {
+        TryExtractCotData(e.Message);
+
+        if (System.Threading.Interlocked.Exchange(ref _pendingRefresh, 1) == 0)
+        {
+            _ = Task.Delay(2500).ContinueWith(async _ =>
+            {
+                System.Threading.Interlocked.Exchange(ref _pendingRefresh, 0);
+                await InvokeAsync(async () => { await RefreshAsync(); });
+            });
+        }
+    }
+
+    private void TryExtractCotData(string xml)
+    {
+        try
+        {
+            var doc    = XDocument.Parse(xml);
+            var ev     = doc.Root!;
+            var uid    = (string?)ev.Attribute("uid");
+            if (string.IsNullOrEmpty(uid)) return;
+
+            var pt     = ev.Element("point");
+            var detail = ev.Element("detail");
+
+            // battery lives in <detail><status battery="…"/></detail>
+            var battStr = (string?)detail?.Element("status")?.Attribute("battery");
+            var pct = ParseBattery(battStr);
+            if (pct.HasValue)
+                lock (_batteryCache) { _batteryCache[uid] = pct.Value; }
+
+            // position from <point lat="…" lon="…"/>
+            var latStr = (string?)pt?.Attribute("lat");
+            var lonStr = (string?)pt?.Attribute("lon");
+            if (double.TryParse(latStr, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var lat)
+             && double.TryParse(lonStr, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var lon)
+             && !(lat == 0 && lon == 0))
+            {
+                lock (_positionCache) { _positionCache[uid] = (lat, lon); }
+            }
+        }
+        catch { }
+    }
+
+    private int? GetBattery(SubscriptionInfo c)
+    {
+        var direct = ParseBattery(c.Battery) ?? ParseBattery(c.Metrics?.Battery);
+        if (direct.HasValue) return direct;
+        lock (_batteryCache)
+        {
+            if (!string.IsNullOrEmpty(c.ClientUid) && _batteryCache.TryGetValue(c.ClientUid, out var v))  return v;
+            if (!string.IsNullOrEmpty(c.SubscriptionUid) && _batteryCache.TryGetValue(c.SubscriptionUid, out var v2)) return v2;
+        }
+        return null;
+    }
+
+    private (double Lat, double Lon)? GetPosition(SubscriptionInfo c)
+    {
+        lock (_positionCache)
+        {
+            if (!string.IsNullOrEmpty(c.ClientUid) && _positionCache.TryGetValue(c.ClientUid, out var v))  return v;
+            if (!string.IsNullOrEmpty(c.SubscriptionUid) && _positionCache.TryGetValue(c.SubscriptionUid, out var v2)) return v2;
+        }
+        return null;
+    }
+
+    private static string FormatUtm(double lat, double lon)
+    {
+        var (zone, band, e, n) = GeoUtils.LatLonToUtm(lat, lon);
+        return $"{zone}{band} {(int)e} {(int)n}";
+    }
+
+    private async Task RefreshAsync()
+    {
+        _loading = true;
+        _error = null;
+        StateHasChanged();
+        try
+        {
+            var result = await SubscriptionClient.GetAllSubscriptionsAsync(null, null, null, null);
+            _clients = result?.Data?.ToList() ?? new();
+            // Enrich each client from their latest SA CoT (battery + position)
+            await Task.WhenAll(_clients.Select(c => EnrichFromCotAsync(c.ClientUid)));
+        }
+        catch (Exception ex)
+        {
+            _error = $"Impossibile caricare i client: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task EnrichFromCotAsync(string? uid)
+    {
+        if (string.IsNullOrEmpty(uid)) return;
+        try
+        {
+            var xml = await MartiClient.GetInfoAsync(uid);
+            if (!string.IsNullOrEmpty(xml))
+                TryExtractCotData(xml);
+        }
+        catch { }
+    }
+
+    private async Task<string> BuildContextLabelAsync(string url)
+    {
+        try
+        {
+            if (TryExtractGuid(url, "/taskdetail/", out var taskId) ||
+                TryExtractGuid(url, "/task/", out taskId))
+            {
+                var task = await TaskService.GetAsync(taskId);
+                if (task?.MissionTAKSuiteId.HasValue == true)
+                {
+                    var mission = await MissionSuiteService.GetAsync(task.MissionTAKSuiteId.Value);
+                    return mission != null ? $"Missione: {mission.Name}" : $"Task: {task.Name}";
+                }
+                return task != null ? $"Task: {task.Name}" : "";
+            }
+            if (TryExtractGuid(url, "/missiontak/", out var missionId))
+            {
+                var mission = await MissionSuiteService.GetAsync(missionId);
+                return mission != null ? $"Missione: {mission.Name}" : "";
+            }
+        }
+        catch { }
+        return "";
+    }
+
+    private static bool TryExtractGuid(string url, string prefix, out Guid id)
+    {
+        id = Guid.Empty;
+        var idx = url.IndexOf(prefix, StringComparison.OrdinalIgnoreCase);
+        if (idx < 0) return false;
+        var start = idx + prefix.Length;
+        var end = url.IndexOf('/', start);
+        var segment = end < 0 ? url[start..] : url[start..end];
+        return Guid.TryParse(segment, out id);
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private static int? ParseBattery(string? s)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return null;
+        var clean = s.Trim().TrimEnd('%');
+        // Intero 0-100
+        if (int.TryParse(clean, out var vi) && vi >= 0 && vi <= 100) return vi;
+        // Decimale 0.0-1.0 → converti in %
+        if (double.TryParse(clean, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var vd))
+        {
+            if (vd is >= 0 and <= 1) return (int)Math.Round(vd * 100);
+            if (vd is > 1 and <= 100) return (int)Math.Round(vd);
+        }
+        return null;
+    }
+
+    private static string BatteryColor(int? pct) => pct switch
+    {
+        < 20  => "text-danger",
+        < 50  => "text-warning",
+        _     => "text-success"
+    };
+
+    private static IconName BatteryIcon(int? pct) => pct switch
+    {
+        < 20  => IconName.Battery,
+        < 50  => IconName.BatteryHalf,
+        _     => IconName.BatteryFull
+    };
+
+    private static string FormatLastReport(double sec) => sec switch
+    {
+        < 60   => $"{(int)sec}s fa",
+        < 3600 => $"{(int)(sec / 60)}m fa",
+        _      => $"{(int)(sec / 3600)}h fa"
+    };
+
+    private static string TeamColor(string? team) => (team ?? "").ToLowerInvariant() switch
+    {
+        "white"      or "bianco"     => "#e0e0e0",
+        "yellow"     or "giallo"     => "#ffc107",
+        "orange"     or "arancione"  => "#fd7e14",
+        "maroon"     or "bordeaux"   => "#800000",
+        "red"        or "rosso"      => "#dc3545",
+        "purple"     or "viola"      => "#9b59b6",
+        "dark blue"  or "blu scuro"  => "#003087",
+        "blue"       or "blu"        => "#0d6efd",
+        "cyan"       or "ciano"      => "#00bcd4",
+        "teal"       or "turchese"   => "#008080",
+        "green"      or "verde"      => "#198754",
+        "dark green" or "verde scuro"=> "#1a5c2a",
+        "brown"      or "marrone"    => "#795548",
+        "magenta"    or "magenta"    => "#e91e96",
+        _                            => "#6c757d"
+    };
+}

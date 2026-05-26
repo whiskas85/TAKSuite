@@ -133,24 +133,14 @@ else
         </FooterTemplate>
     </Modal>
 
-    <div class="page-sticky-header d-flex justify-content-between align-items-center">
-        <div>
-            <h2 class="mb-0">Parkings</h2>
-            <p class="text-muted mb-0">@_mission.Name</p>
-        </div>
-        <div class="d-flex gap-2">
-            @if (!string.IsNullOrEmpty(_mission.TakMissionUid))
-            {
-                <Button Color="ButtonColor.Primary" @onclick="OpenAddModal">
-                    <Icon Name="IconName.PlusLg" /> Aggiungi parcheggio
-                </Button>
-            }
+    <PageHeader Title="Parkings" Subtitle="@_mission.Name">
+        <ChildContent>
             <Button Color="ButtonColor.Secondary" Outline="true"
                     @onclick='() => Navigation.NavigateTo($"/missiontak/{MissionTakId}")'>
-                <Icon Name="IconName.ArrowLeft" /> Dettagli missione
+                <Icon Name="IconName.ArrowLeft" />
             </Button>
-        </div>
-    </div>
+        </ChildContent>
+    </PageHeader>
 
     @if (string.IsNullOrEmpty(_mission.TakMissionUid))
     {
@@ -158,13 +148,22 @@ else
             Nessuna missione TAK collegata. Collega un TAK Mission UID dalla pagina dei dettagli.
         </div>
     }
-    else if (_loading)
+    else
+    {
+        <div class="px-2 pt-3 pb-1">
+            <Button Color="ButtonColor.Primary" @onclick="OpenAddModal" class="w-100">
+                <Icon Name="IconName.PlusCircleFill" /> Aggiungi parcheggio
+            </Button>
+        </div>
+    }
+
+    @if (_loading)
     {
         <div class="d-flex justify-content-center py-5">
             <div class="spinner-border text-secondary" role="status"></div>
         </div>
     }
-    else if (_parkings.Count == 0)
+    else if (_parkings.Count == 0 && !string.IsNullOrEmpty(_mission?.TakMissionUid))
     {
         <div class="text-center py-5 text-muted">
             <Icon Name="IconName.PCircleFill" Size="IconSize.x5" />
@@ -173,32 +172,32 @@ else
     }
     else
     {
-        <div class="d-flex flex-column gap-2">
+        <div class="d-flex flex-column gap-2 px-2 pt-2">
             @foreach (var p in _parkings)
             {
-                <div class="card">
-                    <div class="card-body py-2 px-3 d-flex align-items-center gap-3">
-                        <button type="button"
-                                title="Cambia colore"
-                                @onclick="() => OpenColorPicker(p.Uid, p.Color)"
-                                style="flex-shrink:0;width:26px;height:26px;border-radius:50%;
-                                       background-color:@ColorConverterHelper.ArgbToHex(p.Color ?? -1);
-                                       border:2px solid var(--bs-border-color);cursor:pointer;padding:0;">
-                        </button>
-                        <div class="flex-grow-1 min-width-0">
-                            <div class="d-flex align-items-baseline gap-2 flex-wrap">
-                                <span class="fw-semibold">@p.Callsign</span>
-                                <span class="text-muted small font-monospace">
-                                    @p.Lat?.ToString("F6", CultureInfo.InvariantCulture) &nbsp; @p.Lon?.ToString("F6", CultureInfo.InvariantCulture)
-                                </span>
+                <div class="card shadow-sm">
+                    <div class="card-body py-3 px-3">
+                        <div class="d-flex align-items-start gap-3">
+                            <button type="button"
+                                    title="Cambia colore"
+                                    @onclick="() => OpenColorPicker(p.Uid, p.Color)"
+                                    style="flex-shrink:0;width:28px;height:28px;border-radius:50%;margin-top:2px;
+                                           background-color:@ColorConverterHelper.ArgbToHex(p.Color ?? -1);
+                                           border:2px solid var(--bs-border-color);cursor:pointer;padding:0;">
+                            </button>
+                            <div class="flex-grow-1 min-width-0">
+                                <div class="fw-semibold" style="font-size:1.05rem;">@p.Callsign</div>
+                                <div class="text-muted small font-monospace mt-1">
+                                    @p.Lat?.ToString("F5", CultureInfo.InvariantCulture) &nbsp;/&nbsp; @p.Lon?.ToString("F5", CultureInfo.InvariantCulture)
+                                </div>
                             </div>
                         </div>
-                        <div class="d-flex gap-2 flex-shrink-0">
-                            <Button Color="ButtonColor.Primary" Class="px-4"
+                        <div class="d-flex gap-2 mt-3">
+                            <Button Color="ButtonColor.Primary" class="flex-grow-1"
                                     @onclick="() => OpenMaps(p.Lat, p.Lon)">
                                 <Icon Name="IconName.GeoAltFill" /> Naviga
                             </Button>
-                            <Button Color="ButtonColor.Danger" Size="ButtonSize.Small"
+                            <Button Color="ButtonColor.Danger"
                                     @onclick="() => RemoveParkingAsync(p)">
                                 <Icon Name="IconName.Trash3Fill" />
                             </Button>

@@ -10,6 +10,8 @@
         public DateTime LastModified { get; set; } = DateTime.Now;
         public DateTime CreationDate { get; set; } = DateTime.Now;
         public bool IsValid { get; set; } = true;
+        public bool IsFavorite { get; set; } = false;
+        public string? Description { get; set; }
 
         public Guid? DocumentTypeId { get; set; }
         public DocumentType? DocumentType { get; set; }

@@ -1,4 +1,6 @@
 ﻿@page "/team/{TeamId:guid}/documentation"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
 @using TAKSuite.Components.Pages.Documentation
 @using TAKSuite.Data.Models
 @using TAKSuite.Data.Services

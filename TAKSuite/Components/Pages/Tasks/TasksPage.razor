@@ -1,4 +1,6 @@
 ﻿@page "/tasks2"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
 @using TAKSuite.Data.Models
 @using TAKSuite.Data.Services
 @inject TaskService taskService

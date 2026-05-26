@@ -53,6 +53,45 @@ namespace TAKSuite.TAK.Helper
         private const string UtmBands = "CDEFGHJKLMNPQRSTUVWX";
 
         /// <summary>
+        /// Converts WGS84 decimal lat/lon to UTM zone, band letter, easting, northing.
+        /// </summary>
+        public static (int zone, char band, double easting, double northing) LatLonToUtm(double lat, double lon)
+        {
+            const double a  = 6378137.0;
+            const double e2 = 0.00669437999014;
+            const double k0 = 0.9996;
+            const double E0 = 500000.0;
+
+            int zone   = (int)Math.Floor((lon + 180.0) / 6.0) + 1;
+            double lon0 = ((zone - 1) * 6.0 - 180.0 + 3.0) * Math.PI / 180.0;
+            double latR = lat * Math.PI / 180.0;
+            double lonR = lon * Math.PI / 180.0;
+
+            double eP2 = e2 / (1.0 - e2);
+            double N   = a / Math.Sqrt(1.0 - e2 * Math.Sin(latR) * Math.Sin(latR));
+            double T   = Math.Tan(latR) * Math.Tan(latR);
+            double C   = eP2 * Math.Cos(latR) * Math.Cos(latR);
+            double A   = Math.Cos(latR) * (lonR - lon0);
+            double M   = a * ((1.0 - e2/4 - 3*e2*e2/64 - 5*e2*e2*e2/256) * latR
+                             - (3*e2/8 + 3*e2*e2/32 + 45*e2*e2*e2/1024) * Math.Sin(2*latR)
+                             + (15*e2*e2/256 + 45*e2*e2*e2/1024) * Math.Sin(4*latR)
+                             - (35*e2*e2*e2/3072) * Math.Sin(6*latR));
+
+            double easting = k0 * N * (A
+                + (1 - T + C) * Math.Pow(A, 3) / 6.0
+                + (5 - 18*T + T*T + 72*C - 58*eP2) * Math.Pow(A, 5) / 120.0) + E0;
+
+            double northing = k0 * (M + N * Math.Tan(latR)
+                * (A*A / 2.0
+                 + (5 - T + 9*C + 4*C*C) * Math.Pow(A, 4) / 24.0
+                 + (61 - 58*T + T*T + 600*C - 330*eP2) * Math.Pow(A, 6) / 720.0));
+            if (lat < 0) northing += 10_000_000.0;
+
+            int bi = Math.Clamp((int)Math.Floor((lat + 80) / 8), 0, 19);
+            return (zone, UtmBands[bi], easting, northing);
+        }
+
+        /// <summary>
         /// Tries to parse a raw coordinate string (UTM or decimal lat/lon) into WGS84 decimal lat/lon.
         /// Handles: "32T 373313 4992906", "32T 452390E 4520000N", "45.123, 8.456", "45.123N 8.456E".
         /// </summary>

@@ -1,6 +1,8 @@
 ﻿@page "/team/{TeamId:guid}/tasks/inprogress"
+@attribute [Authorize]
 @inherits ConnectedUserInfo
 
+@using Microsoft.AspNetCore.Authorization
 @using TAKSuite.Components.Layout
 @using TAKSuite.Components.Pages.Tasks
 @using TAKSuite.Components.Pages.Tasks.TaskComponents

@@ -1,0 +1,58 @@
+.client-card {
+    background: var(--bs-body-bg);
+    border: 1px solid var(--bs-border-color);
+    border-radius: .5rem;
+    overflow: hidden;
+}
+
+.client-card-header {
+    padding: .45rem .75rem;
+    background: var(--bs-secondary-bg);
+    border-bottom: 1px solid var(--bs-border-color);
+    font-size: .9rem;
+}
+
+.client-card-body {
+    padding: .4rem .75rem .5rem;
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+}
+
+.client-row {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    flex-wrap: wrap;
+}
+
+.client-battery {
+    display: flex;
+    align-items: center;
+    gap: .2rem;
+}
+
+.client-battery-pct {
+    font-size: .75rem;
+    font-weight: 600;
+}
+
+.team-group-header {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    margin-bottom: .35rem;
+    padding-top: .1rem;
+    padding-bottom: .1rem;
+}
+
+.team-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.team-name {
+    letter-spacing: .04em;
+}

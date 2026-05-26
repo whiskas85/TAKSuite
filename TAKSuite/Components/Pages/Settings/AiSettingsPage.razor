@@ -1,0 +1,183 @@
+@page "/settings/ai"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@using TAKSuite.Data.Services.AI
+@inject AiSettingsService AiSettingsService
+@inject AiService AiService
+@inject ToastService ToastService
+
+<PageHeader Title="Impostazioni AI" TitleIcon="IconName.Robot" />
+
+<div class="container-fluid px-3 py-3" style="max-width:640px;">
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" id="aiEnabled" @bind="_model.IsEnabled" />
+                <label class="form-check-label fw-semibold" for="aiEnabled">Abilita assistente AI</label>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Provider</label>
+                <select class="form-select" @bind="_providerStr" disabled="@(!_model.IsEnabled)">
+                    <option value="Ollama">Ollama (server locale)</option>
+                    <option value="OpenAI">OpenAI / endpoint compatibile</option>
+                    <option value="ClaudeCli">Terminale — Claude Code CLI</option>
+                </select>
+            </div>
+
+            @if (_model.Provider == AiProvider.Ollama)
+            {
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Endpoint Ollama</label>
+                    <input class="form-control font-monospace" @bind="_model.Endpoint"
+                           placeholder="http://localhost:11434"
+                           disabled="@(!_model.IsEnabled)" />
+                    <div class="form-text">URL del server Ollama. Default: http://localhost:11434</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Modello</label>
+                    <input class="form-control font-monospace" @bind="_model.Model"
+                           placeholder="llama3"
+                           disabled="@(!_model.IsEnabled)" />
+                </div>
+            }
+            else if (_model.Provider == AiProvider.OpenAI)
+            {
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Endpoint</label>
+                    <input class="form-control font-monospace" @bind="_model.Endpoint"
+                           placeholder="https://api.openai.com/v1"
+                           disabled="@(!_model.IsEnabled)" />
+                    <div class="form-text">Per OpenAI ufficiale lascia vuoto. Per endpoint compatibili (LM Studio, Groq…) inserisci l'URL.</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">API Key</label>
+                    <input class="form-control font-monospace" type="password" @bind="_model.ApiKey"
+                           placeholder="sk-..."
+                           disabled="@(!_model.IsEnabled)" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Modello</label>
+                    <input class="form-control font-monospace" @bind="_model.Model"
+                           placeholder="gpt-4o"
+                           disabled="@(!_model.IsEnabled)" />
+                </div>
+            }
+            else if (_model.Provider == AiProvider.ClaudeCli)
+            {
+                <div class="alert alert-info py-2 small">
+                    <Icon Name="IconName.Terminal" /> Usa il comando <code>claude</code> installato localmente (Claude Code CLI).
+                    Assicurati che sia nel PATH di sistema e che tu sia autenticato.
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Modello <span class="text-muted small">(lascia vuoto per default)</span></label>
+                    <input class="form-control font-monospace" @bind="_model.Model"
+                           placeholder="claude-sonnet-4-6  (opzionale)"
+                           disabled="@(!_model.IsEnabled)" />
+                </div>
+            }
+
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Istruzioni aggiuntive <span class="text-muted small">(opzionale)</span></label>
+                <textarea class="form-control" rows="3" @bind="_model.ExtraSystemPrompt"
+                          placeholder="Es: Rispondi sempre in modo molto sintetico. Usa solo unità metriche."
+                          disabled="@(!_model.IsEnabled)"></textarea>
+                <div class="form-text">Aggiunto al prompt di sistema per ogni conversazione.</div>
+            </div>
+
+            <div class="d-flex gap-2 flex-wrap">
+                <Button Color="ButtonColor.Primary" @onclick="SaveAsync" Loading="_saving" LoadingText="Salvataggio...">
+                    <Icon Name="IconName.Save" /> Salva
+                </Button>
+                <Button Color="ButtonColor.Secondary" @onclick="TestAsync" Loading="_testing" LoadingText="Test..."
+                        Disabled="@(!_model.IsEnabled)">
+                    <Icon Name="IconName.PlayCircle" /> Test connessione
+                </Button>
+            </div>
+
+            @if (_testResult != null)
+            {
+                <div class="alert @(_testOk ? "alert-success" : "alert-danger") mt-3 py-2 small">
+                    @if (_testOk)
+                    {
+                        <Icon Name="IconName.CheckCircleFill" Color="IconColor.Success" />
+                    }
+                    else
+                    {
+                        <Icon Name="IconName.ExclamationTriangleFill" Color="IconColor.Danger" />
+                    }
+                    <span class="ms-1">@_testResult</span>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private AiSettings _model = new();
+    private bool _saving;
+    private bool _testing;
+    private string? _testResult;
+    private bool _testOk;
+
+    private string _providerStr
+    {
+        get => _model.Provider.ToString();
+        set
+        {
+            if (Enum.TryParse<AiProvider>(value, out var p))
+                _model.Provider = p;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _model = await AiSettingsService.GetOrCreateAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        try
+        {
+            await AiSettingsService.SaveAsync(_model);
+            ToastService.Notify(new(ToastType.Success, "AI", "Impostazioni salvate."));
+        }
+        finally { _saving = false; }
+    }
+
+    private async Task TestAsync()
+    {
+        _testing = true;
+        _testResult = null;
+        try
+        {
+            await AiSettingsService.SaveAsync(_model);
+            var messages = new List<TAKSuite.Data.Services.AI.AiChatMessage>
+            {
+                new("system", "Sei un assistente di test. Rispondi solo con: OK"),
+                new("user", "Test connessione. Rispondi solo con: OK")
+            };
+            var result = await AiService.ChatAsync(messages);
+            if (result != null)
+            {
+                _testResult = $"Connessione riuscita. Risposta: {result.Trim()}";
+                _testOk = true;
+            }
+            else
+            {
+                _testResult = "AI non disponibile. Verifica che sia abilitata e configurata.";
+                _testOk = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            _testResult = $"Errore: {ex.Message}";
+            _testOk = false;
+        }
+        finally { _testing = false; }
+    }
+}

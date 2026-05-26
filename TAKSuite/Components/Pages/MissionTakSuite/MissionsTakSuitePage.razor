@@ -1,56 +1,362 @@
-﻿@page "/missionstaksuite"
+@page "/missionstaksuite"
 @attribute [Authorize]
-
 @using Microsoft.AspNetCore.Authorization
 @using TAKSuite.Components.Pages.Components
 @using TAKSuite.Data.Models
 @using TAKSuite.Data.Services
-@using TAKSuite.TAK.CoT
-@inject MissionSuiteEntityServices entityService
-
-
+@inject MissionSuiteEntityServices EntityService
+@inject TaskService TaskService
+@inject ToastService ToastService
+@inject NavigationManager Navigation
 
 <PageTitle>Lista Missioni</PageTitle>
 
+<!-- Modal: Nuova Missione -->
+<Modal @ref="_createModal" Title="Nuova Missione">
+    <BodyTemplate>
+        <div class="mb-3">
+            <label class="form-label">Nome <span class="text-danger">*</span></label>
+            <input class="form-control" @bind="_newName" placeholder="Nome missione" />
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Descrizione</label>
+            <input class="form-control" @bind="_newDesc" placeholder="Descrizione opzionale" />
+        </div>
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Success" @onclick="CreateAsync" Loading="_creating" LoadingText="Creazione...">
+            <Icon Name="IconName.PlusCircleFill" /> Crea
+        </Button>
+        <Button Color="ButtonColor.Secondary" @onclick="() => _createModal.HideAsync()">Annulla</Button>
+    </FooterTemplate>
+</Modal>
 
+<!-- Modal: Conferma eliminazione -->
+<Modal @ref="_deleteModal" Title="Conferma eliminazione">
+    <BodyTemplate>
+        Eliminare la missione <strong>@_deleteTarget?.Name</strong>? L'operazione non è reversibile.
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Danger" @onclick="ConfirmDeleteAsync" Loading="_deleting" LoadingText="Eliminazione...">
+            <Icon Name="IconName.Trash3Fill" /> Elimina
+        </Button>
+        <Button Color="ButtonColor.Secondary" @onclick="() => _deleteModal.HideAsync()">Annulla</Button>
+    </FooterTemplate>
+</Modal>
 
-<GenericDataTable TItem="MissionSuite"
-                  TModel="MissionTakSuiteModel"
-                  Service="entityService"
-                  LoadItems="Load"
-                  Rights="BlazorReflection.Data.GridRightsType.Delete"
->
+<PageHeader Title="Missioni" Subtitle="@($"{_filtered.Count} missioni")">
+    <ChildContent>
+        <Button Color="ButtonColor.Success" @onclick="OpenCreateModal">
+            <Icon Name="IconName.PlusCircleFill" /> Nuova Missione
+        </Button>
+    </ChildContent>
+</PageHeader>
 
-    <Columns>
+<!-- Filtri -->
+<div class="d-flex gap-2 flex-wrap mb-3 align-items-center">
+    <input class="form-control form-control-sm" style="max-width:220px;"
+           placeholder="Cerca per nome..."
+           @oninput="OnSearch" />
 
-        <GridColumn TItem="MissionSuite">
-            <a href="missiontak/@context.Id"
-               title="@context.Name"
-               target="_blank"
-               rel="noopener noreferrer"
-               class="text-decoration-none">
-                <!-- Bootstrap Icons -->
-                <Tooltip Title="Apri link">
-                    <Icon Name="IconName.BoxArrowUpRight" />
-                </Tooltip>
-            </a>
-        </GridColumn>
+    @foreach (var grp in _statusGroups)
+    {
+        var gk = grp.Key;
+        <Button Size="ButtonSize.Small"
+                Color="@(_statusFilter == gk ? ButtonColor.Primary : ButtonColor.Secondary)"
+                @onclick="() => SetFilter(gk)">
+            @grp.Label
+            <Badge Color="BadgeColor.Light" Class="ms-1 text-dark">@grp.Count</Badge>
+        </Button>
+    }
+</div>
 
-        <GridColumn TItem="MissionSuite" HeaderText="Name" SortKeySelector="x => x.Name">
-            @context.Name
-        </GridColumn>
-        <GridColumn TItem="MissionSuite" HeaderText="Descrizione">
-            @context.Descrizione
-        </GridColumn>
-    </Columns>
-</GenericDataTable>
+<!-- Cards -->
+@if (_loading)
+{
+    <div class="text-center py-5 text-muted">
+        <Spinner Type="SpinnerType.Border" /> Caricamento...
+    </div>
+}
+else if (!_filtered.Any())
+{
+    <div class="text-center py-5 text-muted">
+        <Icon Name="IconName.MapFill" Size="IconSize.x2" /><br />
+        Nessuna missione trovata.
+    </div>
+}
+else
+{
+    <div class="row g-3">
+        @foreach (var m in _filtered)
+        {
+            var taskCount = _taskCounts.GetValueOrDefault(m.Id, 0);
+            var doneCount = _doneCounts.GetValueOrDefault(m.Id, 0);
+            var pct       = taskCount > 0 ? (int)Math.Round(doneCount * 100.0 / taskCount) : 0;
+            var hasWindow = m.StartDateTime.HasValue && m.EndDateTime.HasValue;
+            var color     = StatusColor(m.Status);
+            var detailUrl = "/missiontak/" + m.Id;
+            var editUrl   = "/missionedit/" + m.Id;
+            var mCopy     = m;
+
+            <div class="col-md-6 col-xl-4">
+                <div class="card h-100 shadow-sm" style="border-left: 4px solid @color; border-top: none; border-right: none; border-bottom: none;">
+                    <!-- Header card -->
+                    <div class="card-header d-flex justify-content-between align-items-center py-2 bg-transparent">
+                        <span class="badge" style="background:@color;">@m.Status.GetDisplayName()</span>
+                        <Dropdown>
+                            <DropdownToggleButton Color="DropdownColor.Secondary" Size="ButtonSize.Small" Outline="true">
+                                <Icon Name="IconName.ThreeDotsVertical" />
+                            </DropdownToggleButton>
+                            <DropdownMenu>
+                                <DropdownItem Type="DropdownItemType.Button"
+                                              @onclick="() => Navigation.NavigateTo(detailUrl)">
+                                    <Icon Name="IconName.Activity" /> Operativo
+                                </DropdownItem>
+                                <DropdownItem Type="DropdownItemType.Button"
+                                              @onclick="() => Navigation.NavigateTo(editUrl)">
+                                    <Icon Name="IconName.GearFill" /> Configura
+                                </DropdownItem>
+                                <hr class="dropdown-divider" />
+                                <DropdownItem Type="DropdownItemType.Button" Class="text-danger"
+                                              @onclick="() => OpenDeleteModal(mCopy)">
+                                    <Icon Name="IconName.Trash3Fill" /> Elimina
+                                </DropdownItem>
+                            </DropdownMenu>
+                        </Dropdown>
+                    </div>
+
+                    <!-- Body -->
+                    <div class="card-body pb-2">
+                        <h5 class="card-title mb-1 fw-bold">
+                            <NavLink href="@detailUrl" class="text-decoration-none text-body">
+                                @m.Name
+                            </NavLink>
+                        </h5>
+                        @if (!string.IsNullOrWhiteSpace(m.Descrizione))
+                        {
+                            <p class="card-text text-muted small mb-2">@m.Descrizione</p>
+                        }
+
+                        <ul class="list-unstyled small mb-2 text-muted">
+                            @if (m.Team != null)
+                            {
+                                <li><Icon Name="IconName.PeopleFill" /> @m.Team.Name</li>
+                            }
+                            @if (hasWindow)
+                            {
+                                <li>
+                                    <Icon Name="IconName.CalendarEventFill" />
+                                    @Fmt(m.StartDateTime!.Value)
+                                    <span class="mx-1">→</span>
+                                    @Fmt(m.EndDateTime!.Value)
+                                </li>
+                            }
+                            @if (!string.IsNullOrEmpty(m.TakMissionUid))
+                            {
+                                <li><Icon Name="IconName.Broadcast" /> TAK: <span class="font-monospace">@m.TakMissionUid</span></li>
+                            }
+                            <li><Icon Name="IconName.ClockHistory" /> Creata @Fmt(m.CreationDate)</li>
+                        </ul>
+
+                        @if (taskCount > 0)
+                        {
+                            <div class="d-flex justify-content-between small text-muted mb-1">
+                                <span><Icon Name="IconName.CheckSquareFill" /> @doneCount / @taskCount task</span>
+                                <span>@pct%</span>
+                            </div>
+                            <div class="progress" style="height:5px;">
+                                <div class="progress-bar" style="width:@(pct)%; background:@color;"
+                                     role="progressbar" aria-valuenow="@pct" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                        }
+                        else
+                        {
+                            <span class="small text-muted">Nessun task</span>
+                        }
+                    </div>
+
+                    <!-- Footer azioni -->
+                    <div class="card-footer bg-transparent d-flex gap-2 pt-2 pb-2">
+                        <Button Size="ButtonSize.Small" Color="ButtonColor.Primary"
+                                @onclick="() => Navigation.NavigateTo(detailUrl)">
+                            <Icon Name="IconName.Activity" /> Operativo
+                        </Button>
+                        <Button Size="ButtonSize.Small" Color="ButtonColor.Secondary" Outline="true"
+                                @onclick="() => Navigation.NavigateTo(editUrl)">
+                            <Icon Name="IconName.GearFill" /> Configura
+                        </Button>
+                        <Button Size="ButtonSize.Small" Color="ButtonColor.Danger" Outline="true" Class="ms-auto"
+                                @onclick="() => OpenDeleteModal(mCopy)">
+                            <Icon Name="IconName.Trash3Fill" />
+                        </Button>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
 
 @code {
+    private List<MissionSuite>   _all      = [];
+    private List<MissionSuite>   _filtered = [];
+    private Dictionary<Guid,int> _taskCounts = [];
+    private Dictionary<Guid,int> _doneCounts = [];
+    private bool _loading = true;
 
-    private async Task<List<MissionSuite>> Load()
+    private string _search       = "";
+    private string _statusFilter = "all";
+
+    private Modal        _createModal  = default!;
+    private Modal        _deleteModal  = default!;
+    private MissionSuite? _deleteTarget;
+
+    private string _newName = "";
+    private string _newDesc = "";
+    private bool   _creating;
+    private bool   _deleting;
+
+    private static readonly HashSet<TaskStatusTak> _taskDoneStatuses =
+    [
+        TaskStatusTak.Completed, TaskStatusTak.Aborted,
+        TaskStatusTak.Failed,    TaskStatusTak.Canceled
+    ];
+
+    private record StatusGroup(string Key, string Label, int Count);
+    private List<StatusGroup> _statusGroups = [];
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
     {
-        var items = await entityService.GetAllAsync();
-        return items.OrderByDescending(x => x.Name).ToList();
+        _loading = true;
+        _all = (await EntityService.GetAllAsync())
+            .OrderBy(m => StatusOrder(m.Status))
+            .ThenBy(m => m.Name)
+            .ToList();
+
+        var tasks = await TaskService.GetAllAsync();
+        _taskCounts = tasks
+            .Where(t => t.MissionTAKSuiteId.HasValue)
+            .GroupBy(t => t.MissionTAKSuiteId!.Value)
+            .ToDictionary(g => g.Key, g => g.Count());
+        _doneCounts = tasks
+            .Where(t => t.MissionTAKSuiteId.HasValue && _taskDoneStatuses.Contains(t.Status))
+            .GroupBy(t => t.MissionTAKSuiteId!.Value)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        BuildStatusGroups();
+        ApplyFilter();
+        _loading = false;
     }
 
+    private void BuildStatusGroups()
+    {
+        _statusGroups =
+        [
+            new("all",    "Tutte",      _all.Count),
+            new("active", "Attive",     _all.Count(m => IsActive(m.Status))),
+            new("done",   "Concluse",   _all.Count(m => IsDone(m.Status))),
+        ];
+    }
+
+    private void SetFilter(string key) { _statusFilter = key; ApplyFilter(); }
+
+    private void OnSearch(ChangeEventArgs e) { _search = e.Value?.ToString() ?? ""; ApplyFilter(); }
+
+    private void ApplyFilter()
+    {
+        var q = _all.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(_search))
+            q = q.Where(m => m.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)
+                           || (m.Descrizione?.Contains(_search, StringComparison.OrdinalIgnoreCase) == true));
+        if (_statusFilter == "active") q = q.Where(m => IsActive(m.Status));
+        if (_statusFilter == "done")   q = q.Where(m => IsDone(m.Status));
+        _filtered = q.ToList();
+    }
+
+    private async Task OpenCreateModal()
+    {
+        _newName = ""; _newDesc = "";
+        await _createModal.ShowAsync();
+    }
+
+    private async Task CreateAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newName)) return;
+        _creating = true;
+        try
+        {
+            var m = new MissionSuite
+            {
+                Id           = Guid.NewGuid(),
+                Name         = _newName.Trim(),
+                Descrizione  = string.IsNullOrWhiteSpace(_newDesc) ? null : _newDesc.Trim(),
+                Status       = MissionStatusTak.Created,
+                CreationDate = DateTime.UtcNow,
+                LastModified = DateTime.UtcNow
+            };
+            await EntityService.AddAsync(m);
+            await _createModal.HideAsync();
+            ToastService.Notify(new(ToastType.Success, "Missione", $"'{m.Name}' creata con successo."));
+            await Load();
+        }
+        finally { _creating = false; }
+    }
+
+    private async Task OpenDeleteModal(MissionSuite m)
+    {
+        _deleteTarget = m;
+        await _deleteModal.ShowAsync();
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_deleteTarget == null) return;
+        _deleting = true;
+        try
+        {
+            await EntityService.DeleteAsync(_deleteTarget.Id);
+            await _deleteModal.HideAsync();
+            ToastService.Notify(new(ToastType.Warning, "Missione", $"'{_deleteTarget.Name}' eliminata."));
+            _deleteTarget = null;
+            await Load();
+        }
+        finally { _deleting = false; }
+    }
+
+    private static string StatusColor(MissionStatusTak s) => s switch
+    {
+        MissionStatusTak.Created    => "#6c757d",
+        MissionStatusTak.Assigned   => "#0d6efd",
+        MissionStatusTak.InProgress => "#fd7e14",
+        MissionStatusTak.Paused     => "#ffc107",
+        MissionStatusTak.Stopped    => "#dc3545",
+        MissionStatusTak.Completed  => "#198754",
+        MissionStatusTak.Archived   => "#495057",
+        MissionStatusTak.Canceled   => "#dc3545",
+        _                           => "#6c757d"
+    };
+
+    private static int StatusOrder(MissionStatusTak s) => s switch
+    {
+        MissionStatusTak.InProgress => 0,
+        MissionStatusTak.Assigned   => 1,
+        MissionStatusTak.Created    => 2,
+        MissionStatusTak.Paused     => 3,
+        MissionStatusTak.Stopped    => 4,
+        MissionStatusTak.Completed  => 5,
+        MissionStatusTak.Archived   => 6,
+        MissionStatusTak.Canceled   => 7,
+        _                           => 9
+    };
+
+    private static bool IsActive(MissionStatusTak s) =>
+        s is MissionStatusTak.Created or MissionStatusTak.Assigned
+          or MissionStatusTak.InProgress or MissionStatusTak.Paused or MissionStatusTak.Stopped;
+
+    private static bool IsDone(MissionStatusTak s) =>
+        s is MissionStatusTak.Completed or MissionStatusTak.Archived or MissionStatusTak.Canceled;
+
+    private static string Fmt(DateTime utc) =>
+        DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToLocalTime().ToString("dd/MM/yy HH:mm");
 }

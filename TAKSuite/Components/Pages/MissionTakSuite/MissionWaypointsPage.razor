@@ -29,12 +29,8 @@ else
                  OnPoiCreated="OnPoiCreated" />
     <ConfirmDialog @ref="_confirmDialog" />
 
-    <div class="page-sticky-header d-flex justify-content-between align-items-center">
-        <div>
-            <h2 class="mb-0">Waypoints</h2>
-            <p class="text-muted mb-0">@_mission.Name</p>
-        </div>
-        <div class="d-flex gap-2">
+    <PageHeader Title="Waypoints" Subtitle="@_mission.Name">
+        <ChildContent>
             <Button Color="ButtonColor.Primary"
                     @onclick="async () => await _addPoiModal.ShowAsync()">
                 <Icon Name="IconName.GeoFill" /> Aggiungi POI
@@ -43,8 +39,8 @@ else
                     @onclick='() => Navigation.NavigateTo($"/missiontak/{MissionTakId}")'>
                 <Icon Name="IconName.ArrowLeft" /> Dettagli missione
             </Button>
-        </div>
-    </div>
+        </ChildContent>
+    </PageHeader>
 
     @if (string.IsNullOrEmpty(_mission.TakMissionUid))
     {

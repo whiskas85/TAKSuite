@@ -1,0 +1,34 @@
+<div class="page-sticky-header d-flex justify-content-between align-items-center">
+    <div class="page-header-title">
+        <h2 class="mb-0">
+            @if (TitleIcon.HasValue)
+            {
+                <Icon Name="@TitleIcon.Value" Class="me-1" />
+            }
+            @Title
+        </h2>
+        @if (SubtitleContent != null)
+        {
+            <div class="text-muted small mt-0">@SubtitleContent</div>
+        }
+        else if (!string.IsNullOrEmpty(Subtitle))
+        {
+            <p class="text-muted mb-0">@Subtitle</p>
+        }
+    </div>
+    <div class="d-flex gap-2 align-items-center flex-shrink-0">
+        @if (ChildContent != null)
+        {
+            @ChildContent
+        }
+        <UserAvatarButton />
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public IconName? TitleIcon { get; set; }
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public RenderFragment? SubtitleContent { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

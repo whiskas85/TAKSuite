@@ -9,18 +9,18 @@
 
 <PageTitle>Editor Template</PageTitle>
 
+<PageHeader Title="Template HTML Task" TitleIcon="IconName.FileEarmarkCodeFill">
+    <ChildContent>
+        <Button Color="ButtonColor.Success" @onclick="Save" Loading="_saving" LoadingText="Salvataggio...">
+            <Icon Name="IconName.Save" /> Salva Template
+        </Button>
+        <Button Color="ButtonColor.Secondary" @onclick="RefreshPreview">
+            <Icon Name="IconName.Eye" /> Aggiorna Anteprima
+        </Button>
+    </ChildContent>
+</PageHeader>
+
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3>Template HTML Task</h3>
-        <div class="d-flex gap-2">
-            <Button Color="ButtonColor.Success" @onclick="Save" Loading="_saving" LoadingText="Salvataggio...">
-                <Icon Name="IconName.Save" /> Salva Template
-            </Button>
-            <Button Color="ButtonColor.Secondary" @onclick="RefreshPreview">
-                <Icon Name="IconName.Eye" /> Aggiorna Anteprima
-            </Button>
-        </div>
-    </div>
 
     @if (_saved)
     {

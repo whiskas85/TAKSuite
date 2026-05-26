@@ -16,9 +16,43 @@ using TAKSuite.Data.ServicesTak;
 using BlazorPro.BlazorSize;
 using TAKSuite.Data.Seeder;
 using TAKSuite.Data.Services.BaseDataManagement;
+using TAKSuite.Data.Services.AI;
 using TAKSuite.Data.Models;
+using Serilog;
+
+var logDir = Path.Combine(AppContext.BaseDirectory, "logs");
+Directory.CreateDirectory(logDir);
+if (!System.Diagnostics.Debugger.IsAttached)
+    Console.SetOut(new ConsoleToSerilog());
+
+var sessionLogFile = Path.Combine(logDir, $"session-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+const string logTemplate = "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}";
+
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore", Serilog.Events.LogEventLevel.Warning)
+    .WriteTo.File(Path.Combine(logDir, "app-.log"),
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 14,
+        outputTemplate: logTemplate)
+    .WriteTo.File(sessionLogFile, outputTemplate: logTemplate)
+    .CreateBootstrapLogger();
+
+try
+{
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Host.UseWindowsService();
+builder.Host.UseSerilog((ctx, cfg) => cfg
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore", Serilog.Events.LogEventLevel.Warning)
+    .WriteTo.File(Path.Combine(logDir, "app-.log"),
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 14,
+        outputTemplate: logTemplate)
+    .WriteTo.File(sessionLogFile, outputTemplate: logTemplate));
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
@@ -59,6 +93,12 @@ builder.Services.AddIdentityCore<ApplicationUser>(options => options.SignIn.Requ
     .AddDefaultTokenProviders();
 
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
+
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+    options.Cookie.SameSite    = SameSiteMode.Lax;
+});
 
 // TAK Connectivity
 builder.Services.AddSingleton<TakClientProvider>();  // TakLib client (mTLS HTTP + TCP/SSL streaming)
@@ -106,9 +146,14 @@ builder.Services.AddTransient<MissionRadioContactService>();
 builder.Services.AddTransient<PhoneContactService>();
 builder.Services.AddTransient<MissionPhoneContactService>();
 builder.Services.AddTransient<AiCoordinatesService>();
+builder.Services.AddTransient<AiSettingsService>();
+builder.Services.AddTransient<AiService>();
+builder.Services.AddTransient<TaskScoreService>();
+builder.Services.AddTransient<ScoreConfigService>();
 builder.Services.AddTransient<TakSettingsService>();
 builder.Services.AddTransient<TakSubscriptionService>();
 builder.Services.AddSingleton<PhotoAutoJoinService>();
+builder.Services.AddSingleton<NavRefreshService>();
 
 
 
@@ -154,7 +199,7 @@ lifetime.ApplicationStarted.Register(() =>
     {
         // Carica impostazioni TAK dal DB e riconfigura il client
         try { await takProvider.InitializeFromDbAsync(); }
-        catch (Exception ex) { Console.WriteLine($"[Startup] InitializeFromDbAsync: {ex.Message}"); }
+        catch (Exception ex) { Log.Warning(ex, "[Startup] InitializeFromDbAsync fallito"); }
 
         // Ripristina sottoscrizioni missioni salvate
         try
@@ -166,12 +211,12 @@ lifetime.ApplicationStarted.Register(() =>
             foreach (var sub in subscriptions)
             {
                 try { await martiClient.SubscribeMissionAsync(sub.MissionName); }
-                catch (Exception ex) { Console.WriteLine($"[Startup] Ri-sottoscrizione '{sub.MissionName}' fallita: {ex.Message}"); }
+                catch (Exception ex) { Log.Warning(ex, "[Startup] Ri-sottoscrizione '{MissionName}' fallita", sub.MissionName); }
             }
             if (subscriptions.Count > 0)
-                Console.WriteLine($"[Startup] Ripristinate {subscriptions.Count} sottoscrizioni.");
+                Log.Information("[Startup] Ripristinate {Count} sottoscrizioni", subscriptions.Count);
         }
-        catch (Exception ex) { Console.WriteLine($"[Startup] Ripristino sottoscrizioni: {ex.Message}"); }
+        catch (Exception ex) { Log.Warning(ex, "[Startup] Ripristino sottoscrizioni fallito"); }
 
         // Avvia lo streaming CoT
         await cotApiClient.StartListening(cancellationToken);
@@ -188,11 +233,7 @@ if (app.Environment.IsDevelopment())
 else
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
-    app.UseHsts();
 }
-
-app.UseHttpsRedirection();
 
 app.UseAntiforgery();
 
@@ -203,6 +244,43 @@ app.MapRazorComponents<App>()
 // Add additional endpoints required by the Identity /Account Razor components.
 app.MapAdditionalIdentityEndpoints();
 
-//app.MapControllers(); // 🚀 Questo attiva il controller API
+// Document file serving endpoint
+app.MapGet("/api/doc/{id:guid}/file/{filename?}", async (Guid id, string? filename, DocumentationService docService, IWebHostEnvironment env, HttpContext httpCtx) =>
+{
+    var doc = await docService.GetAsync(id);
+    if (doc == null) return Results.NotFound();
+    var absolutePath = System.IO.Path.IsPathRooted(doc.Path)
+        ? doc.Path
+        : System.IO.Path.Combine(env.ContentRootPath, doc.Path);
+    if (!System.IO.File.Exists(absolutePath)) return Results.NotFound();
+    var mime = string.IsNullOrWhiteSpace(doc.Type) ? "application/octet-stream" : doc.Type;
+    var fileName = string.IsNullOrWhiteSpace(doc.Name) ? "file" : doc.Name;
+    httpCtx.Response.Headers["Content-Disposition"] = $"inline; filename=\"{fileName}\"; filename*=UTF-8''{Uri.EscapeDataString(fileName)}";
+    return Results.File(absolutePath, mime, enableRangeProcessing: true);
+}).RequireAuthorization();
 
 app.Run();
+
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Applicazione terminata inaspettatamente");
+}
+finally
+{
+    Log.CloseAndFlush();
+}
+
+class ConsoleToSerilog : System.IO.TextWriter
+{
+    public override System.Text.Encoding Encoding => System.Text.Encoding.UTF8;
+
+    public override void WriteLine(string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+            Log.Information("{ConsoleMessage}", value);
+    }
+
+    public override void Write(string? value) { }
+    public override void Write(char value) { }
+}

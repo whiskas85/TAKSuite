@@ -18,6 +18,7 @@
 @inject RadioChannelService radioChannelService
 @inject TaskTemplateService templateService
 @inject IJSRuntime JS
+@inject TAKSuite.Data.Services.NavRefreshService NavRefreshService
 
 @implements IDisposable
 
@@ -40,7 +41,7 @@ else
     <!-- LAYOUT PRINCIPALE -->
     <div class="obj-editor-content">
 
-        <h3>Task Editor</h3>
+        <PageHeader Title="@(taskEntity?.Name ?? "Task Editor")" TitleIcon="IconName.FileEarmarkCodeFill" />
 
         <div class="row mb-3">
             <div class="col">
@@ -351,6 +352,7 @@ else
         if (taskEntity == null) return;
         taskEntity.LastModified = DateTime.UtcNow;
         await taskService.UpdateAsync(taskEntity);
+        NavRefreshService.NotifyNavChanged();
         if (_previewOpen) await RefreshPreview();
     }
 

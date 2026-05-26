@@ -28,15 +28,8 @@
 }
 else
 {
-    <div class="page-sticky-header d-flex justify-content-between align-items-center px-1">
-        <div>
-            <h2 class="mb-0">@_task.Name</h2>
-            @if (!string.IsNullOrEmpty(_task.Sottotitolo))
-            {
-                <p class="text-muted mb-0">@_task.Sottotitolo</p>
-            }
-        </div>
-        <div class="d-flex gap-2 align-items-center">
+    <PageHeader Title="@_task.Name" Subtitle="@_task.Sottotitolo">
+        <ChildContent>
             @if (_task.GreenLightDateTime.HasValue && _task.Durata is > 0)
             {
                 <span class="text-success small fw-semibold text-end lh-1 me-1">
@@ -68,12 +61,16 @@ else
                     <Icon Name="IconName.CloudUploadFill" /> Invia a TAK
                 </Button>
             }
+            <Button Color="ButtonColor.Secondary" Outline="true"
+                    @onclick='() => Navigation.NavigateTo($"/taskdetail/{_task.Id}/documents")'>
+                <Icon Name="IconName.FolderFill" /> Documenti
+            </Button>
             <Button Color="ButtonColor.Primary"
                     @onclick='() => Navigation.NavigateTo($"/objeditor/{_task.Id}")'>
                 <Icon Name="IconName.PencilFill" /> Editor
             </Button>
-        </div>
-    </div>
+        </ChildContent>
+    </PageHeader>
 
     <!-- Timeline grafica (mostrata solo se ci sono le date della missione) -->
     @if (_mission?.StartDateTime.HasValue == true && _mission.EndDateTime.HasValue)
@@ -321,72 +318,6 @@ else
             </div>
         </div>
 
-        @if (!string.IsNullOrEmpty(_task.PoiUid))
-        {
-            <div class="col-md-6">
-                <div class="card h-100">
-                    <div class="card-header fw-bold d-flex justify-content-between align-items-center">
-                        <span><Icon Name="IconName.Paperclip" /> Allegati obiettivo</span>
-                    </div>
-                    <div class="card-body">
-                        @if (!string.IsNullOrEmpty(_mission?.TakMissionUid))
-                        {
-                            <div class="d-flex gap-2 align-items-center mb-3">
-                                <InputFile OnChange="OnAttachFileSelected" class="form-control form-control-sm" />
-                                <Button Color="ButtonColor.Primary" Size="ButtonSize.Small"
-                                        @onclick="UploadAttachmentAsync"
-                                        Loading="_uploading" LoadingText="Caricamento..."
-                                        Disabled="@(_uploadFile == null || _uploading)">
-                                    <Icon Name="IconName.CloudUploadFill" /> Allega
-                                </Button>
-                            </div>
-                        }
-                        <Grid @ref="_attachGrid"
-                              TItem="AtakAttachment"
-                              Class="table table-hover table-sm"
-                              DataProvider="AttachDataProvider"
-                              AllowFiltering="false"
-                              AllowPaging="false"
-                              AllowSorting="false"
-                              Responsive="true"
-                              EmptyText="Nessun allegato">
-                            <GridColumns>
-                                <GridColumn TItem="AtakAttachment" HeaderText="Nome" SortKeySelector="x => x.Name">
-                                    @Uri.UnescapeDataString(context.Name ?? "")
-                                </GridColumn>
-                                <GridColumn TItem="AtakAttachment" HeaderText="Tipo" SortKeySelector="x => x.MediaType">
-                                    @context.MediaType
-                                </GridColumn>
-                                <GridColumn TItem="AtakAttachment" HeaderText="" Style="width:100px">
-                                    <Button Size="ButtonSize.Small" @onclick="() => ViewAttachment(context)">
-                                        @if (context.MediaType?.Contains("jpeg") == true || context.MediaType?.Contains("png") == true)
-                                        {
-                                            <Icon Name="IconName.FileEarmarkImage" Color="IconColor.Primary" />
-                                        }
-                                        else if (context.MediaType?.Contains("pdf") == true)
-                                        {
-                                            <Icon Name="IconName.FileEarmarkPdfFill" Color="IconColor.Primary" />
-                                        }
-                                        else
-                                        {
-                                            <Icon Name="IconName.FileEarmarkArrowDownFill" Color="IconColor.Primary" />
-                                        }
-                                    </Button>
-                                    @if (!string.IsNullOrEmpty(_mission?.TakMissionUid))
-                                    {
-                                        <Button Size="ButtonSize.Small" Color="ButtonColor.Danger"
-                                                @onclick="() => DeleteAttachmentAsync(context)">
-                                            <Icon Name="IconName.Trash3Fill" />
-                                        </Button>
-                                    }
-                                </GridColumn>
-                            </GridColumns>
-                        </Grid>
-                    </div>
-                </div>
-            </div>
-        }
-
         <!-- Descrizione -->
         @if (!string.IsNullOrWhiteSpace(_task.Description))
         {
@@ -415,7 +346,7 @@ else
                     <ul class="list-group list-group-flush">
                         @foreach (var item in infoItems)
                         {
-                            <li class="list-group-item">@item.Value</li>
+                            <li class="list-group-item"><Markdown>@item.Value</Markdown></li>
                         }
                     </ul>
                 </div>
@@ -430,7 +361,7 @@ else
                     <ul class="list-group list-group-flush">
                         @foreach (var item in noteItems)
                         {
-                            <li class="list-group-item">@item.Value</li>
+                            <li class="list-group-item"><Markdown>@item.Value</Markdown></li>
                         }
                     </ul>
                 </div>
@@ -445,7 +376,7 @@ else
                     <ul class="list-group list-group-flush">
                         @foreach (var item in actionItems)
                         {
-                            <li class="list-group-item">@item.Value</li>
+                            <li class="list-group-item"><Markdown>@item.Value</Markdown></li>
                         }
                     </ul>
                 </div>
@@ -462,10 +393,6 @@ else
     private MissionSuite? _mission;
     private List<Team> _subteams = new();
     private bool _pushing;
-
-    private Grid<AtakAttachment> _attachGrid = default!;
-    private IBrowserFile? _uploadFile;
-    private bool _uploading;
 
     private System.Timers.Timer? _timer;
 
@@ -507,9 +434,6 @@ else
             _subteams = await TeamService.GetSubTeamsAsync(ConnectedAtakUser.Team);
 
         StartTimerIfNeeded();
-
-        if (_attachGrid is not null)
-            await _attachGrid.RefreshDataAsync();
 
         StateHasChanged();
     }
@@ -660,64 +584,6 @@ else
         {
             Console.WriteLine($"[AutoSubscribe] {takMissionUid}: {ex.Message}");
         }
-    }
-
-    private void OnAttachFileSelected(InputFileChangeEventArgs e) => _uploadFile = e.File;
-
-    private async Task<GridDataProviderResult<AtakAttachment>> AttachDataProvider(GridDataProviderRequest<AtakAttachment> request)
-    {
-        var list = string.IsNullOrEmpty(_task?.PoiUid)
-            ? new List<AtakAttachment>()
-            : await AttachmentService.GetAllAsync(_task.PoiUid);
-        return request.ApplyTo(list);
-    }
-
-    private async Task UploadAttachmentAsync()
-    {
-        if (_uploadFile == null || string.IsNullOrEmpty(_task?.PoiUid) || string.IsNullOrEmpty(_mission?.TakMissionUid)) return;
-        _uploading = true;
-        try
-        {
-            using var ms = new System.IO.MemoryStream();
-            await _uploadFile.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024).CopyToAsync(ms);
-            var ok = await AttachmentService.UploadAndAttachAsync(
-                _mission.TakMissionUid, _task.PoiUid,
-                ms.ToArray(), _uploadFile.Name,
-                string.IsNullOrEmpty(_uploadFile.ContentType) ? "application/octet-stream" : _uploadFile.ContentType);
-            if (ok)
-            {
-                ToastService.Notify(new(ToastType.Success, "Allegato", "File allegato con successo."));
-                _uploadFile = null;
-                await _attachGrid.RefreshDataAsync();
-            }
-            else
-            {
-                ToastService.Notify(new(ToastType.Danger, "Errore", "Impossibile allegare il file."));
-            }
-        }
-        finally { _uploading = false; }
-    }
-
-    private async Task DeleteAttachmentAsync(AtakAttachment attach)
-    {
-        var ok = await AttachmentService.DeleteAsync(_mission!.TakMissionUid!, attach);
-        if (ok)
-        {
-            ToastService.Notify(new(ToastType.Success, "Allegato", "Allegato rimosso."));
-            await _attachGrid.RefreshDataAsync();
-        }
-        else
-        {
-            ToastService.Notify(new(ToastType.Danger, "Errore", "Impossibile rimuovere l'allegato."));
-        }
-    }
-
-    private async Task ViewAttachment(AtakAttachment attach)
-    {
-        if (attach.FileBytes == null) return;
-        var base64 = Convert.ToBase64String(attach.FileBytes);
-        var mediaType = attach.MediaType ?? "application/octet-stream";
-        await JS.InvokeVoidAsync("viewFile", base64, mediaType);
     }
 
     public void Dispose()

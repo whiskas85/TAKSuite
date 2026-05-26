@@ -29,12 +29,16 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<MissionPhotoJoinConfig> MissionPhotoJoinConfigs { get; set; }
     public DbSet<CotPriorityRule> CotPriorityRules { get; set; }
 
+    public DbSet<AiSettings>      AiSettings      { get; set; }
     public DbSet<TakSettings>     TakSettings     { get; set; }
     public DbSet<TakSubscription> TakSubscriptions { get; set; }
     public DbSet<CotTemplate>     CotTemplates    { get; set; }
     public DbSet<MissionRadioContact> MissionRadioContacts { get; set; }
     public DbSet<PhoneContact> PhoneContacts { get; set; }
     public DbSet<MissionPhoneContact> MissionPhoneContacts { get; set; }
+
+    public DbSet<TaskScoreEntry> TaskScoreEntries { get; set; }
+    public DbSet<ScoreConfig> ScoreConfigs { get; set; }
 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -95,6 +99,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .OnDelete(DeleteBehavior.SetNull);
 
 
+
+        // AiSettings: singleton row
+        modelBuilder.Entity<AiSettings>()
+            .Property(a => a.Id)
+            .ValueGeneratedNever();
 
         // TakSettings: singleton row, Id is always 1 — never auto-generated
         modelBuilder.Entity<TakSettings>()
@@ -174,10 +183,23 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasOne(tl => tl.Task)
             .WithMany(t => t.Logs)
             .HasForeignKey(tl => tl.TaskId);
-        
+
         modelBuilder.Entity<TaskHierarchy>()
                 .HasOne(tl => tl.Task)
                 .WithMany(t => t.Hierarchy)
                 .HasForeignKey(tl => tl.TaskId);
+
+        modelBuilder.Entity<TaskScoreEntry>()
+            .HasOne(s => s.Task)
+            .WithMany()
+            .HasForeignKey(s => s.TaskEntityId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ScoreConfig>()
+            .HasOne(c => c.Task)
+            .WithMany()
+            .HasForeignKey(c => c.TaskEntityId)
+            .IsRequired(false)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

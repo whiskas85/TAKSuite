@@ -19,17 +19,17 @@
 }
 else
 {
-    <div class="container-fluid">
-        <div class="d-flex align-items-center gap-3 mb-4">
-            <Button Color="ButtonColor.Secondary" Size="ButtonSize.Small"
+    <PageHeader Title="Photo Auto-Join" TitleIcon="IconName.CameraFill"
+                Subtitle="@_mission.Name">
+        <ChildContent>
+            <Button Color="ButtonColor.Secondary" Outline="true"
                     @onclick='() => Navigation.NavigateTo($"/missiontak/{MissionTakId}")'>
-                <Icon Name="IconName.ArrowLeft" />
+                <Icon Name="IconName.ArrowLeft" /> Dettagli missione
             </Button>
-            <div>
-                <h3 class="mb-0"><Icon Name="IconName.CameraFill" /> Photo Auto-Join</h3>
-                <small class="text-muted">Missione: <strong>@_mission.Name</strong></small>
-            </div>
-        </div>
+        </ChildContent>
+    </PageHeader>
+
+    <div class="container-fluid">
 
         <!-- Intestazione: on/off + raggio -->
         <div class="card mb-4">

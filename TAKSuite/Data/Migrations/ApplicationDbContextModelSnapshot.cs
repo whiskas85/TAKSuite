@@ -298,6 +298,12 @@ namespace TAKSuite.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("Icon")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("int");
+
                     b.Property<int>("Target")
                         .HasColumnType("int");
 
@@ -317,6 +323,9 @@ namespace TAKSuite.Migrations
 
                     b.Property<Guid?>("DocumentTypeId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsFavorite")
+                        .HasColumnType("bit");
 
                     b.Property<bool>("IsValid")
                         .HasColumnType("bit");

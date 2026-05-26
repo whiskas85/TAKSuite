@@ -22,16 +22,61 @@
 }
 else
 {
-    <div class="page-sticky-header d-flex justify-content-between align-items-center">
-        <div>
-            <h2 class="mb-0">WP Simple</h2>
-            <p class="text-muted mb-0">@_mission.Name</p>
-        </div>
-        <Button Color="ButtonColor.Secondary" Outline="true"
-                @onclick='() => Navigation.NavigateTo($"/missiontak/{MissionTakId}")'>
-            <Icon Name="IconName.ArrowLeft" /> Dettagli missione
-        </Button>
-    </div>
+    <PageHeader Title="WP Simple" Subtitle="@_mission.Name">
+        <ChildContent>
+            <Button Color="ButtonColor.Secondary" Outline="true"
+                    @onclick='() => Navigation.NavigateTo($"/missiontak/{MissionTakId}")'>
+                <Icon Name="IconName.ArrowLeft" />
+            </Button>
+        </ChildContent>
+    </PageHeader>
+
+    <!-- Allegati modal -->
+    <Modal @ref="_attachmentModal" Title="Allegati waypoint">
+        <BodyTemplate>
+            @if (_attachList == null)
+            {
+                <div class="text-center py-3">
+                    <div class="spinner-border spinner-border-sm" role="status"></div>
+                    <span class="ms-2 text-muted">Caricamento...</span>
+                </div>
+            }
+            else if (!_attachList.Any())
+            {
+                <p class="text-center text-muted py-3">Nessun allegato</p>
+            }
+            else
+            {
+                <div class="list-group list-group-flush">
+                    @foreach (var a in _attachList)
+                    {
+                        var isImage = a.MediaType?.Contains("image") == true || a.MediaType?.Contains("jpeg") == true || a.MediaType?.Contains("png") == true;
+                        var isPdf = a.MediaType?.Contains("pdf") == true;
+                        <button class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-2 border-0"
+                                @onclick="() => ViewAttachment(a)">
+                            @if (isImage)
+                            {
+                                <Icon Name="IconName.FileEarmarkImage" Color="IconColor.Primary" Size="IconSize.x5" />
+                            }
+                            else if (isPdf)
+                            {
+                                <Icon Name="IconName.FileEarmarkPdfFill" Color="IconColor.Danger" Size="IconSize.x5" />
+                            }
+                            else
+                            {
+                                <Icon Name="IconName.FileEarmarkFill" Color="IconColor.Secondary" Size="IconSize.x5" />
+                            }
+                            <span class="flex-grow-1 text-truncate small text-start">@Uri.UnescapeDataString(a.Name ?? "")</span>
+                            <Icon Name="IconName.BoxArrowUpRight" Color="IconColor.Secondary" />
+                        </button>
+                    }
+                </div>
+            }
+        </BodyTemplate>
+        <FooterTemplate>
+            <Button Color="ButtonColor.Secondary" @onclick="() => _attachmentModal.HideAsync()">Chiudi</Button>
+        </FooterTemplate>
+    </Modal>
 
     @if (string.IsNullOrEmpty(_mission.TakMissionUid))
     {
@@ -39,135 +84,126 @@ else
             Nessuna missione TAK collegata. Collega un TAK Mission UID dalla pagina dei dettagli.
         </div>
     }
+    else if (_loading)
+    {
+        <div class="d-flex justify-content-center py-5">
+            <div class="spinner-border text-secondary" role="status"></div>
+        </div>
+    }
+    else if (!_waypoints.Any())
+    {
+        <div class="text-center py-5 text-muted">
+            <Icon Name="IconName.GeoFill" Size="IconSize.x5" />
+            <p class="mt-3">Nessun waypoint nella missione.</p>
+        </div>
+    }
     else
     {
-        <Grid @ref="_grid"
-              TItem="Waypoint"
-              Class="table table-hover"
-              HeaderRowCssClass="bg-success text-white border-bottom-0"
-              DataProvider="WpSimpleDataProvider"
-              AllowFiltering="false"
-              AllowPaging="false"
-              AllowSorting="true"
-              RowClass="GetRowClass"
-              Responsive="true">
-            <GridColumns>
-                <GridColumn TItem="Waypoint" HeaderText="Callsign" SortKeySelector="x => x.Callsign">
-                    @context.Callsign
-                </GridColumn>
-                <GridColumn TItem="Waypoint" HeaderText="">
-                    @if (context.Color != ATAKHelper.COLOR_WAYPOINT_COMPLETED)
-                    {
-                        <Button Size="ButtonSize.Small" Color="ButtonColor.Success"
-                                @onclick="() => CompleteWaypoint(context)">
-                            <Icon Name="IconName.CheckLg" />
-                        </Button>
-                    }
-                    <Button Size="ButtonSize.Small" Color="ButtonColor.Secondary" Position="Position.Relative"
-                            @onclick="() => OpenAttachments(context)">
-                        <Icon Name="IconName.Paperclip" />
-                        @if (context.AttachmentUidList.Count > 0)
-                        {
-                            <Badge Color="BadgeColor.Danger"
-                                   Position="Position.Absolute"
-                                   Placement="BadgePlacement.TopRight"
-                                   IndicatorType="BadgeIndicatorType.RoundedPill">
-                                @context.AttachmentUidList.Count
-                            </Badge>
-                        }
-                    </Button>
-                </GridColumn>
-            </GridColumns>
-        </Grid>
-    }
-
-    <Modal @ref="_attachmentModal" Title="Allegati waypoint" Size="ModalSize.Large">
-        <BodyTemplate>
-            <Grid TItem="AtakAttachment"
-                  Class="table table-hover"
-                  HeaderRowCssClass="bg-success text-white border-bottom-0"
-                  DataProvider="AttachmentDataProvider"
-                  AllowFiltering="false"
-                  AllowPaging="false"
-                  AllowSorting="true"
-                  Responsive="true">
-                <GridColumns>
-                    <GridColumn TItem="AtakAttachment" HeaderText="Nome" SortKeySelector="x => x.Name">
-                        @context.Name
-                    </GridColumn>
-                    <GridColumn TItem="AtakAttachment" HeaderText="">
-                        <Button Size="ButtonSize.Small" @onclick="() => ViewAttachment(context)">
-                            @if (context.MediaType?.Contains("jpeg") == true)
+        <div class="d-flex flex-column gap-2 px-2 pt-2">
+            @foreach (var wp in _waypoints)
+            {
+                var completed = wp.Color == ATAKHelper.COLOR_WAYPOINT_COMPLETED;
+                <div class="card shadow-sm @(completed ? "border-success border-2" : "")">
+                    <div class="card-body py-3 px-3">
+                        <div class="d-flex align-items-center gap-2 mb-3">
+                            <span style="flex-shrink:0;width:22px;height:22px;border-radius:50%;
+                                         background-color:@(TAKSuite.Helper.ColorConverterHelper.ArgbToHex(wp.Color ?? -1));
+                                         border:2px solid var(--bs-border-color);display:inline-block;">
+                            </span>
+                            <span class="fw-semibold @(completed ? "text-success" : "")"
+                                  style="font-size:1.1rem;">@wp.Callsign</span>
+                        </div>
+                        <div class="d-flex gap-2">
+                            @if (!completed)
                             {
-                                <Icon Name="IconName.FileEarmarkImage" Color="IconColor.Primary" />
-                            }
-                            else if (context.MediaType?.Contains("pdf") == true)
-                            {
-                                <Icon Name="IconName.FileEarmarkPdfFill" Color="IconColor.Primary" />
+                                <Button Color="ButtonColor.Success" class="flex-grow-1"
+                                        @onclick="() => CompleteWaypoint(wp)">
+                                    <Icon Name="IconName.CheckLg" /> Completa
+                                </Button>
                             }
                             else
                             {
-                                <Icon Name="IconName.FileEarmarkArrowDownFill" Color="IconColor.Primary" />
+                                <div class="flex-grow-1 text-success d-flex flex-column">
+                                    <span class="fw-semibold small d-flex align-items-center gap-1">
+                                        <Icon Name="IconName.CheckCircleFill" /> Completato
+                                    </span>
+                                    <span class="font-monospace" style="font-size:.8rem;">
+                                        @wp.LastUpdateTime.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
+                                    </span>
+                                </div>
                             }
-                        </Button>
-                    </GridColumn>
-                </GridColumns>
-            </Grid>
-        </BodyTemplate>
-        <FooterTemplate>
-            <Button Color="ButtonColor.Secondary" @onclick="() => _attachmentModal.HideAsync()">Chiudi</Button>
-        </FooterTemplate>
-    </Modal>
+                            <Button Color="ButtonColor.Secondary" Position="Position.Relative"
+                                    @onclick="() => OpenAttachments(wp)">
+                                <Icon Name="IconName.Paperclip" />
+                                @if (wp.AttachmentUidList.Count > 0)
+                                {
+                                    <Badge Color="BadgeColor.Danger"
+                                           Position="Position.Absolute"
+                                           Placement="BadgePlacement.TopRight"
+                                           IndicatorType="BadgeIndicatorType.RoundedPill">
+                                        @wp.AttachmentUidList.Count
+                                    </Badge>
+                                }
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
 }
 
 @code {
     [Parameter] public Guid MissionTakId { get; set; }
 
     private MissionSuite? _mission;
-    private Grid<Waypoint> _grid = default!;
+    private List<Waypoint> _waypoints = new();
+    private bool _loading;
+    private Guid _loadedMissionId = Guid.Empty;
+
     private Modal _attachmentModal = default!;
     private string? _selectedWaypointUid;
-
-    private Guid _loadedMissionId = Guid.Empty;
+    private List<AtakAttachment>? _attachList;
 
     protected override async Task OnParametersSetAsync()
     {
         if (MissionTakId == _loadedMissionId) return;
         _loadedMissionId = MissionTakId;
         _mission = null;
+        _waypoints = new();
         _mission = await MissionSuiteService.GetAsync(MissionTakId);
+        await LoadWaypointsAsync();
     }
 
-    private async Task<GridDataProviderResult<Waypoint>> WpSimpleDataProvider(GridDataProviderRequest<Waypoint> request)
+    private async Task LoadWaypointsAsync()
     {
         var missionUid = _mission?.TakMissionUid ?? string.Empty;
-        var list = string.IsNullOrEmpty(missionUid)
-            ? new List<Waypoint>()
-            : (await WaypointService.GetAllWaypointsAsync(missionUid)).OrderBy(w => w.Callsign).ToList();
-        return request.ApplyTo(list);
+        if (string.IsNullOrEmpty(missionUid)) { _waypoints = new(); StateHasChanged(); return; }
+        _loading = true;
+        StateHasChanged();
+        try
+        {
+            _waypoints = (await WaypointService.GetAllWaypointsAsync(missionUid))
+                .OrderBy(w => w.Color == ATAKHelper.COLOR_WAYPOINT_COMPLETED)
+                .ThenBy(w => w.Callsign)
+                .ToList();
+        }
+        finally { _loading = false; StateHasChanged(); }
     }
-
-    private string GetRowClass(Waypoint wpt)
-        => wpt.Color == ATAKHelper.COLOR_WAYPOINT_COMPLETED ? "table-success" : string.Empty;
 
     private async Task CompleteWaypoint(Waypoint item)
     {
         await CoTManager.ChangeCotColor(_mission?.TakMissionUid ?? string.Empty, item.Uid, ATAKHelper.COLOR_WAYPOINT_COMPLETED);
-        await _grid.RefreshDataAsync();
+        await LoadWaypointsAsync();
     }
 
     private async Task OpenAttachments(Waypoint item)
     {
         _selectedWaypointUid = item.Uid;
+        _attachList = null;
         await _attachmentModal.ShowAsync();
-    }
-
-    private async Task<GridDataProviderResult<AtakAttachment>> AttachmentDataProvider(GridDataProviderRequest<AtakAttachment> request)
-    {
-        var list = string.IsNullOrEmpty(_selectedWaypointUid)
-            ? new List<AtakAttachment>()
-            : await AttachmentService.GetAllAsync(_selectedWaypointUid);
-        return request.ApplyTo(list);
+        _attachList = await AttachmentService.GetAllAsync(item.Uid);
+        StateHasChanged();
     }
 
     private async Task ViewAttachment(AtakAttachment attach)

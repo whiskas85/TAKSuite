@@ -2,10 +2,22 @@
     position: relative;
     display: flex;
     flex-direction: column;
+    height: 100dvh;
+    overflow: hidden;
 }
 
 main {
     flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+}
+
+article {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
 }
 
 .guest-topbar {
@@ -20,7 +32,6 @@ main {
     background-color: var(--bs-body-bg);
     padding-top: 0.875rem;
     padding-bottom: 0.75rem;
-    padding-right: 3.75rem;
     margin-bottom: 1rem;
     box-shadow: 0 2px 8px -4px rgba(0,0,0,0.18);
 }
@@ -69,7 +80,7 @@ main {
     }
 
     .page-sticky-header {
-        top: 3.25rem;
+        top: 0;
         margin-left: -1rem;
         margin-right: -1rem;
         padding-left: 1rem;
@@ -138,6 +149,58 @@ main {
         padding-left: 2rem;
         padding-right: 3.75rem;
     }
+}
+
+/* ── AI floating button ── */
+.ai-fab {
+    position: fixed;
+    bottom: 1.25rem;
+    right: 1.25rem;
+    z-index: 1030;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background-color: #198754;
+    color: #fff;
+    border: none;
+    font-size: 1.4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,.3);
+    cursor: pointer;
+    transition: background-color .15s, transform .15s;
+}
+
+.ai-fab:hover {
+    background-color: #146c43;
+    transform: scale(1.08);
+}
+
+/* ── Clients floating button ── */
+.clients-fab {
+    position: fixed;
+    bottom: 1.25rem;
+    right: 4.75rem;
+    z-index: 1030;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background-color: #0d6efd;
+    color: #fff;
+    border: none;
+    font-size: 1.3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,.3);
+    cursor: pointer;
+    transition: background-color .15s, transform .15s;
+}
+
+.clients-fab:hover {
+    background-color: #0b5ed7;
+    transform: scale(1.08);
 }
 
 #blazor-error-ui {

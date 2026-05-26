@@ -119,6 +119,24 @@
     }
     .bb-icon-item:hover { background: var(--bs-secondary-bg); }
     .bb-icon-item.selected { background: var(--bs-primary); color: #fff; }
+    .doc-name-link:hover { text-decoration: underline !important; color: var(--bs-primary) !important; }
+    .doc-desc-text { cursor: pointer; line-height: 1.3; }
+    .doc-desc-text:hover { color: var(--bs-body-color) !important; text-decoration: underline; }
+    .doc-desc-placeholder { cursor: pointer; opacity: 0.45; font-size: .75rem; }
+    .doc-desc-placeholder:hover { opacity: 0.75; }
+    .doc-desc-input { font-size: .8rem; min-width: 200px; resize: vertical; }
+
+    .doc-fav-icon {
+        cursor: pointer;
+        color: var(--bs-danger-border-subtle);
+        font-size: 1rem;
+        line-height: 1;
+        transition: color .15s, transform .1s;
+        display: inline-flex;
+        align-items: center;
+    }
+    .doc-fav-icon:hover { color: var(--bs-danger); transform: scale(1.2); }
+    .doc-fav-icon--on { color: var(--bs-danger); }
 </style>
 
 <PageTitle>Documenti — @(_mission?.Name ?? "Missione")</PageTitle>
@@ -309,29 +327,68 @@ else
         </FooterTemplate>
     </Modal>
 
+    <!-- New Text/MD Document Modal -->
+    <Modal @ref="_newTextModal" Title="Nuovo documento testo">
+        <BodyTemplate>
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Tipo file</label>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm @(_newTextIsMd ? "btn-outline-secondary" : "btn-primary")"
+                            @onclick='() => _newTextIsMd = false'>
+                        <Icon Name="IconName.FileEarmarkTextFill" /> .txt
+                    </button>
+                    <button type="button" class="btn btn-sm @(_newTextIsMd ? "btn-primary" : "btn-outline-secondary")"
+                            @onclick='() => _newTextIsMd = true'>
+                        <Icon Name="IconName.FileEarmarkCodeFill" /> .md
+                    </button>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Nome file</label>
+                <input type="text" class="form-control" @bind="_newTextName" @bind:event="oninput"
+                       @onkeydown="OnNewTextKeyDown"
+                       placeholder="@(_newTextIsMd ? "es. note.md" : "es. appunti.txt")" />
+            </div>
+            <div class="mb-1">
+                <label class="form-label fw-semibold">Contenuto iniziale <span class="text-muted fw-normal">(opzionale)</span></label>
+                <textarea class="form-control" rows="6" @bind="_newTextContent" @bind:event="oninput"
+                          style="font-family:var(--bs-font-monospace);font-size:.85rem;resize:vertical"></textarea>
+            </div>
+        </BodyTemplate>
+        <FooterTemplate>
+            <Button Color="ButtonColor.Primary" @onclick="CreateTextDocAsync"
+                    Loading="_creatingText" LoadingText="Creazione..."
+                    Disabled="@(string.IsNullOrWhiteSpace(_newTextName) || _creatingText)">
+                <Icon Name="IconName.PlusLg" /> Crea
+            </Button>
+            <Button Color="ButtonColor.Secondary" @onclick="() => _newTextModal.HideAsync()" Disabled="_creatingText">Annulla</Button>
+        </FooterTemplate>
+    </Modal>
+
+    <div class="d-flex flex-column" style="height:100%;overflow:hidden;padding-bottom:1rem;">
     <!-- Sticky Header -->
-    <div class="page-sticky-header d-flex justify-content-between align-items-center">
-        <div>
-            <h5 class="mb-0"><Icon Name="IconName.FolderFill" /> Documenti — @_mission.Name</h5>
-            <p class="text-muted mb-0 small">
-                @if (_draggingDocId.HasValue)
-                {<span class="text-primary fw-semibold">Trascina sulla scheda per cambiare tipologia</span>}
-                else if (_draggingTypeId.HasValue)
-                {<span class="text-warning fw-semibold">Trascina sulla scheda di destinazione per riordinare</span>}
-                else
-                {<span>Trascina i file sulla tabella · Trascina i documenti sulle schede per cambiare tipologia</span>}
-            </p>
-        </div>
-        <div class="d-flex gap-2 align-items-center">
+    <PageHeader Title="@($"Documenti — {_mission.Name}")" TitleIcon="IconName.FolderFill">
+        <SubtitleContent>
+            @if (_draggingDocId.HasValue)
+            {<span class="text-primary fw-semibold">Trascina sulla scheda per cambiare tipologia</span>}
+            else if (_draggingTypeId.HasValue)
+            {<span class="text-warning fw-semibold">Trascina sulla scheda di destinazione per riordinare</span>}
+            else
+            {<span>Trascina i file sulla tabella · Trascina i documenti sulle schede per cambiare tipologia</span>}
+        </SubtitleContent>
+        <ChildContent>
             <Button Size="ButtonSize.Small" Color="ButtonColor.Secondary" Outline="true"
                     @onclick="LoadDocsAsync" title="Aggiorna lista">
                 <Icon Name="IconName.ArrowRepeat" />
             </Button>
+            <Button Size="ButtonSize.Small" Color="ButtonColor.Secondary" @onclick="OpenNewTextModal">
+                <Icon Name="IconName.FileEarmarkPlusFill" /> Nuovo
+            </Button>
             <Button Size="ButtonSize.Small" Color="ButtonColor.Primary" @onclick="OpenUploadModal">
                 <Icon Name="IconName.CloudUploadFill" /> Carica
             </Button>
-        </div>
-    </div>
+        </ChildContent>
+    </PageHeader>
 
     <!-- Tab Bar (search inline) -->
     <div class="doc-tab-bar">
@@ -382,16 +439,23 @@ else
             <Icon Name="IconName.PlusLg" />
         </button>
 
-        <!-- Search inline with tabs -->
+        <!-- Search + sort inline with tabs -->
         <div class="doc-tab-search">
             <input type="text" class="form-control form-control-sm" style="width:180px;"
                    placeholder="Cerca per nome..." @bind="_nameFilter" @bind:event="oninput" />
+            <Button Size="ButtonSize.Small"
+                    Color="@(_sortByDate ? ButtonColor.Primary : ButtonColor.Secondary)"
+                    Outline="@(!_sortByDate)"
+                    @onclick="() => _sortByDate = !_sortByDate"
+                    title="@(_sortByDate ? "Ordine: data modifica" : "Ordine: nome")">
+                <Icon Name="@(_sortByDate ? IconName.CalendarDate : IconName.SortAlphaDown)" />
+            </Button>
         </div>
     </div>
 
     <!-- Tab Content -->
-    <div class="card">
-        <div class="position-relative"
+    <div class="card flex-fill" style="min-height:0;overflow:hidden;">
+        <div class="position-relative" style="height:100%;overflow:hidden;"
              @ref="_tableDropContainer"
              @ondragenter="OnTableDragEnter"
              @ondragleave="OnTableDragLeave"
@@ -418,7 +482,7 @@ else
                 </div>
             }
 
-            <div class="table-responsive">
+            <div class="table-responsive" style="height:100%;overflow-y:auto;">
                 <table class="table table-hover mb-0">
                     <thead class="bg-success text-white">
                         @if (_activeTab == null)
@@ -426,11 +490,12 @@ else
                             <tr>
                                 <th style="width:3rem"></th>
                                 <th>Nome</th>
+                                <th>Descrizione</th>
                                 <th>Tipologia</th>
                                 <th>Tipo</th>
                                 <th>Dimensione</th>
                                 <th>Ultima modifica</th>
-                                <th style="width:10rem"></th>
+                                <th style="width:8rem"></th>
                             </tr>
                         }
                         else
@@ -438,10 +503,11 @@ else
                             <tr>
                                 <th style="width:3rem"></th>
                                 <th>Nome</th>
+                                <th>Descrizione</th>
                                 <th>Tipo</th>
                                 <th>Dimensione</th>
                                 <th>Ultima modifica</th>
-                                <th style="width:10rem"></th>
+                                <th style="width:8rem"></th>
                             </tr>
                         }
                     </thead>
@@ -452,7 +518,7 @@ else
                         @if (!filteredDocs.Any())
                         {
                             <tr>
-                                <td colspan="@(_activeTab == null ? 7 : 6)" class="text-center text-muted py-4">
+                                <td colspan="@(_activeTab == null ? 8 : 7)" class="text-center text-muted py-4">
                                     @if (_draggingDocId.HasValue)
                                     {<span>Trascina sulla scheda per cambiare tipologia</span>}
                                     else
@@ -463,7 +529,8 @@ else
                         @foreach (var doc in filteredDocs)
                         {
                             var isRenaming = _renamingDocId == doc.Id;
-                            <tr draggable="@(isRenaming ? "false" : "true")"
+                            var isDescEditing = _descEditingId == doc.Id;
+                            <tr draggable="@(isRenaming || isDescEditing ? "false" : "true")"
                                 class="@(_draggingDocId == doc.Id ? "doc-row-dragging" : "")"
                                 @ondragstart="() => OnRowDragStart(doc.Id)"
                                 @ondragend="OnRowDragEnd">
@@ -478,7 +545,44 @@ else
                                     }
                                     else
                                     {
-                                        <span class="fw-semibold">@doc.Name</span>
+                                        <a href="#" class="fw-semibold text-body text-decoration-none doc-name-link"
+                                           @onclick="() => OpenDocAsync(doc)" @onclick:preventDefault="true">@doc.Name</a>
+                                    }
+                                </td>
+                                <td class="align-middle" style="min-width:180px">
+                                    @if (isDescEditing)
+                                    {
+                                        <div class="d-flex align-items-start gap-1">
+                                            <textarea class="form-control form-control-sm doc-desc-input"
+                                                      rows="2"
+                                                      placeholder="Descrizione..."
+                                                      @bind="_descValue" @bind:event="oninput"
+                                                      @onkeydown="OnDescKeyDown"></textarea>
+                                            <div class="d-flex flex-column gap-1">
+                                                <Button Size="ButtonSize.Small" Color="ButtonColor.Success"
+                                                        @onclick="CommitDescAsync" title="Salva">
+                                                    <Icon Name="IconName.CheckLg" />
+                                                </Button>
+                                                <Button Size="ButtonSize.Small" Color="ButtonColor.Secondary"
+                                                        @onclick="CancelDesc" title="Annulla">
+                                                    <Icon Name="IconName.X" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    }
+                                    else if (!string.IsNullOrEmpty(doc.Description))
+                                    {
+                                        <span class="text-body-secondary small doc-desc-text"
+                                              @onclick="() => StartDescEdit(doc)" title="Modifica descrizione">
+                                            @doc.Description
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-body-secondary small doc-desc-placeholder"
+                                              @onclick="() => StartDescEdit(doc)">
+                                            <Icon Name="IconName.PlusCircle" Class="me-1" style="font-size:.7rem" />Aggiungi descrizione
+                                        </span>
                                     }
                                 </td>
                                 @if (_activeTab == null)
@@ -516,10 +620,11 @@ else
                                     else
                                     {
                                         <div class="d-flex gap-1 justify-content-end">
-                                            <Button Size="ButtonSize.Small" Color="ButtonColor.Primary" Outline="true"
-                                                    @onclick="() => OpenDocAsync(doc)" title="Apri">
-                                                <Icon Name="IconName.BoxArrowUpRight" />
-                                            </Button>
+                                            <span class="doc-fav-icon @(doc.IsFavorite ? "doc-fav-icon--on" : "")"
+                                                  @onclick="() => ToggleFavoriteAsync(doc)"
+                                                  title="@(doc.IsFavorite ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti")">
+                                                <Icon Name="@(doc.IsFavorite ? IconName.HeartFill : IconName.Heart)" />
+                                            </span>
                                             <Button Size="ButtonSize.Small" Color="ButtonColor.Secondary" Outline="true"
                                                     @onclick="() => StartRename(doc)" title="Rinomina">
                                                 <Icon Name="IconName.PencilFill" />
@@ -538,6 +643,7 @@ else
             </div>
         </div>
     </div>
+    </div>
 }
 
 @code {
@@ -549,6 +655,7 @@ else
     private List<Documentation> _docs = new();
     private List<DocumentType> _docTypes = new();
     private string _nameFilter = string.Empty;
+    private bool _sortByDate = false;
 
     // Tabs
     private bool ShowGenerale => !_docTypes.Any() || _docs.Any(d => d.DocumentTypeId == null);
@@ -613,6 +720,7 @@ else
     {
         _renamingDocId = doc.Id;
         _renameValue   = doc.Name;
+        _descEditingId = null;
     }
 
     private void CancelRename()
@@ -637,6 +745,53 @@ else
     {
         if (e.Key == "Enter")  await CommitRenameAsync();
         if (e.Key == "Escape") CancelRename();
+    }
+
+    // ── Description ──────────────────────────────────────────────────────────
+
+    private Guid? _descEditingId;
+    private string _descValue = "";
+
+    private void StartDescEdit(Documentation doc)
+    {
+        _descEditingId = doc.Id;
+        _descValue     = doc.Description ?? "";
+        _renamingDocId = null;
+    }
+
+    private void CancelDesc()
+    {
+        _descEditingId = null;
+        _descValue     = "";
+    }
+
+    private async Task CommitDescAsync()
+    {
+        if (!_descEditingId.HasValue) return;
+        var docId = _descEditingId.Value;
+        _descEditingId = null;
+
+        var doc = _docs.FirstOrDefault(d => d.Id == docId);
+        if (doc == null) return;
+
+        var newDesc = string.IsNullOrWhiteSpace(_descValue) ? null : _descValue.Trim();
+        doc.Description = newDesc;
+        await DocService.UpdateDescriptionAsync(docId, newDesc);
+    }
+
+    private async Task OnDescKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") CancelDesc();
+        if (e.Key == "Enter" && e.CtrlKey) await CommitDescAsync();
+    }
+
+    // ── Favorite ──────────────────────────────────────────────────────────────
+
+    private async Task ToggleFavoriteAsync(Documentation doc)
+    {
+        doc.IsFavorite = !doc.IsFavorite;
+        await DocService.ToggleFavoriteAsync(doc.Id);
+        StateHasChanged();
     }
 
     // Delete modal
@@ -830,7 +985,9 @@ else
         if (!string.IsNullOrWhiteSpace(_nameFilter))
             docs = docs.Where(d => d.Name.Contains(_nameFilter, StringComparison.OrdinalIgnoreCase));
 
-        return docs.OrderByDescending(d => d.LastModified);
+        return _sortByDate
+            ? docs.OrderByDescending(d => d.IsFavorite).ThenByDescending(d => d.LastModified)
+            : docs.OrderByDescending(d => d.IsFavorite).ThenBy(d => d.Name, StringComparer.OrdinalIgnoreCase);
     }
 
     // ── Add type ──────────────────────────────────────────────────────────────
@@ -895,7 +1052,7 @@ else
     {
         _tableDragCounter = 0;
         if (_draggingDocId.HasValue || _draggingTypeId.HasValue) return;
-        var files = e.GetMultipleFiles(20);
+        var files = e.GetMultipleFiles(50);
         if (!files.Any()) return;
         await ProcessFilesAsync(files, _activeTab);
     }
@@ -993,20 +1150,56 @@ else
         finally { _deleting = false; }
     }
 
+    // ── New text/md document ──────────────────────────────────────────────────
+
+    private Modal _newTextModal = default!;
+    private bool _newTextIsMd;
+    private string _newTextName = "";
+    private string _newTextContent = "";
+    private bool _creatingText;
+
+    private Task OpenNewTextModal()
+    {
+        _newTextName    = "";
+        _newTextContent = "";
+        _newTextIsMd    = false;
+        return _newTextModal.ShowAsync();
+    }
+
+    private async Task OnNewTextKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await CreateTextDocAsync();
+    }
+
+    private async Task CreateTextDocAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newTextName)) return;
+        _creatingText = true;
+        try
+        {
+            var name = _newTextName.Trim();
+            var ext  = _newTextIsMd ? ".md" : ".txt";
+            if (!name.EndsWith(ext, StringComparison.OrdinalIgnoreCase))
+                name += ext;
+
+            var doc = await DocService.CreateTextDocumentAsync(name, _newTextContent, _activeTab);
+            if (doc != null && _mission != null)
+            {
+                await DocService.LinkDocumentAsync(doc, _mission);
+                await _newTextModal.HideAsync();
+                await LoadDocsAsync();
+                await JS.InvokeVoidAsync("open", $"/doc/view/{doc.Id}?edit=true", "_blank");
+            }
+            else
+                ToastService.Notify(new(ToastType.Danger, "Errore", "Impossibile creare il documento."));
+        }
+        finally { _creatingText = false; }
+    }
+
     // ── Open / view ───────────────────────────────────────────────────────────
 
     private async Task OpenDocAsync(Documentation doc)
-    {
-        if (!File.Exists(doc.Path))
-        {
-            ToastService.Notify(new(ToastType.Warning, "Documento", "File non trovato sul server."));
-            return;
-        }
-        var bytes  = await File.ReadAllBytesAsync(doc.Path);
-        var base64 = Convert.ToBase64String(bytes);
-        var mime   = string.IsNullOrWhiteSpace(doc.Type) ? "application/octet-stream" : doc.Type;
-        await JS.InvokeVoidAsync("viewFile", base64, mime, doc.Name);
-    }
+        => await JS.InvokeVoidAsync("open", $"/doc/view/{doc.Id}", "_blank");
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 

@@ -28,7 +28,6 @@
                         </button>
                         <span class="mobile-topbar-title">TAK Suite</span>
                     </div>
-                    <UserAvatarButton />
                 </Authorized>
                 <NotAuthorized>
                     <div class="guest-topbar d-flex align-items-center justify-content-between px-3 py-2 border-bottom">
@@ -61,12 +60,30 @@
     </div>
 
     <Toasts class="p-3" AutoHide="true" Delay="4000" StackLength="3" Placement="ToastsPlacement.BottomRight" />
+
+    <AuthorizeView>
+        <Authorized>
+            <AiChatPanel @ref="_aiPanel" />
+            <ClientsPanel @ref="_clientsPanel" />
+            <button class="ai-fab" @onclick="OpenAiPanel" title="TAKSuite AI">
+                <span class="bi bi-robot"></span>
+            </button>
+            <button class="clients-fab" @onclick="OpenClientsPanel" title="Client connessi">
+                <span class="bi bi-people-fill"></span>
+            </button>
+        </Authorized>
+    </AuthorizeView>
 </MediaQueryList>
 
 @code {
     [Inject] protected ToastService ToastService { get; set; } = default!;
 
+    private AiChatPanel _aiPanel = default!;
+    private ClientsPanel _clientsPanel = default!;
     private bool _mobileSidebarOpen;
+
+    private async Task OpenAiPanel() => await _aiPanel.OpenAsync();
+    private async Task OpenClientsPanel() => await _clientsPanel.OpenAsync();
 
     private void ToggleSidebar() => _mobileSidebarOpen = !_mobileSidebarOpen;
     private void CloseSidebar()  => _mobileSidebarOpen = false;

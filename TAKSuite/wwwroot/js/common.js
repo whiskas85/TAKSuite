@@ -20,7 +20,20 @@ window.viewFile = (base64Data, mediaType, filename) => {
     const url = URL.createObjectURL(blob);
     const viewable = mediaType && (mediaType.startsWith('image/') || mediaType === 'application/pdf' || mediaType.startsWith('text/'));
     if (viewable) {
-        window.open(url, '_blank');
+        if (mediaType === 'application/pdf') {
+            const safeTitle = (filename || 'documento').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            const newTab = window.open('', '_blank');
+            if (newTab) {
+                newTab.document.write(
+                    '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + safeTitle + '</title>' +
+                    '<style>html,body{margin:0;padding:0;height:100%;background:#404040}embed{width:100%;height:100%}</style>' +
+                    '</head><body><embed src="' + url + '" type="application/pdf"></body></html>'
+                );
+                newTab.document.close();
+            }
+        } else {
+            window.open(url, '_blank');
+        }
     } else {
         const a = document.createElement('a');
         a.href = url;
@@ -138,4 +151,83 @@ window.initTableDropZone = function (container) {
         input.files = dt.files;
         input.dispatchEvent(new Event('change', { bubbles: true }));
     }, true); // capture: fires before Blazor's ondrop handler
+};
+
+window.clearTextarea = (el) => {
+    if (!el) return;
+    el.value = '';
+    el.style.height = '2.75rem';
+    el.style.overflowY = 'hidden';
+};
+
+window.autoResizeTextarea = (el) => {
+    if (!el) return;
+    el.style.height = 'auto';
+    const lh = parseFloat(getComputedStyle(el).lineHeight) || 22;
+    const maxH = lh * 5 + 20; // 5 righe + padding
+    const newH = Math.min(el.scrollHeight, maxH);
+    el.style.height = newH + 'px';
+    el.style.overflowY = el.scrollHeight > maxH ? 'auto' : 'hidden';
+};
+
+window.scrollToBottom = (elementId) => {
+    const el = document.getElementById(elementId);
+    if (el) el.scrollTop = el.scrollHeight;
+};
+
+window.initAiPanelResize = () => {
+    const panel = document.querySelector('.offcanvas.offcanvas-end');
+    if (!panel || panel._aiResizeInit) return;
+    panel._aiResizeInit = true;
+
+    const handle = document.createElement('div');
+    handle.id = 'ai-resize-handle';
+    handle.style.cssText = [
+        'position:absolute',
+        'left:0','top:0','bottom:0','width:8px',
+        'cursor:ew-resize','z-index:9999',
+        'background:transparent',
+        'transition:background .15s',
+        'display:flex','align-items:center','justify-content:center'
+    ].join(';');
+
+    // Linea visibile al centro della maniglia
+    const bar = document.createElement('div');
+    bar.style.cssText = 'width:3px;height:40px;border-radius:3px;background:rgba(128,128,128,0.35);pointer-events:none;';
+    handle.appendChild(bar);
+
+    handle.addEventListener('mouseenter', () => { bar.style.background = 'rgba(128,128,128,0.75)'; });
+    handle.addEventListener('mouseleave', () => { if (startX === undefined) bar.style.background = 'rgba(128,128,128,0.35)'; });
+
+    panel.appendChild(handle);
+
+    let startX, startW;
+
+    const begin = (clientX) => {
+        startX = clientX;
+        startW = panel.offsetWidth;
+        document.body.style.userSelect = 'none';
+        document.body.style.cursor = 'ew-resize';
+    };
+    const move = (clientX) => {
+        if (startX === undefined) return;
+        const delta = startX - clientX;
+        const newW = Math.min(Math.max(300, startW + delta), window.innerWidth * 0.92);
+        panel.style.width = newW + 'px';
+    };
+    const end = () => {
+        startX = undefined;
+        document.body.style.userSelect = '';
+        document.body.style.cursor = '';
+    };
+
+    // Mouse
+    handle.addEventListener('mousedown', e => { begin(e.clientX); e.preventDefault(); });
+    document.addEventListener('mousemove', e => move(e.clientX));
+    document.addEventListener('mouseup', end);
+
+    // Touch
+    handle.addEventListener('touchstart', e => { begin(e.touches[0].clientX); }, { passive: true });
+    document.addEventListener('touchmove', e => move(e.touches[0].clientX), { passive: true });
+    document.addEventListener('touchend', end);
 };

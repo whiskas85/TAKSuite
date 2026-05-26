@@ -43,17 +43,17 @@ public class TaskTemplateService
         var infos = task.Items
             .Where(i => i.Type == TaskStringItemType.Info)
             .OrderBy(i => i.Order)
-            .Select(i => $"<div class=\"info\">{HttpUtility.HtmlEncode(i.Value)}</div>");
+            .Select(i => $"<div class=\"info\">{Markdown.ToHtml(i.Value ?? string.Empty, _pipeline)}</div>");
 
         var notes = task.Items
             .Where(i => i.Type == TaskStringItemType.Note)
             .OrderBy(i => i.Order)
-            .Select(i => $"<div class=\"note\">{HttpUtility.HtmlEncode(i.Value)}</div>");
+            .Select(i => $"<div class=\"note\">{Markdown.ToHtml(i.Value ?? string.Empty, _pipeline)}</div>");
 
         var objectives = task.Items
             .Where(i => i.Type == TaskStringItemType.Action)
             .OrderBy(i => i.Order)
-            .Select(i => $"<li>{HttpUtility.HtmlEncode(i.Value)}</li>");
+            .Select(i => $"<li>{Markdown.ToHtml(i.Value ?? string.Empty, _pipeline)}</li>");
 
         return template
             .Replace("{{TITLE}}", HttpUtility.HtmlEncode(task.Name))

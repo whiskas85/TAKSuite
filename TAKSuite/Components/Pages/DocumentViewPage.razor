@@ -1,0 +1,433 @@
+@page "/doc/view/{DocId:guid}"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using Markdig
+@using TAKSuite.Data.Models
+@using DocumentationModel = TAKSuite.Data.Models.Documentation
+@using TAKSuite.Data.Services
+@inject DocumentationService DocService
+@inject IJSRuntime JS
+
+<style>
+    .docview-topbar {
+        position: sticky; top: 0; z-index: 100;
+        background: var(--bs-body-bg);
+        border-bottom: 1px solid var(--bs-border-color);
+        padding: .5rem .75rem;
+        display: flex; align-items: center; gap: .5rem;
+    }
+    .docview-topbar .doc-name {
+        font-weight: 600; max-width: 60vw;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .docview-body { padding: 1.25rem; }
+
+    .md-preview { font-size: .925rem; line-height: 1.6; max-width: 860px; margin: 0 auto; }
+    .md-preview h1,.md-preview h2,.md-preview h3,
+    .md-preview h4,.md-preview h5,.md-preview h6 {
+        margin-top: 1.1rem; margin-bottom: .4rem; font-weight: 600;
+        border-bottom: 1px solid var(--bs-border-color-translucent); padding-bottom: .2rem; }
+    .md-preview h1 { font-size: 1.6rem; }
+    .md-preview h2 { font-size: 1.3rem; }
+    .md-preview h3 { font-size: 1.1rem; }
+    .md-preview code {
+        background: var(--bs-tertiary-bg); border-radius: .25rem;
+        padding: .15em .4em; font-size: .875em; }
+    .md-preview pre {
+        background: var(--bs-tertiary-bg); border-radius: .375rem;
+        padding: .75rem 1rem; overflow-x: auto; }
+    .md-preview pre code { background: none; padding: 0; }
+    .md-preview blockquote {
+        border-left: 4px solid var(--bs-primary); padding-left: 1rem;
+        color: var(--bs-secondary-color); margin-left: 0; margin-right: 0; }
+    .md-preview table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
+    .md-preview table th,.md-preview table td {
+        border: 1px solid var(--bs-border-color); padding: .3rem .6rem; font-size: .875rem; }
+    .md-preview table thead { background: var(--bs-tertiary-bg); }
+    .md-preview ul,.md-preview ol { padding-left: 1.5rem; margin-bottom: .5rem; }
+    .md-preview a { color: var(--bs-link-color); }
+    .md-preview img { max-width: 100%; border-radius: .375rem; }
+    .md-preview hr { border-color: var(--bs-border-color); margin: 1rem 0; }
+    .md-preview p { margin-bottom: .6rem; }
+
+    .txt-preview {
+        white-space: pre-wrap; word-break: break-word;
+        font-family: var(--bs-font-monospace); font-size: .875rem; line-height: 1.55;
+        max-width: 860px; margin: 0 auto; }
+
+    /* ── Edit-mode full-page layout ── */
+    .docview-body.is-editing {
+        padding: 0;
+        margin: 0 -1.5rem;
+        height: calc(100dvh - 3.5rem);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+
+    @@media (max-width: 640.98px) {
+        .docview-body.is-editing {
+            height: calc(100dvh - 3.25rem - 3.5rem);
+        }
+    }
+
+    @@media (min-width: 641px) {
+        .docview-body.is-editing {
+            margin: 0 -1.5rem 0 -2rem;
+        }
+    }
+
+    .docview-body.is-editing textarea.form-control {
+        flex: 1;
+        min-height: 0 !important;
+        height: 100% !important;
+        resize: none !important;
+        border: none !important;
+        border-top: 1px solid var(--bs-border-color) !important;
+        border-radius: 0 !important;
+        padding: 1rem 1.25rem !important;
+        font-family: var(--bs-font-monospace);
+        font-size: .875rem;
+        line-height: 1.55;
+        box-shadow: none !important;
+    }
+
+    /* ── EasyMDE full-height layout ── */
+    .docview-body.is-editing .EasyMDEContainer {
+        flex: 1;
+        min-height: 0;          /* permette al flex di shrinkare */
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+    /* CodeMirror ha figli position:absolute, quindi height:auto = 0.
+       Usiamo height:0 + flex:1 così flex-grow assegna l'altezza reale. */
+    .docview-body.is-editing .EasyMDEContainer .CodeMirror {
+        flex: 1 !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        max-height: none !important;
+    }
+    .docview-body.is-editing .EasyMDEContainer .CodeMirror .CodeMirror-scroll {
+        height: 100% !important;
+        min-height: 0 !important;
+    }
+    /* Nasconde la statusbar (la barra scura di mezzo) */
+    .docview-body.is-editing .EasyMDEContainer .editor-statusbar {
+        display: none !important;
+    }
+
+    /* ── Tema scuro per EasyMDE ── */
+    [data-bs-theme="dark"] .EasyMDEContainer {
+        background: var(--bs-body-bg);
+    }
+    [data-bs-theme="dark"] .editor-toolbar {
+        background: var(--bs-tertiary-bg) !important;
+        border-color: var(--bs-border-color) !important;
+    }
+    [data-bs-theme="dark"] .editor-toolbar button,
+    [data-bs-theme="dark"] .editor-toolbar button i {
+        color: var(--bs-body-color) !important;
+    }
+    [data-bs-theme="dark"] .editor-toolbar button:hover,
+    [data-bs-theme="dark"] .editor-toolbar button.active {
+        background: var(--bs-secondary-bg) !important;
+        border-color: var(--bs-border-color) !important;
+    }
+    [data-bs-theme="dark"] .editor-toolbar i.separator {
+        border-color: var(--bs-border-color) !important;
+    }
+    [data-bs-theme="dark"] .CodeMirror {
+        background: var(--bs-body-bg) !important;
+        color: var(--bs-body-color) !important;
+        border-color: var(--bs-border-color) !important;
+    }
+    [data-bs-theme="dark"] .CodeMirror-scroll {
+        background: var(--bs-body-bg) !important;
+    }
+    [data-bs-theme="dark"] .CodeMirror-cursor {
+        border-left-color: var(--bs-body-color) !important;
+    }
+    [data-bs-theme="dark"] .CodeMirror-selected,
+    [data-bs-theme="dark"] .CodeMirror-line::selection,
+    [data-bs-theme="dark"] .CodeMirror-line > span::selection {
+        background: rgba(var(--bs-primary-rgb), .35) !important;
+    }
+    [data-bs-theme="dark"] .CodeMirror-gutters {
+        background: var(--bs-tertiary-bg) !important;
+        border-color: var(--bs-border-color) !important;
+    }
+    [data-bs-theme="dark"] .CodeMirror-linenumber {
+        color: var(--bs-secondary-color) !important;
+    }
+    [data-bs-theme="dark"] .editor-preview,
+    [data-bs-theme="dark"] .editor-preview-side {
+        background: var(--bs-body-bg) !important;
+        color: var(--bs-body-color) !important;
+        border-color: var(--bs-border-color) !important;
+    }
+</style>
+
+<PageTitle>@(_doc?.Name ?? "Documento")</PageTitle>
+
+@if (_loading)
+{
+    <div class="d-flex justify-content-center align-items-center" style="min-height:60vh">
+        <Spinner Type="SpinnerType.Border" Color="SpinnerColor.Primary" />
+    </div>
+}
+else if (_notFound)
+{
+    <div class="text-center mt-5">
+        <Icon Name="IconName.ExclamationTriangleFill" Size="IconSize.x3" Color="IconColor.Warning" />
+        <p class="mt-3 mb-0 fw-semibold">Documento non trovato.</p>
+        <p class="text-muted small">Il file potrebbe essere stato eliminato dal server.</p>
+    </div>
+}
+else if (_doc != null)
+{
+    <div class="docview-topbar">
+        @if (!_editing)
+        {
+            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="GoBack" title="Indietro">
+                <Icon Name="IconName.ArrowLeft" />
+            </button>
+        }
+        <Icon Name="@GetIcon(_doc.Type)" Color="@GetIconColor(_doc.Type)" />
+        <span class="doc-name" title="@_doc.Name">@_doc.Name</span>
+        <span class="badge bg-secondary">@GetTypeLabel(_doc.Type)</span>
+        @if (_editing)
+        {
+            <div class="ms-auto d-flex gap-2">
+                <Button Size="ButtonSize.Small" Color="ButtonColor.Success"
+                        @onclick="SaveEditAsync" Loading="_saving" LoadingText="Salvo...">
+                    <Icon Name="IconName.Floppy" /> Salva
+                </Button>
+                <Button Size="ButtonSize.Small" Color="ButtonColor.Primary"
+                        @onclick="SaveAndCloseAsync" Disabled="_saving">
+                    <Icon Name="IconName.CheckLg" /> Salva e chiudi
+                </Button>
+                <Button Size="ButtonSize.Small" Color="ButtonColor.Secondary"
+                        @onclick="CancelEdit" Disabled="_saving">Annulla</Button>
+            </div>
+        }
+        else if (_ext is ".md" or ".txt")
+        {
+            <Button Size="ButtonSize.Small" Color="ButtonColor.Secondary" Class="ms-auto"
+                    @onclick="StartEdit">
+                <Icon Name="IconName.PencilFill" /> Modifica
+            </Button>
+        }
+        else
+        {
+            <span class="ms-auto text-muted small">@GetFileSize(_doc)</span>
+        }
+        <UserAvatarButton />
+    </div>
+
+    <div class="docview-body @(_editing ? "is-editing" : "")">
+        @if (_editing && _ext == ".md")
+        {
+            <MarkdownEditor SpellChecker="false" @bind-Value="_editContent" />
+        }
+        else if (_editing && _ext == ".txt")
+        {
+            <textarea class="form-control"
+                      @bind="_editContent" @bind:event="oninput"></textarea>
+        }
+        else if (_ext == ".md")
+        {
+            <div class="md-preview">@_markdownContent</div>
+        }
+        else if (_ext == ".txt")
+        {
+            <div class="txt-preview">@_textContent</div>
+        }
+        else if (_doc.Type?.StartsWith("image/") == true)
+        {
+            <div class="text-center">
+                <img src="/api/doc/@DocId/file" alt="@_doc.Name" class="img-fluid" style="max-height:85vh;border-radius:.375rem" />
+            </div>
+        }
+        else
+        {
+            <div class="text-center mt-5">
+                <Icon Name="@GetIcon(_doc.Type)" Size="IconSize.x3" Color="@GetIconColor(_doc.Type)" />
+                <p class="mt-3 fw-semibold mb-1">@_doc.Name</p>
+                <p class="text-muted small mb-3">Tipo non visualizzabile nel browser.</p>
+                <Button Color="ButtonColor.Primary" @onclick="DownloadAsync">
+                    <Icon Name="IconName.Download" /> Scarica
+                </Button>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public Guid DocId { get; set; }
+    [SupplyParameterFromQuery(Name = "edit")] public bool AutoEdit { get; set; }
+
+    private DocumentationModel? _doc;
+    private bool _loading = true;
+    private bool _notFound;
+    private string _ext = "";
+
+    private MarkupString _markdownContent;
+    private string _textContent = "";
+    private string _rawContent  = "";
+    private bool _redirectToPdf;
+    private bool _editing;
+    private bool _saving;
+    private string _editContent = "";
+
+    private static readonly Markdig.MarkdownPipeline _mdPipeline =
+        new Markdig.MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading       = true;
+        _notFound      = false;
+        _redirectToPdf = false;
+        _doc           = await DocService.GetAsync(DocId);
+
+        if (_doc == null || !System.IO.File.Exists(_doc.Path))
+        {
+            _notFound = true;
+            _loading  = false;
+            return;
+        }
+
+        _ext = Path.GetExtension(_doc.Name).ToLowerInvariant();
+
+        if (_doc.Type == "application/pdf")
+        {
+            _redirectToPdf = true;
+            _loading       = false;
+            return;
+        }
+
+        if (_ext == ".md")
+        {
+            _rawContent      = await System.IO.File.ReadAllTextAsync(_doc.Path);
+            _markdownContent = new MarkupString(Markdig.Markdown.ToHtml(_rawContent, _mdPipeline));
+        }
+        else if (_ext == ".txt")
+        {
+            _rawContent  = await System.IO.File.ReadAllTextAsync(_doc.Path);
+            _textContent = _rawContent;
+        }
+        if (AutoEdit && (_ext == ".md" || _ext == ".txt"))
+        {
+            _editContent = _rawContent;
+            _editing     = true;
+        }
+        _loading = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && _redirectToPdf)
+        {
+            var encodedName = Uri.EscapeDataString(_doc?.Name ?? "documento.pdf");
+            await JS.InvokeVoidAsync("eval", $"window.location.replace('/api/doc/{DocId}/file/{encodedName}')");
+        }
+    }
+
+    private async Task GoBack() => await JS.InvokeVoidAsync("eval", "history.back()");
+
+    private void StartEdit()
+    {
+        _editContent = _rawContent;
+        _editing     = true;
+    }
+
+    private void CancelEdit()
+    {
+        _editing     = false;
+        _editContent = "";
+    }
+
+    private async Task SaveEditAsync()
+    {
+        if (_doc == null) return;
+        _saving = true;
+        try
+        {
+            var ok = await DocService.SaveTextAsync(DocId, _editContent);
+            if (ok)
+            {
+                _rawContent = _editContent;
+                if (_ext == ".md")
+                    _markdownContent = new MarkupString(Markdig.Markdown.ToHtml(_rawContent, _mdPipeline));
+                else
+                    _textContent = _rawContent;
+            }
+        }
+        finally { _saving = false; }
+    }
+
+    private async Task SaveAndCloseAsync()
+    {
+        await SaveEditAsync();
+        if (!_saving) _editing = false;
+    }
+
+    private async Task DownloadAsync()
+    {
+        if (_doc == null || !File.Exists(_doc.Path)) return;
+        var bytes  = await File.ReadAllBytesAsync(_doc.Path);
+        var base64 = Convert.ToBase64String(bytes);
+        await JS.InvokeVoidAsync("viewFile", base64, _doc.Type ?? "application/octet-stream", _doc.Name);
+    }
+
+    private static IconName GetIcon(string? mime) => mime switch
+    {
+        var m when m?.StartsWith("image/") == true                                              => IconName.FileEarmarkImageFill,
+        "application/pdf"                                                                        => IconName.FileEarmarkPdfFill,
+        var m when m?.Contains("word") == true || m?.Contains("odt") == true                   => IconName.FileEarmarkWordFill,
+        var m when m?.Contains("sheet") == true || m?.Contains("excel") == true ||
+                   m?.Contains("ods") == true                                                   => IconName.FileEarmarkExcelFill,
+        var m when m?.Contains("presentation") == true || m?.Contains("powerpoint") == true ||
+                   m?.Contains("odp") == true                                                   => IconName.FileEarmarkPptFill,
+        var m when m?.StartsWith("text/") == true                                               => IconName.FileEarmarkTextFill,
+        _                                                                                       => IconName.FileEarmarkFill
+    };
+
+    private static IconColor GetIconColor(string? mime) => mime switch
+    {
+        "application/pdf"                                                                        => IconColor.Danger,
+        var m when m?.StartsWith("image/") == true                                              => IconColor.Success,
+        var m when m?.Contains("word") == true || m?.Contains("odt") == true                   => IconColor.Primary,
+        var m when m?.Contains("sheet") == true || m?.Contains("excel") == true ||
+                   m?.Contains("ods") == true                                                   => IconColor.Success,
+        var m when m?.Contains("presentation") == true || m?.Contains("powerpoint") == true ||
+                   m?.Contains("odp") == true                                                   => IconColor.Warning,
+        _                                                                                       => IconColor.Secondary
+    };
+
+    private static string GetTypeLabel(string? mime) => mime switch
+    {
+        "application/pdf"                                                                        => "PDF",
+        var m when m?.StartsWith("image/") == true                                              => "Immagine",
+        var m when m?.Contains("word") == true || m?.Contains("odt") == true                   => "Word",
+        var m when m?.Contains("sheet") == true || m?.Contains("excel") == true ||
+                   m?.Contains("ods") == true                                                   => "Excel",
+        var m when m?.Contains("presentation") == true || m?.Contains("powerpoint") == true ||
+                   m?.Contains("odp") == true                                                   => "PowerPoint",
+        "text/plain" or "text/csv"                                                              => "Testo",
+        _                                                                                       => mime ?? "—"
+    };
+
+    private static string GetFileSize(DocumentationModel doc)
+    {
+        try   { return File.Exists(doc.Path) ? FormatSize(new FileInfo(doc.Path).Length) : "—"; }
+        catch { return "—"; }
+    }
+
+    private static string FormatSize(long bytes) => bytes switch
+    {
+        < 1024        => $"{bytes} B",
+        < 1024 * 1024 => $"{bytes / 1024.0:F1} KB",
+        _             => $"{bytes / (1024.0 * 1024):F1} MB"
+    };
+}

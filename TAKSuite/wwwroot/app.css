@@ -139,3 +139,19 @@ h1:focus {
 .tree-node-children li {
     margin-top: 5px;
 }
+
+/* ── AI Chat Panel (global — scoped CSS non raggiunge elementi fuori dal componente) ── */
+
+/* Footer offcanvas: input a tutta larghezza */
+.offcanvas-end .offcanvas-footer {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    padding-bottom: 0 !important;
+    padding-top: .5rem !important;
+    overflow: visible !important;
+}
+
+/* User message bubble: testo scuro su primary lime */
+.ai-msg--user .ai-msg-bubble {
+    color: #000 !important;
+}

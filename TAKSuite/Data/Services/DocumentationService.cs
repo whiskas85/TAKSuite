@@ -51,6 +51,56 @@ namespace TAKSuite.Data.Services
             }
         }
 
+        public async Task<Documentation?> CreateTextDocumentAsync(string name, string content, Guid? documentTypeId = null)
+        {
+            Documentation documentation = new() { Id = Guid.NewGuid() };
+            var basePath = Path.Combine("wwwroot", "documentation");
+            var path = Path.Combine(basePath, documentation.Id.ToString());
+
+            if (!Directory.Exists(basePath))
+                Directory.CreateDirectory(basePath);
+
+            try
+            {
+                await System.IO.File.WriteAllTextAsync(path, content, System.Text.Encoding.UTF8);
+                documentation.Path = path;
+                documentation.Name = name.Trim();
+                documentation.Type = "text/plain";
+                documentation.DocumentTypeId = documentTypeId;
+
+                using var ctx = _factory.CreateDbContext();
+                ctx.Documents.Add(documentation);
+                await ctx.SaveChangesAsync();
+                return documentation;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.Message);
+                return null;
+            }
+        }
+
+        public async Task<bool> SaveTextAsync(Guid id, string content)
+        {
+            using var ctx = _factory.CreateDbContext();
+            var doc = await ctx.Documents.FindAsync(id);
+            if (doc == null) return false;
+
+            try
+            {
+                await System.IO.File.WriteAllTextAsync(doc.Path, content, System.Text.Encoding.UTF8);
+                doc.LastModified = DateTime.Now;
+                await ctx.SaveChangesAsync();
+                _cache.Remove(_cacheKey);
+                return true;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.Message);
+                return false;
+            }
+        }
+
         public async Task<bool> RenameAsync(Guid id, string newName)
         {
             if (string.IsNullOrWhiteSpace(newName)) return false;
@@ -70,6 +120,28 @@ namespace TAKSuite.Data.Services
             var doc = await ctx.Documents.FindAsync(docId);
             if (doc == null) return false;
             doc.DocumentTypeId = typeId;
+            await ctx.SaveChangesAsync();
+            _cache.Remove(_cacheKey);
+            return true;
+        }
+
+        public async Task<bool> UpdateDescriptionAsync(Guid id, string? description)
+        {
+            using var ctx = _factory.CreateDbContext();
+            var doc = await ctx.Documents.FindAsync(id);
+            if (doc == null) return false;
+            doc.Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
+            await ctx.SaveChangesAsync();
+            _cache.Remove(_cacheKey);
+            return true;
+        }
+
+        public async Task<bool> ToggleFavoriteAsync(Guid docId)
+        {
+            using var ctx = _factory.CreateDbContext();
+            var doc = await ctx.Documents.FindAsync(docId);
+            if (doc == null) return false;
+            doc.IsFavorite = !doc.IsFavorite;
             await ctx.SaveChangesAsync();
             _cache.Remove(_cacheKey);
             return true;

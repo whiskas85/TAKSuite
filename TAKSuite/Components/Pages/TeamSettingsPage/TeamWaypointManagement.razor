@@ -1,6 +1,8 @@
 ﻿@page "/team/{TeamId:guid}/waypoints"
+@attribute [Authorize]
 @inherits ConnectedUserInfo
 
+@using Microsoft.AspNetCore.Authorization
 @rendermode InteractiveServer
 
 @using System.ComponentModel.DataAnnotations

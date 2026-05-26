@@ -14,20 +14,14 @@
 <ConfirmDialog @ref="_confirm" />
 
 <!-- Header fisso -->
-<div style="position: fixed; top: 0; left: 300px; right: 0; z-index: 100;
-            background: var(--bs-body-bg); border-bottom: 1px solid var(--bs-border-color);
-            padding: 0.5rem 1.5rem;">
-    <div class="d-flex justify-content-between align-items-center">
-        <div>
-            <h2 class="mb-0 fs-4">Rubrica Telefonica</h2>
-            <p class="text-muted mb-0 small">Gestione contatti per le missioni</p>
-        </div>
+<PageHeader Title="Rubrica Telefonica" TitleIcon="IconName.TelephoneFill"
+            Subtitle="Gestione contatti per le missioni">
+    <ChildContent>
         <Button Color="ButtonColor.Primary" @onclick="OpenAdd">
             <Icon Name="IconName.PlusLg" /> Nuovo contatto
         </Button>
-    </div>
-</div>
-<div style="height: 72px;"></div>
+    </ChildContent>
+</PageHeader>
 
 <!-- Omnibar search -->
 <div class="mb-3">

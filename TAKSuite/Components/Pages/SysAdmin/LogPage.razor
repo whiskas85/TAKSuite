@@ -1,0 +1,183 @@
+@page "/system/log"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject IJSRuntime JS
+@implements IDisposable
+@using System.IO
+
+<PageTitle>Log di sistema</PageTitle>
+
+<div class="d-flex flex-column" style="height:calc(100vh - 64px); padding:1rem; gap:.5rem;">
+
+    <!-- Tab selezione tipo log -->
+    <div class="d-flex gap-2 align-items-center flex-wrap">
+        <Button Size="ButtonSize.Small"
+                Color="@(_tab == Tab.Session ? ButtonColor.Primary : ButtonColor.Secondary)"
+                @onclick="() => SwitchTab(Tab.Session)">
+            <Icon Name="IconName.PlayCircleFill" /> Sessioni
+        </Button>
+        <Button Size="ButtonSize.Small"
+                Color="@(_tab == Tab.Daily ? ButtonColor.Primary : ButtonColor.Secondary)"
+                @onclick="() => SwitchTab(Tab.Daily)">
+            <Icon Name="IconName.CalendarFill" /> Log giornaliero
+        </Button>
+
+        <div style="width:1px; background:#444; height:24px; margin:0 4px;"></div>
+
+        <!-- Dropdown file -->
+        <select class="form-select form-select-sm" style="max-width:280px;" @onchange="OnFileChanged">
+            @foreach (var f in CurrentFiles)
+            {
+                <option value="@f" selected="@(f == _selectedFile)">@FileLabel(f)</option>
+            }
+        </select>
+
+        <Button Size="ButtonSize.Small" Color="ButtonColor.Secondary" @onclick="Refresh">
+            <Icon Name="IconName.ArrowClockwise" />
+        </Button>
+
+        <div class="form-check form-switch mb-0 ms-1">
+            <input class="form-check-input" type="checkbox" @bind="_autoScroll" id="chkAutoScroll" />
+            <label class="form-check-label small" for="chkAutoScroll">Scroll</label>
+        </div>
+        <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" @bind="_autoRefresh" id="chkLive" />
+            <label class="form-check-label small" for="chkLive">Live</label>
+        </div>
+
+        <Badge Color="BadgeColor.Secondary">@_lines.Count righe</Badge>
+        @if (_autoRefresh)
+        {
+            <Badge Color="BadgeColor.Success">● Live</Badge>
+        }
+    </div>
+
+    <!-- Viewer -->
+    <div id="logContainer"
+         style="flex:1; overflow-y:auto; background:#0d1117; border-radius:8px; padding:.75rem 1rem;
+                font-family:'Cascadia Code','Consolas','Courier New',monospace; font-size:.76rem; line-height:1.6;
+                border:1px solid #30363d;">
+        @if (!_lines.Any())
+        {
+            <div style="color:#666; text-align:center; padding:2rem;">Nessun log disponibile</div>
+        }
+        else
+        {
+            @foreach (var line in _lines)
+            {
+                <div style="@LineStyle(line); white-space:pre-wrap; word-break:break-all;">@line</div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    private enum Tab { Session, Daily }
+
+    private List<string> _sessionFiles = [];
+    private List<string> _dailyFiles   = [];
+    private Tab          _tab          = Tab.Session;
+    private string?      _selectedFile;
+    private List<string> _lines        = [];
+    private bool         _autoScroll   = true;
+    private bool         _autoRefresh  = true;
+    private Timer?       _timer;
+    private long         _lastSize     = -1;
+
+    private List<string> CurrentFiles => _tab == Tab.Session ? _sessionFiles : _dailyFiles;
+
+    protected override void OnInitialized()
+    {
+        LoadFileLists();
+        _selectedFile = CurrentFiles.FirstOrDefault();
+        ReadFile();
+        _timer = new Timer(_ => _ = InvokeAsync(LiveTick), null,
+                           TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_autoScroll)
+            await JS.InvokeVoidAsync("eval",
+                "var el=document.getElementById('logContainer'); if(el) el.scrollTop=el.scrollHeight;");
+    }
+
+    private void LoadFileLists()
+    {
+        var logDir = Path.Combine(AppContext.BaseDirectory, "logs");
+        if (!Directory.Exists(logDir)) return;
+
+        _sessionFiles = [.. Directory.GetFiles(logDir, "session-*.log")
+            .OrderByDescending(f => f)];
+
+        _dailyFiles = [.. Directory.GetFiles(logDir, "app-*.log")
+            .OrderByDescending(f => f)];
+    }
+
+    private void SwitchTab(Tab tab)
+    {
+        _tab = tab;
+        LoadFileLists();
+        _selectedFile = CurrentFiles.FirstOrDefault();
+        _lastSize = -1;
+        ReadFile();
+    }
+
+    private void ReadFile()
+    {
+        if (_selectedFile == null || !File.Exists(_selectedFile)) { _lines = []; return; }
+        try
+        {
+            using var fs = new FileStream(_selectedFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            _lastSize = fs.Length;
+            using var sr = new StreamReader(fs);
+            _lines = [.. sr.ReadToEnd().Split('\n', StringSplitOptions.RemoveEmptyEntries)];
+        }
+        catch { }
+    }
+
+    private async Task LiveTick()
+    {
+        if (!_autoRefresh || _selectedFile == null || !File.Exists(_selectedFile)) return;
+        if (new FileInfo(_selectedFile).Length != _lastSize)
+        {
+            ReadFile();
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void Refresh() { LoadFileLists(); ReadFile(); StateHasChanged(); }
+
+    private void OnFileChanged(ChangeEventArgs e)
+    {
+        _selectedFile = e.Value?.ToString();
+        _lastSize = -1;
+        ReadFile();
+    }
+
+    private string FileLabel(string path)
+    {
+        var name = Path.GetFileNameWithoutExtension(path);
+        if (name.StartsWith("session-") && name.Length >= 23)
+        {
+            // session-20260525-221643 → 25/05/2026 22:16:43
+            var raw = name[8..]; // 20260525-221643
+            if (DateTime.TryParseExact(raw, "yyyyMMdd-HHmmss",
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out var dt))
+                return $"Sessione {dt:dd/MM/yyyy HH:mm:ss}";
+        }
+        return name;
+    }
+
+    private static string LineStyle(string line)
+    {
+        if (line.Contains("[FTL]")) return "color:#ff4444;font-weight:bold;background:rgba(255,0,0,.08);padding:0 4px;border-radius:2px;";
+        if (line.Contains("[ERR]")) return "color:#ff6b6b;";
+        if (line.Contains("[WRN]")) return "color:#e3b341;";
+        if (line.Contains("[INF]")) return "color:#3fb950;";
+        if (line.Contains("[DBG]")) return "color:#6e7681;";
+        return "color:#c9d1d9;";
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

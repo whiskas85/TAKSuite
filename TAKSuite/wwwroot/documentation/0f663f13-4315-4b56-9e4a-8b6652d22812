@@ -1,0 +1,246 @@
+# 🐍 MGS — SONS OF THE PATRIOTS
+## RIEPILOGO FASE INTELLIGENCE PRE-GARA
+**FOXHOUND 02 — ZERO DARK | LPD 32-33**
+**Evento: 13/14 Giugno 2026 — Sommariva Perno (CN)**
+
+---
+
+## 📡 ACCESSO AL TERMINALE
+
+**URL:** `https://www.devils-team.it/terminale/`
+
+| Campo | Valore |
+|---|---|
+| USER ID | `FOXHOUND` |
+| PASSWORD | `METAL_GEAR_SOLID` |
+
+> Credenziali ricavate completando il gioco Codec (`https://www.devils-team.it/mgs1_codec_ultimate/`) e aprendo la cassaforte Titan-V con codice `19874310`.
+
+---
+
+## 🔐 PASSWORD CARTELLE TERMINALE
+
+| Cartella | Password | Come si trova |
+|---|---|---|
+| ARMORY_NET | `1749` | File PASSWORD_2 → russo: *"uno-sette-quattro-nove"* ✅ canonico |
+| INTEL_CORPS | `10779` | File PASSWORD_1 → Comandamenti(10) Meraviglie(7) Peccati(7) Inferno(9) ✅ canonico |
+| CONFIDENCIAL | `3389942236090388` | Solo via F12 ❌ |
+| SOLDIERS | `24680` | File ДАННЫЕ_05 → `>>> ПАРОЛЬ: 24680 <<<` ✅ canonico |
+| PSYCHO_MANTIS | `24680` | Stessa password di SOLDIERS ✅ |
+| HIDDEN_LOGS | `10281953208187` | Solo via F12 ❌ |
+
+---
+
+## 📁 FILE SCARICATI E CONTENUTO
+
+### 📄 PDF Operativi
+| File | Contenuto |
+|---|---|
+| `INTELLIGENCE.pdf` | Briefing missione — 4 fasi operative |
+| `password_dinamiche.pdf` | Password dinamiche per contatti sul campo |
+| `AREA OPERATIVA_A3-20K.pdf` | Mappa area operativa |
+| `LOG.pdf` | Log ricerca ArmsTech — reagenti composto 72-A |
+| `LOGISTICA.pdf` | Logistica evento |
+| `ATTO_PRIMO.pdf` | Storyline Atto Primo |
+| `ATTO_SECONDO.pdf` | Missioni secondarie |
+| `OBJ1-6.pdf` | Schede obiettivi principali |
+| `GRU_caracter.pdf` | Schede personaggi GRU |
+| `DocumentiGRU.pdf` | Documenti GRU |
+| `C3.pdf` | Scheda tecnica esplosivo C-3 (OKB.64.027, 1964) |
+| `security_box.pdf` | Da analizzare |
+
+### 🖼️ Immagini
+| File | Contenuto |
+|---|---|
+| `patriot.jpg` | Riferimento visivo per MISSION 10 |
+| `elementi.jpg` | Da analizzare |
+| `foto_1/2/3.jpg` | Da analizzare |
+
+---
+
+## 🔑 PASSWORD DINAMICHE SUL CAMPO
+
+### 🐍 Contatto con SNAKE
+- **FOX:** *"I serpenti non hanno bisogno di ali per volare."*
+- **SNAKE:** *"Ma hanno bisogno di terra per strisciare."*
+
+### 🕶️ Contatto con ADAM / EVA
+- **FOX:** *"Chi sono i patrioti?"*
+- **AGENTE:** *"La Li Lu Le Lo."*
+
+### 🕶️ Contatto con SOKOLOV
+- **FOX:** *"Il mondo sarà unificato?"*
+- **SOKOLOV:** *"Solo se i Patrioti lo vorranno."*
+
+### 🕶️ Contatto con SIGINT
+- **FOX:** *"Hai mai visto un'arma che non spara proiettili, ma dati?"*
+- **SIGINT:** *"Solo se il segnale è abbastanza pulito da uccidere."*
+
+> ⚠️ Se l'agente non risponde correttamente: contatto COMPROMESSO — sganciarsi immediatamente.
+
+---
+
+## 🧪 REAGENTE CORRETTO — COMPOSTO 72-A
+
+### 🔑 Indizio Operativo — LOG-10
+Il reagente **Hilovirus** è stato occultato sul campo a **16 passi indietro** dal punto di evacuazione del laboratorio. Reagisce agli **UV ed emana luminescenza** — portare una **torcia UV** per individuarlo.
+
+### 📋 Reagenti testati
+
+| Log | Reagente | Risultato |
+|---|---|---|
+| 01 | Rhino | ❌ Stabilizza, nessuna onda d'urto |
+| 02 | Xylos | ❌ Reazione endotermica, congela |
+| 03 | Bunya | ❌ Loop di risonanza, zero spinta |
+| 04 | Kyasanur | ⚠️ Forma corretta ma potenza nulla |
+| 05 | Voster | ❌ Ipervolatile, evapora tutto |
+| 06 | Junin | ❌ Neutralizza completamente |
+| 07 | Nipah | ❌ Chimicamente incompatibile |
+| 08 | Feia | ⚠️ Quasi invisibile ma energetico, emette luce propria |
+| 09 | Zika | ❌ Viraggio viola, zero cinetica |
+| 10 | **Hilovirus** | ✅ **+150% amplificazione**, reattivo UV, emette luminescenza |
+
+---
+
+## 🔗 INDIZI → OBIETTIVI
+
+### 🧪 OBJ 2 — THE FEAR
+**Recuperare e miscelare il Composto 72-A con il reagente corretto**
+Reagente giusto: **HILOVIRUS** (+150% amplificazione, reattivo UV). Cercarlo a **16 passi indietro** dal punto di evacuazione del laboratorio con una **torcia UV**.
+
+---
+
+### 🔐 MISSION 6 — THE JAIL
+**Infiltrarsi nelle file nemiche usando i documenti del GRU**
+Usare le **password dinamiche** del file `password_dinamiche.pdf` (vedi sezione sopra).
+
+---
+
+### 📸 MISSION 3 — THE REPORTAGE
+**Fotografare ogni personaggio riconducibile ai documenti**
+Usare `GRU_caracter.pdf` e `DocumentiGRU.pdf` per identificare i personaggi sul campo.
+
+---
+
+### 🗺️ MISSION 10 — THE PATRIOTS
+**Recuperare le immagini criptate nell'AO**
+`patriot.jpg` è il riferimento visivo per riconoscere le immagini criptate sul campo.
+
+---
+
+### 💣 MISSION 1 — THE JAMMER
+**Piazzare il jammer magnetico sulla torre radio**
+Materiale: simulacro esplosivo con magnete (d.40mm Sp.10mm) con logo team — a cura FOX.
+
+---
+
+### 💣 MISSION 2 — THE ANNIHILATION
+**Minare le strutture portanti**
+Materiale: simulacro esplosivo C3 fornito dalla DE.
+
+---
+
+### 🎯 OBJ 1 — THE PAIN (E4)
+**Risolvere i Protocolli di Tselinoyarsk (esercizio cartografico)**
+Usare `AREA OPERATIVA_A3-20K.pdf` per l'esercizio cartografico.
+
+---
+
+### 🎭 MISSION 11 — THE EASTER EGG
+**"Это танец маленьких утят"** = *"È la danza dei piccoli anatroccoli"*
+Sul campo eseguire o riconoscere fisicamente **la danza degli anatroccoli**. 🦆
+
+---
+
+### 🎒 MISSION 7 — THE MEMORY
+**Trovare i resti della Missione Virtuosa**
+Materiale: tubo d.80mm h.230mm tappato — dimensioni di un **tubo di Pringles** — nascosto nell'area operativa.
+
+---
+
+### 🔑 Codice russo 4726
+**"Четыре семь два шесть"** — probabile chiave per **OBJ 1 (E1/E2)** o **OBJ 4 (E1)**: alimentare la plancia o armare l'ordigno.
+
+---
+
+### 📋 Riepilogo rapido indizi → obiettivi
+
+| Indizio trovato | Obiettivo collegato |
+|---|---|
+| Reagente HILOVIRUS + 16 passi | OBJ 2 — THE FEAR |
+| Password dinamiche | MISSION 6 — THE JAIL |
+| GRU_caracter.pdf | MISSION 3 — THE REPORTAGE |
+| patriot.jpg | MISSION 10 — THE PATRIOTS |
+| Simulacro magnetico d.40mm | MISSION 1 — THE JAMMER |
+| C3 / CLAYMORE | MISSION 2 — THE ANNIHILATION |
+| AREA OPERATIVA mappa | OBJ 1 — THE PAIN (E4) |
+| Danza anatroccoli 🦆 | MISSION 11 — THE EASTER EGG |
+| Tubo Pringles | MISSION 7 — THE MEMORY |
+| Codice 4726 | OBJ 1 o OBJ 4 (chiave ordigno) |
+
+---
+
+## 📞 CONTATTI ORGANIZZATORI
+
+| Ruolo | Numero |
+|---|---|
+| PATRIOT | 348 2636255 |
+| RICU | 333 3199895 |
+| RAGE | 339 8507008 |
+| Admin terminale | 3389942236 (WhatsApp) |
+
+> Per file corrotti: contattare admin WhatsApp identificandosi come **Foxhound_N°**
+
+---
+
+## 🔴 DA FARE ANCORA
+
+### Prima dell'evento
+- [ ] Aprire HIDDEN_LOGS (`10281953208187`) e scaricare LOG, SECURITY_BOX, FOTO 1-2-3
+- [ ] Scaricare e studiare `GRU_caracter.pdf`
+- [ ] Attendere risposta WhatsApp per file corrotti
+- [ ] Capire a cosa servono i cifrari Codec (HACKER, THE BOSS)
+- [ ] Trovare dove usare esattamente il codice **4726**
+
+### Materiali fisici da preparare
+- [ ] Simulacro esplosivo magnetico (d.40mm Sp.10mm) con logo team
+- [ ] Tubo d.80mm h.230mm tappato (es. Pringles)
+- [ ] **Torcia UV** per trovare il reagente Hilovirus
+
+### Sul campo
+- [ ] Usare password dinamiche per identificare agenti
+- [ ] Fotografare personaggi GRU (MISSION 3)
+- [ ] Trovare e fotografare 4 paracadute (MISSION 8)
+- [ ] Trovare immagini criptate nell'AO (MISSION 10)
+- [ ] Piazzare jammer sulla torre radio (MISSION 1)
+- [ ] Trovare reagente Hilovirus con torcia UV (OBJ 2)
+- [ ] Filmare scontro notturno Snake vs GRU (MISSION 13)
+- [ ] Filmare scambio GRU all'alba (MISSION 14)
+- [ ] Raccogliere Supply Points nell'AO (MISSION 15)
+
+---
+
+## 🎮 CANALI RADIO FOXHOUND 02
+**LPD 32-33**
+
+| Team | Canale |
+|---|---|
+| FOXHOUND 01 — SAS | LPD 30-31 |
+| **FOXHOUND 02 — ZERO DARK** | **LPD 32-33** |
+| FOXHOUND 03 — JACKALS | LPD 34-35 |
+| FOXHOUND 04 — LUPI DEL TIGULLIO | LPD 36-37 |
+| FOXHOUND 05 — RAPTOR | LPD 38-39 |
+| FOXHOUND 06 — CDM | LPD 40-41 |
+| FOXHOUND 07 — NOVAK | LPD 42-43 |
+| FOXHOUND 08 — GDP | LPD 44-45 |
+| FOXHOUND 09 — WOLF CLAN | LPD 46-47 |
+| FOXHOUND 10 — FOXUNIT | LPD 48-49 |
+| FOXHOUND 11 — SCOIATTOLI | LPD 50-51 |
+| FOXHOUND 12 — NBC | LPD 52-53 |
+| FOXHOUND 13 — BRIGATA FANTASMA | LPD 54-55 |
+| DE | LPD 69 (68) |
+
+---
+
+*Documento generato nella fase di Intelligence pre-gara — FOXHOUND 02*
+*"Il cervello è la tua arma migliore." — Master Miller*

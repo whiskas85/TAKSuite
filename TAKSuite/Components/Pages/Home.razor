@@ -26,16 +26,15 @@
 }
 else
 {
-    <div class="page-sticky-header">
-        <h1 class="mb-0">Buongiorno, @(_nick ?? "operatore")</h1>
-        <p class="text-muted mb-0">
+    <PageHeader Title="@($"Buongiorno, {_nick ?? "operatore"}")">
+        <SubtitleContent>
             @DateTime.Now.ToString("dddd d MMMM yyyy", new System.Globalization.CultureInfo("it-IT"))
             @if (_userTeam != null)
             {
                 <span class="ms-2 badge bg-secondary">@_userTeam.Name</span>
             }
-        </p>
-    </div>
+        </SubtitleContent>
+    </PageHeader>
 
     <!-- KPI row -->
     <div class="row g-3 mb-4">

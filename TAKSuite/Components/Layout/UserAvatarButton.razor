@@ -80,6 +80,8 @@
     private string _displayName = "";
     private string _currentTheme = "auto";
 
+    private string? _userId;
+
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
@@ -89,7 +91,9 @@
         var appUser = await userManager.GetUserAsync(authState.User);
         if (appUser == null) return;
 
+        _userId = appUser.Id;
         _email = appUser.Email;
+        _currentTheme = appUser.Theme ?? "auto";
 
         try
         {
@@ -108,15 +112,7 @@
     {
         if (firstRender)
         {
-            try
-            {
-                _currentTheme = await JS.InvokeAsync<string>("avatarGetTheme");
-            }
-            catch
-            {
-                _currentTheme = "auto";
-            }
-            StateHasChanged();
+            await JS.InvokeVoidAsync("avatarSetTheme", _currentTheme);
         }
     }
 
@@ -124,6 +120,14 @@
     {
         _currentTheme = theme;
         await JS.InvokeVoidAsync("avatarSetTheme", theme);
+
+        if (_userId == null) return;
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var appUser = await userManager.FindByIdAsync(_userId);
+        if (appUser == null) return;
+        appUser.Theme = theme;
+        await userManager.UpdateAsync(appUser);
     }
 
     private static string ComputeInitials(string input)

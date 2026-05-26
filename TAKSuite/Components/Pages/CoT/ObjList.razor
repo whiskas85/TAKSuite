@@ -1,7 +1,8 @@
-﻿@page "/objs" 
+﻿@page "/objs"
 @* /{missionUid:string}*@
-@inject WaypointService waypointsService;
+@attribute [Authorize]
 @using Microsoft.AspNetCore.Authorization
+@inject WaypointService waypointsService;
 @using TAKSuite.Data.ModelsTak
 @using TAKSuite.Data.ServicesTak
 @attribute [Authorize]

@@ -18,18 +18,18 @@
 
 <PageTitle>Connessione TAK</PageTitle>
 
+<PageHeader Title="Connessione TAK Server" TitleIcon="IconName.ShieldLockFill">
+    <ChildContent>
+        <Button Color="ButtonColor.Primary" @onclick="SaveAsync" Loading="_saving" LoadingText="Salvataggio...">
+            <Icon Name="IconName.Save" /> Salva
+        </Button>
+        <Button Color="ButtonColor.Warning" @onclick="ApplyAndReconnectAsync" Loading="_reconnecting" LoadingText="Riconnessione...">
+            <Icon Name="IconName.ArrowRepeat" /> Applica e Riconnetti
+        </Button>
+    </ChildContent>
+</PageHeader>
+
 <div class="container-fluid">
-    <div class="page-sticky-header d-flex justify-content-between align-items-center">
-        <h3><Icon Name="IconName.ShieldLockFill" /> Connessione TAK Server</h3>
-        <div class="d-flex gap-2">
-            <Button Color="ButtonColor.Primary" @onclick="SaveAsync" Loading="_saving" LoadingText="Salvataggio...">
-                <Icon Name="IconName.Save" /> Salva
-            </Button>
-            <Button Color="ButtonColor.Warning" @onclick="ApplyAndReconnectAsync" Loading="_reconnecting" LoadingText="Riconnessione...">
-                <Icon Name="IconName.ArrowRepeat" /> Applica e Riconnetti
-            </Button>
-        </div>
-    </div>
 
     @if (_errorMessage != null)
     {

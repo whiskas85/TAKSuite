@@ -1,0 +1,951 @@
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@using TAKSuite.Data.Services.AI
+@using TAKSuite.Data.ServicesTak
+@using TAKSuite.TAK.Helper
+@using TAKSuite.TAK.CoT
+@using TAKSuite.TAK.MartiApi
+@using System.Xml.Linq
+@inject AiService AiService
+@inject AiSettingsService AiSettingsService
+@inject NavigationManager Nav
+@inject MissionSuiteEntityServices MissionSuiteService
+@inject TaskService TaskService
+@inject DocumentationService DocService
+@inject WaypointService WaypointService
+@inject AttachmentService AttachmentService
+@inject CoTManager CoTManager
+@inject TaskScoreService TaskScoreService
+@inject ScoreConfigService ScoreConfigService
+@inject SubscriptionApiClient SubscriptionClient
+@inject MartiApiClient MartiClient
+@inject IJSRuntime JS
+@implements IDisposable         
+
+<Offcanvas @ref="_panel"
+           Title="@_panelTitle"
+           Placement="Placement.End"
+           Size="OffcanvasSize.Regular"
+           UseStaticBackdrop="false">
+    <BodyTemplate>
+        @if (!_aiEnabled)
+        {
+            <div class="text-center text-muted py-4">
+                <Icon Name="IconName.Robot" Size="IconSize.x4" />
+                <p class="mt-2 small">AI non configurata.</p>
+                <a href="/settings/ai" class="btn btn-sm btn-outline-primary">Configura</a>
+            </div>
+        }
+        else
+        {
+            <!-- Top bar: context + nuova conversazione -->
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                @if (!string.IsNullOrEmpty(_contextLabel))
+                {
+                    <span class="badge bg-secondary rounded-pill">
+                        <Icon Name="IconName.GeoFill" /> @_contextLabel
+                    </span>
+                }
+                else
+                {
+                    <span></span>
+                }
+                <button class="ai-new-chat-btn" @onclick="ClearHistory" title="Nuova conversazione">
+                    <Icon Name="IconName.PencilSquare" />
+                </button>
+            </div>
+
+            <!-- Chat messages -->
+            <div class="ai-chat-messages" id="ai-chat-scroll">
+                @foreach (var msg in _display)
+                {
+                    <div class="ai-msg ai-msg--@msg.Role">
+                        <div class="ai-msg-bubble">
+                            @if (msg.Role == "assistant")
+                            {
+                                <Markdown>@msg.Content</Markdown>
+                            }
+                            else
+                            {
+                                @msg.Content
+                            }
+                        </div>
+                    </div>
+                }
+                @if (_thinking)
+                {
+                    <div class="ai-msg ai-msg--assistant">
+                        <div class="ai-msg-bubble ai-msg-bubble--thinking">
+                            <span class="ai-dot"></span>
+                            <span class="ai-dot"></span>
+                            <span class="ai-dot"></span>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </BodyTemplate>
+    <FooterTemplate>
+        @if (_aiEnabled)
+        {
+            <div class="ai-input-container">
+                <textarea class="ai-textarea"
+                          @ref="_textareaRef"
+                          placeholder="Messaggio…"
+                          @oninput="OnTextareaInput"
+                          @onkeydown="OnKeyDown"
+                          disabled="@_thinking">@_input</textarea>
+                <div class="ai-toolbar">
+                    <button class="ai-toolbar-btn" disabled title="Allegati (non disponibile)">
+                        <span class="bi bi-plus-lg"></span>
+                    </button>
+                    <span class="ai-model-label">@_modelLabel</span>
+                    <button class="ai-send-btn @(string.IsNullOrWhiteSpace(_input) || _thinking ? "ai-send-btn--disabled" : "ai-send-btn--active")"
+                            @onclick="SendAsync"
+                            disabled="@(string.IsNullOrWhiteSpace(_input) || _thinking)">
+                        <span class="bi bi-arrow-up"></span>
+                    </button>
+                </div>
+            </div>
+        }
+    </FooterTemplate>
+</Offcanvas>
+
+@code {
+    private Offcanvas _panel = default!;
+    private bool _aiEnabled;
+    private bool _thinking;
+    private string _input = "";
+    private string _modelLabel = "";
+    private ElementReference _textareaRef;
+    private string _panelTitle = "TAKSuite AI";
+    private string _contextLabel = "";
+
+    // Messaggi mostrati (senza il system prompt)
+    private List<AiChatMessage> _display = new();
+    // Messaggi completi (system + storia), mandati all'AI
+    private List<AiChatMessage> _history = new();
+    // Task disponibili nel contesto corrente (per eseguire azioni)
+    private List<(Guid Id, string Name)> _contextTasks = new();
+    // ID e UID TAK della missione del contesto corrente
+    private Guid? _contextMissionId;
+    private string? _contextTakMissionUid;
+    // Task corrente (per fill_score)
+    private Guid? _contextTaskId;
+    // Waypoint TAK del contesto corrente (callsign → uid)
+    private List<(string Uid, string Callsign)> _contextWaypoints = new();
+
+    protected override void OnInitialized()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+        => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
+
+    public async Task OpenAsync()
+    {
+        _aiEnabled = await AiService.IsAvailableAsync();
+        var settings = await AiSettingsService.GetOrCreateAsync();
+        _modelLabel = settings.Provider switch
+        {
+            AiProvider.ClaudeCli => string.IsNullOrWhiteSpace(settings.Model) ? "Claude CLI" : settings.Model,
+            AiProvider.OpenAI    => string.IsNullOrWhiteSpace(settings.Model) ? "OpenAI" : settings.Model,
+            AiProvider.Ollama    => string.IsNullOrWhiteSpace(settings.Model) ? "Ollama" : settings.Model,
+            _                    => "AI"
+        };
+        if (_aiEnabled)
+        {
+            var (systemPrompt, label) = await BuildContextAsync(Nav.Uri);
+            _contextLabel = label;
+            if (_history.Count == 0)
+                _history.Add(new("system", systemPrompt));
+            else
+                _history[0] = new("system", systemPrompt);
+        }
+        await _panel.ShowAsync();
+        await Task.Delay(80); // aspetta che il DOM dell'offcanvas sia pronto
+        await JS.InvokeVoidAsync("initAiPanelResize");
+        await JS.InvokeVoidAsync("autoResizeTextarea", _textareaRef);
+    }
+
+    private async Task StartNewContextAsync()
+    {
+        var (systemPrompt, label) = await BuildContextAsync(Nav.Uri);
+        _contextLabel = label;
+        _history = new List<AiChatMessage> { new("system", systemPrompt) };
+        _display = new();
+    }
+
+    private async Task ClearHistory()
+    {
+        await StartNewContextAsync();
+        StateHasChanged();
+    }
+
+    private async Task SendAsync()
+    {
+        var text = _input.Trim();
+        if (string.IsNullOrEmpty(text) || _thinking) return;
+
+        _input = "";
+        _display.Add(new("user", text));
+        _history.Add(new("user", text));
+        _thinking = true;
+        StateHasChanged();
+        await JS.InvokeVoidAsync("clearTextarea", _textareaRef);
+
+        var sb = new System.Text.StringBuilder();
+        int streamingIdx = -1;
+        int chunkCount = 0;
+
+        try
+        {
+            await JS.InvokeVoidAsync("scrollToBottom", "ai-chat-scroll");
+
+            await foreach (var chunk in AiService.StreamChatAsync(_history))
+            {
+                if (_thinking)
+                {
+                    // Primo chunk: nascondi i pallini e aggiungi messaggio vuoto
+                    _thinking = false;
+                    _display.Add(new("assistant", ""));
+                    streamingIdx = _display.Count - 1;
+                }
+
+                sb.Append(chunk);
+                _display[streamingIdx] = new("assistant", sb.ToString());
+
+                chunkCount++;
+                if (chunkCount % 4 == 0)
+                {
+                    StateHasChanged();
+                    await JS.InvokeVoidAsync("scrollToBottom", "ai-chat-scroll");
+                }
+            }
+
+            var rawReply = sb.Length > 0 ? sb.ToString() : "Nessuna risposta dall'AI.";
+            var replyText = await ExecuteActionsAsync(rawReply);
+
+            if (streamingIdx >= 0)
+                _display[streamingIdx] = new("assistant", replyText);
+            else
+                _display.Add(new("assistant", replyText));
+
+            _history.Add(new("assistant", replyText));
+        }
+        catch (Exception ex)
+        {
+            _display.Add(new("assistant", $"Errore: {ex.Message}"));
+        }
+        finally
+        {
+            _thinking = false;
+            StateHasChanged();
+            await JS.InvokeVoidAsync("scrollToBottom", "ai-chat-scroll");
+        }
+    }
+
+    private async Task OnTextareaInput(ChangeEventArgs e)
+    {
+        _input = e.Value?.ToString() ?? "";
+        await JS.InvokeVoidAsync("autoResizeTextarea", _textareaRef);
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey)
+        {
+            await SendAsync();
+            await JS.InvokeVoidAsync("autoResizeTextarea", _textareaRef);
+        }
+    }
+
+    // Esegue le azioni operative incluse nella risposta AI (<action .../>)
+    private async Task<string> ExecuteActionsAsync(string text)
+    {
+        var glRegex = new System.Text.RegularExpressions.Regex(
+            @"<action\s+name=""set_green_light""\s+task=""([^""]+)""\s+minutes=""(\d+)""\s*/>",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        var datesRegex = new System.Text.RegularExpressions.Regex(
+            @"<action\s+name=""set_mission_dates""\s+start=""([^""]+)""\s+end=""([^""]+)""\s*/>",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        var result = text;
+
+        foreach (System.Text.RegularExpressions.Match m in glRegex.Matches(text))
+        {
+            var taskHint = m.Groups[1].Value;
+            var minutes  = int.Parse(m.Groups[2].Value);
+            string replacement;
+
+            var found = _contextTasks.FirstOrDefault(t =>
+                t.Name.Contains(taskHint, StringComparison.OrdinalIgnoreCase) ||
+                taskHint.Contains(t.Name, StringComparison.OrdinalIgnoreCase));
+
+            if (found.Id != Guid.Empty)
+            {
+                var glUtc = DateTime.UtcNow.AddMinutes(minutes);
+                await TaskService.SetGreenLightAsync(found.Id, glUtc);
+                replacement = $"✅ Luce verde impostata su **{found.Name}** alle **{glUtc.ToLocalTime():HH:mm}**";
+            }
+            else
+            {
+                replacement = $"⚠️ Task non trovato: '{taskHint}'";
+            }
+
+            result = result.Replace(m.Value, replacement);
+        }
+
+        foreach (System.Text.RegularExpressions.Match m in datesRegex.Matches(text))
+        {
+            var startStr = m.Groups[1].Value;
+            var endStr   = m.Groups[2].Value;
+            string replacement;
+
+            if (_contextMissionId.HasValue &&
+                DateTime.TryParseExact(startStr, "dd/MM/yyyy HH:mm",
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out var startLocal) &&
+                DateTime.TryParseExact(endStr, "dd/MM/yyyy HH:mm",
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out var endLocal))
+            {
+                var mission = await MissionSuiteService.GetAsync(_contextMissionId.Value);
+                if (mission != null)
+                {
+                    mission.StartDateTime = startLocal.ToUniversalTime();
+                    mission.EndDateTime   = endLocal.ToUniversalTime();
+                    await MissionSuiteService.UpdateAsync(mission);
+                    replacement = $"✅ Date missione aggiornate — Inizio: **{startLocal:dd/MM/yyyy HH:mm}** · Fine: **{endLocal:dd/MM/yyyy HH:mm}**";
+                }
+                else
+                {
+                    replacement = "⚠️ Missione non trovata nel contesto.";
+                }
+            }
+            else
+            {
+                replacement = $"⚠️ Formato data non valido (usa dd/MM/yyyy HH:mm): start='{startStr}' end='{endStr}'";
+            }
+
+            result = result.Replace(m.Value, replacement);
+        }
+
+        // --- set_task_dates ---
+        var taskDatesRegex = new System.Text.RegularExpressions.Regex(
+            @"<action\s+name=""set_task_dates""\s+task=""([^""]+)""\s+start=""([^""]+)""\s+end=""([^""]+)""\s*/>",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        foreach (System.Text.RegularExpressions.Match m in taskDatesRegex.Matches(text))
+        {
+            var hint = m.Groups[1].Value;
+            var startStr = m.Groups[2].Value;
+            var endStr   = m.Groups[3].Value;
+            var found = _contextTasks.FirstOrDefault(t =>
+                t.Name.Contains(hint, StringComparison.OrdinalIgnoreCase) ||
+                hint.Contains(t.Name, StringComparison.OrdinalIgnoreCase));
+            string replacement;
+            if (found.Id != Guid.Empty &&
+                DateTime.TryParseExact(startStr, "dd/MM/yyyy HH:mm", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var sL) &&
+                DateTime.TryParseExact(endStr,   "dd/MM/yyyy HH:mm", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var eL))
+            {
+                await TaskService.UpdateTaskDatesAsync(found.Id, sL.ToUniversalTime(), eL.ToUniversalTime());
+                replacement = $"✅ Date **{found.Name}** aggiornate — Inizio: **{sL:dd/MM/yyyy HH:mm}** · Fine: **{eL:dd/MM/yyyy HH:mm}**";
+            }
+            else replacement = $"⚠️ Task non trovato o formato data non valido (task='{hint}', start='{startStr}', end='{endStr}')";
+            result = result.Replace(m.Value, replacement);
+        }
+
+        // --- add_task_window ---
+        var addWinRegex = new System.Text.RegularExpressions.Regex(
+            @"<action\s+name=""add_task_window""\s+task=""([^""]+)""\s+start=""([^""]+)""\s+end=""([^""]+)""\s*/>",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        foreach (System.Text.RegularExpressions.Match m in addWinRegex.Matches(text))
+        {
+            var hint = m.Groups[1].Value;
+            var startStr = m.Groups[2].Value;
+            var endStr   = m.Groups[3].Value;
+            var found = _contextTasks.FirstOrDefault(t =>
+                t.Name.Contains(hint, StringComparison.OrdinalIgnoreCase) ||
+                hint.Contains(t.Name, StringComparison.OrdinalIgnoreCase));
+            string replacement;
+            if (found.Id != Guid.Empty &&
+                DateTime.TryParseExact(startStr, "dd/MM/yyyy HH:mm", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var sL) &&
+                DateTime.TryParseExact(endStr,   "dd/MM/yyyy HH:mm", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var eL))
+            {
+                var wins = await TaskService.GetTaskTimeWindowsAsync(found.Id);
+                wins.Add(new TAKSuite.Data.Models.TaskTimeWindow { StartDateTime = sL.ToUniversalTime(), EndDateTime = eL.ToUniversalTime() });
+                await TaskService.UpdateTaskTimeWindowsAsync(found.Id, wins);
+                replacement = $"✅ Finestra aggiunta a **{found.Name}**: **{sL:dd/MM HH:mm}** → **{eL:dd/MM HH:mm}** (finestra {wins.Count})";
+            }
+            else replacement = $"⚠️ Task non trovato o formato data non valido";
+            result = result.Replace(m.Value, replacement);
+        }
+
+        // --- remove_task_window ---
+        var removeWinRegex = new System.Text.RegularExpressions.Regex(
+            @"<action\s+name=""remove_task_window""\s+task=""([^""]+)""\s+index=""(\d+)""\s*/>",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        foreach (System.Text.RegularExpressions.Match m in removeWinRegex.Matches(text))
+        {
+            var hint  = m.Groups[1].Value;
+            var idx1  = int.Parse(m.Groups[2].Value); // 1-based
+            var found = _contextTasks.FirstOrDefault(t =>
+                t.Name.Contains(hint, StringComparison.OrdinalIgnoreCase) ||
+                hint.Contains(t.Name, StringComparison.OrdinalIgnoreCase));
+            string replacement;
+            if (found.Id != Guid.Empty)
+            {
+                var wins = await TaskService.GetTaskTimeWindowsAsync(found.Id);
+                if (idx1 >= 1 && idx1 <= wins.Count)
+                {
+                    var removed = wins[idx1 - 1];
+                    wins.RemoveAt(idx1 - 1);
+                    await TaskService.UpdateTaskTimeWindowsAsync(found.Id, wins);
+                    replacement = $"✅ Finestra {idx1} rimossa da **{found.Name}**: {removed.StartDateTime?.ToLocalTime():dd/MM HH:mm} → {removed.EndDateTime?.ToLocalTime():dd/MM HH:mm}";
+                }
+                else replacement = $"⚠️ Indice {idx1} non valido per **{found.Name}** (ha {wins.Count} finestre)";
+            }
+            else replacement = $"⚠️ Task non trovato: '{hint}'";
+            result = result.Replace(m.Value, replacement);
+        }
+
+        // --- move_task_window ---
+        var moveWinRegex = new System.Text.RegularExpressions.Regex(
+            @"<action\s+name=""move_task_window""\s+task=""([^""]+)""\s+index=""(\d+)""\s+start=""([^""]+)""\s+end=""([^""]+)""\s*/>",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        foreach (System.Text.RegularExpressions.Match m in moveWinRegex.Matches(text))
+        {
+            var hint = m.Groups[1].Value;
+            var idx1 = int.Parse(m.Groups[2].Value);
+            var startStr = m.Groups[3].Value;
+            var endStr   = m.Groups[4].Value;
+            var found = _contextTasks.FirstOrDefault(t =>
+                t.Name.Contains(hint, StringComparison.OrdinalIgnoreCase) ||
+                hint.Contains(t.Name, StringComparison.OrdinalIgnoreCase));
+            string replacement;
+            if (found.Id != Guid.Empty &&
+                DateTime.TryParseExact(startStr, "dd/MM/yyyy HH:mm", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var sL) &&
+                DateTime.TryParseExact(endStr,   "dd/MM/yyyy HH:mm", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var eL))
+            {
+                var wins = await TaskService.GetTaskTimeWindowsAsync(found.Id);
+                if (idx1 >= 1 && idx1 <= wins.Count)
+                {
+                    wins[idx1 - 1].StartDateTime = sL.ToUniversalTime();
+                    wins[idx1 - 1].EndDateTime   = eL.ToUniversalTime();
+                    await TaskService.UpdateTaskTimeWindowsAsync(found.Id, wins);
+                    replacement = $"✅ Finestra {idx1} di **{found.Name}** spostata: **{sL:dd/MM HH:mm}** → **{eL:dd/MM HH:mm}**";
+                }
+                else replacement = $"⚠️ Indice {idx1} non valido per **{found.Name}** (ha {wins.Count} finestre)";
+            }
+            else replacement = $"⚠️ Task non trovato o formato data non valido";
+            result = result.Replace(m.Value, replacement);
+        }
+
+        // --- set_waypoint_color ---
+        var setWpColorRegex = new System.Text.RegularExpressions.Regex(
+            @"<action\s+name=""set_waypoint_color""\s+callsign=""([^""]+)""\s+color=""([^""]+)""\s*/>",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        foreach (System.Text.RegularExpressions.Match m in setWpColorRegex.Matches(text))
+        {
+            var callsign  = m.Groups[1].Value;
+            var colorName = m.Groups[2].Value.Trim().ToLowerInvariant();
+            string replacement;
+            var wp = _contextWaypoints.FirstOrDefault(w =>
+                w.Callsign.Contains(callsign, StringComparison.OrdinalIgnoreCase) ||
+                callsign.Contains(w.Callsign, StringComparison.OrdinalIgnoreCase));
+
+            if (!string.IsNullOrEmpty(wp.Uid) && !string.IsNullOrEmpty(_contextTakMissionUid))
+            {
+                var argb = colorName switch
+                {
+                    "rosso"     or "red"     => -65536,
+                    "verde"     or "green"   => -16711936,
+                    "blu"       or "blue"    => -16776961,
+                    "giallo"    or "yellow"  => -256,
+                    "arancione" or "orange"  => -23296,
+                    "bianco"    or "white"   => -1,
+                    "nero"      or "black"   => -16777216,
+                    "ciano"     or "cyan"    => -16711681,
+                    "magenta"               => -65281,
+                    "completato"            => ATAKHelper.COLOR_WAYPOINT_COMPLETED,
+                    _ => int.MinValue
+                };
+                if (argb == int.MinValue)
+                {
+                    replacement = $"⚠️ Colore '{colorName}' non riconosciuto. Colori disponibili: rosso, verde, blu, giallo, arancione, bianco, nero, ciano, magenta, completato.";
+                }
+                else
+                {
+                    try
+                    {
+                        await CoTManager.ChangeCotColor(_contextTakMissionUid, wp.Uid, argb);
+                        replacement = $"✅ Colore di **{wp.Callsign}** impostato su **{colorName}**";
+                    }
+                    catch (Exception ex) { replacement = $"⚠️ Errore cambio colore '{callsign}': {ex.Message}"; }
+                }
+            }
+            else if (string.IsNullOrEmpty(_contextTakMissionUid))
+                replacement = "⚠️ Missione TAK non configurata";
+            else
+                replacement = $"⚠️ Waypoint non trovato: '{callsign}'";
+            result = result.Replace(m.Value, replacement);
+        }
+
+        // --- complete_waypoint ---
+        var completeWpRegex = new System.Text.RegularExpressions.Regex(
+            @"<action\s+name=""complete_waypoint""\s+callsign=""([^""]+)""\s*/>",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        foreach (System.Text.RegularExpressions.Match m in completeWpRegex.Matches(text))
+        {
+            var callsign = m.Groups[1].Value;
+            string replacement;
+            var wp = _contextWaypoints.FirstOrDefault(w =>
+                w.Callsign.Contains(callsign, StringComparison.OrdinalIgnoreCase) ||
+                callsign.Contains(w.Callsign, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrEmpty(wp.Uid) && !string.IsNullOrEmpty(_contextTakMissionUid))
+            {
+                try
+                {
+                    await CoTManager.ChangeCotColor(_contextTakMissionUid, wp.Uid, TAKSuite.TAK.Helper.ATAKHelper.COLOR_WAYPOINT_COMPLETED);
+                    replacement = $"✅ Waypoint **{wp.Callsign}** completato";
+                }
+                catch (Exception ex) { replacement = $"⚠️ Errore completamento waypoint '{callsign}': {ex.Message}"; }
+            }
+            else if (string.IsNullOrEmpty(_contextTakMissionUid))
+                replacement = "⚠️ Missione TAK non configurata — impossibile completare il waypoint";
+            else
+                replacement = $"⚠️ Waypoint non trovato: '{callsign}'";
+            result = result.Replace(m.Value, replacement);
+        }
+
+        // --- fill_score ---
+        var fillScoreRegex = new System.Text.RegularExpressions.Regex(
+            @"<action\s+name=""fill_score""([^/]*?)/>",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
+        foreach (System.Text.RegularExpressions.Match m in fillScoreRegex.Matches(text))
+        {
+            var attrs = m.Groups[1].Value;
+            string AttrVal(string name, string def = "") {
+                var am = System.Text.RegularExpressions.Regex.Match(attrs, $@"{name}=""([^""]*)""", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                return am.Success ? am.Groups[1].Value.Trim() : def;
+            }
+            int AttrInt(string name) => int.TryParse(AttrVal(name, "0"), out var v) ? v : 0;
+            bool AttrBool(string name) => AttrVal(name, "no").Equals("si", StringComparison.OrdinalIgnoreCase);
+
+            string replacement;
+            Guid targetTaskId = Guid.Empty;
+            string taskHint = AttrVal("task");
+            if (!string.IsNullOrEmpty(taskHint))
+            {
+                var found = _contextTasks.FirstOrDefault(t =>
+                    t.Name.Contains(taskHint, StringComparison.OrdinalIgnoreCase) ||
+                    taskHint.Contains(t.Name, StringComparison.OrdinalIgnoreCase));
+                if (found.Id != Guid.Empty) targetTaskId = found.Id;
+            }
+            if (targetTaskId == Guid.Empty && _contextTaskId.HasValue)
+                targetTaskId = _contextTaskId.Value;
+
+            if (targetTaskId == Guid.Empty)
+            {
+                replacement = "⚠️ Nessun task nel contesto per fill_score.";
+            }
+            else
+            {
+                var entry = new TAKSuite.Data.Models.TaskScoreEntry
+                {
+                    TaskEntityId             = targetTaskId,
+                    IdentificativoPattuglia  = AttrVal("pattuglia"),
+                    Tipologia                = AttrVal("tipologia") is { Length: > 0 } tip ? tip : null,
+                    DurataMinuti             = int.TryParse(AttrVal("durata"), out var dm) ? dm : null,
+                    InizioObj                = AttrVal("inizio") is { Length: > 0 } ini ? ini : null,
+                    FineObj                  = AttrVal("fine") is { Length: > 0 } fin ? fin : null,
+                    FuoriFinestra            = AttrBool("ff"),
+                    PunteggioMinimo          = AttrBool("pm"),
+                    Bivacco                  = AttrInt("bivacco"),
+                    AiutoCartografico        = AttrInt("aiuto"),
+                    OperatoreNonDichiarato   = AttrInt("op_nd"),
+                    MarcaturaAsgAssente      = AttrInt("marcatura"),
+                    FasciaNonEsposta         = AttrInt("fascia"),
+                    OperatoreSqualificato    = AttrInt("squalificato"),
+                    InterferenzaArbitrale    = AttrInt("interferenza"),
+                    ComportamentoAntisportivo = AttrInt("antisportivo"),
+                    AsgOverJoule             = AttrInt("joule"),
+                    SaccoRifiuti             = AttrInt("sacco"),
+                    DifensoriEliminati       = AttrInt("difensori"),
+                    RibelliColpiti           = AttrInt("ribelli"),
+                    CiviliColpiti            = AttrInt("civili"),
+                    NotePattugliaIncursori   = AttrVal("note_pattuglia") is { Length: > 0 } np ? np : null,
+                    NoteArbitro              = AttrVal("note_arbitro") is { Length: > 0 } na ? na : null,
+                };
+                // Parse fasi: "si,no,,si,,,"  (7 values)
+                var fasiRaw = AttrVal("fasi");
+                var fasiArr = new bool?[7];
+                if (!string.IsNullOrEmpty(fasiRaw))
+                {
+                    var parts = fasiRaw.Split(',');
+                    for (int fi = 0; fi < Math.Min(7, parts.Length); fi++)
+                    {
+                        var p = parts[fi].Trim().ToLowerInvariant();
+                        fasiArr[fi] = p == "si" ? true : p == "no" ? false : null;
+                    }
+                }
+                entry.FasiE = fasiArr;
+
+                try
+                {
+                    await TaskScoreService.AddAsync(entry);
+                    var pattuglia = string.IsNullOrEmpty(entry.IdentificativoPattuglia) ? "—" : entry.IdentificativoPattuglia;
+                    replacement = $"✅ Scheda punteggio creata per pattuglia **{pattuglia}** (Bivacco:{entry.Bivacco} Aiuto:{entry.AiutoCartografico} Difensori:{entry.DifensoriEliminati} FF:{(entry.FuoriFinestra ? "Sì" : "No")} PM:{(entry.PunteggioMinimo ? "Sì" : "No")})";
+                }
+                catch (Exception ex)
+                {
+                    replacement = $"⚠️ Errore creazione scheda punteggio: {ex.Message}";
+                }
+            }
+            result = result.Replace(m.Value, replacement);
+        }
+
+        return result;
+    }
+
+    // Costruisce il system prompt in base all'URL corrente
+    private async Task<(string SystemPrompt, string Label)> BuildContextAsync(string url)
+    {
+        _contextTasks = new();
+        _contextMissionId = null;
+        _contextTakMissionUid = null;
+        _contextWaypoints = new();
+        _contextTaskId = null;
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Sei un assistente integrato in TAKSuite, sistema di gestione missioni tattiche.");
+        sb.AppendLine("Rispondi sempre in italiano, in modo conciso e operativo.");
+        sb.AppendLine("Quando ti chiedono distanze o posizioni usa le coordinate lat/lon WGS84 fornite nel contesto. Distanza haversine: d=2·R·arcsin(√(sin²(Δφ/2)+cos(φ1)·cos(φ2)·sin²(Δλ/2))), R=6371000m. Esprimi in m se <1km, altrimenti km con un decimale. Per un team usa la media lat/lon dei membri con posizione nota.");
+
+        var settings = await AiSettingsService.GetOrCreateAsync();
+        if (!string.IsNullOrWhiteSpace(settings.ExtraSystemPrompt))
+            sb.AppendLine(settings.ExtraSystemPrompt);
+
+        var label = "";
+
+        // --- /task/{id} o /taskdetail/{id} ---
+        if (TryExtractGuid(url, "/task/", out var taskId) ||
+            TryExtractGuid(url, "/taskdetail/", out taskId))
+        {
+            try
+            {
+                var task = await TaskService.GetAsync(taskId);
+                if (task != null)
+                {
+                    _contextTaskId = taskId;
+                    label = $"Task: {task.Name}";
+                    sb.AppendLine($"\n--- CONTESTO: TASK ---");
+                    sb.AppendLine($"Nome: {task.Name}");
+                    sb.AppendLine($"Stato: {task.Status}");
+                    sb.AppendLine($"Priorità: {task.Priority?.Name ?? "—"}");
+                    sb.AppendLine($"Descrizione: {task.Description}");
+                    if (!string.IsNullOrEmpty(task.Sottotitolo)) sb.AppendLine($"Sottotitolo: {task.Sottotitolo}");
+                    if (task.AssignedTeam != null) sb.AppendLine($"Team assegnato: {task.AssignedTeam.Name}");
+                    if (task.ExecutingTeam != null) sb.AppendLine($"Team esecuzione: {task.ExecutingTeam.Name}");
+                    if (task.GreenLightDateTime.HasValue) sb.AppendLine($"Luce verde: {task.GreenLightDateTime.Value.ToLocalTime():dd/MM/yyyy HH:mm}");
+                    if (task.Durata.HasValue) sb.AppendLine($"Durata: {task.Durata} min");
+
+                    // Carica anche la missione collegata
+                    if (task.MissionTAKSuiteId.HasValue)
+                    {
+                        var mission = await MissionSuiteService.GetAsync(task.MissionTAKSuiteId.Value);
+                        if (mission != null)
+                        {
+                            sb.AppendLine($"\n--- MISSIONE COLLEGATA ---");
+                            sb.AppendLine($"Nome: {mission.Name}");
+                            sb.AppendLine($"Stato: {mission.Status}");
+                            if (mission.StartDateTime.HasValue) sb.AppendLine($"Inizio: {mission.StartDateTime.Value.ToLocalTime():dd/MM/yyyy HH:mm}");
+                            if (mission.EndDateTime.HasValue) sb.AppendLine($"Fine: {mission.EndDateTime.Value.ToLocalTime():dd/MM/yyyy HH:mm}");
+                            // altri task della missione
+                            var allTasks = await TaskService.GetAllAsync();
+                            var missionTasks = allTasks.Where(t => t.MissionTAKSuiteId == mission.Id).ToList();
+                            _contextTasks = missionTasks.Select(t => (t.Id, t.Name)).ToList();
+                            if (missionTasks.Any())
+                            {
+                                sb.AppendLine($"Task nella missione ({missionTasks.Count}):");
+                                foreach (var t in missionTasks.OrderBy(t => t.Name))
+                                    sb.AppendLine($"  - {t.Name} [{t.Status}] {(t.Priority != null ? $"P:{t.Priority.Name}" : "")}");
+                            }
+                            var missionDocs = await DocService.GetAllByOwnerIdAsync(mission);
+                            if (missionDocs.Any())
+                            {
+                                sb.AppendLine($"\nDocumenti missione ({missionDocs.Count}):");
+                                foreach (var d in missionDocs)
+                                    sb.AppendLine($"  - {d.Name}{(string.IsNullOrEmpty(d.Description) ? "" : $" — {d.Description}")} [{d.DocumentType?.Description ?? d.Type}]");
+                            }
+
+                            _contextMissionId    = mission.Id;
+                            _contextTakMissionUid = mission.TakMissionUid;
+                            // TAK points with coordinates for distance queries
+                            if (!string.IsNullOrEmpty(mission.TakMissionUid))
+                            {
+                                try
+                                {
+                                    var allPts = await WaypointService.GetAllMissionPointsAsync(mission.TakMissionUid);
+                                    if (allPts.Any())
+                                    {
+                                        sb.AppendLine($"\nPunti TAK nella missione ({allPts.Count}):");
+                                        foreach (var p in allPts.OrderBy(p => p.Callsign ?? p.Uid))
+                                            sb.AppendLine($"  - {p.Callsign ?? p.Uid}: lat={p.Lat:F6} lon={p.Lon:F6}");
+                                    }
+                                }
+                                catch { }
+                            }
+                            var baseUri2 = Nav.BaseUri.TrimEnd('/');
+                            sb.AppendLine($"\nURL documenti missione: {baseUri2}/missiontak/{mission.Id}/documents");
+                            sb.AppendLine($"URL waypoint semplice: {baseUri2}/missiontak/{mission.Id}/waypoints-simple");
+                        }
+                    }
+
+                    // Documenti del task
+                    try
+                    {
+                        var taskDocs = await DocService.GetAllByOwnerIdAsync(task);
+                        if (taskDocs.Any())
+                        {
+                            sb.AppendLine($"\nDocumenti task ({taskDocs.Count}):");
+                            foreach (var d in taskDocs)
+                                sb.AppendLine($"  - [{d.Id}] {d.Name}{(string.IsNullOrEmpty(d.Description) ? "" : $" — {d.Description}")} [{d.DocumentType?.Description ?? d.Type}]");
+                        }
+                    }
+                    catch { }
+
+                    // Schede punteggio esistenti
+                    try
+                    {
+                        var scoreEntries = await TaskScoreService.GetByTaskAsync(taskId);
+                        if (scoreEntries.Any())
+                        {
+                            sb.AppendLine($"\nSchede punteggio esistenti ({scoreEntries.Count}):");
+                            foreach (var e in scoreEntries)
+                                sb.AppendLine($"  - Pattuglia: {e.IdentificativoPattuglia}, Tipo: {e.Tipologia ?? "—"}, Durata: {e.DurataMinuti?.ToString() ?? "—"} min, FF:{(e.FuoriFinestra?"Sì":"No")}, PM:{(e.PunteggioMinimo?"Sì":"No")}");
+                        }
+
+                        // Config fasi E
+                        var scoreCfg = await ScoreConfigService.GetEffectiveAsync(taskId);
+                        var fasiDefs = scoreCfg.FasiEDefs;
+                        var hasActiveFasi = fasiDefs.Any(f => !string.IsNullOrEmpty(f.Descrizione));
+                        if (hasActiveFasi)
+                        {
+                            sb.AppendLine($"\nFasi E configurate:");
+                            for (int fi = 0; fi < 7; fi++)
+                                if (!string.IsNullOrEmpty(fasiDefs[fi].Descrizione))
+                                    sb.AppendLine($"  - E{fi+1}: {fasiDefs[fi].Descrizione}");
+                        }
+                    }
+                    catch { }
+
+                    sb.AppendLine("\n--- AZIONI DISPONIBILI ---");
+                    sb.AppendLine("Puoi eseguire le seguenti azioni includendo i tag nel messaggio:");
+                    sb.AppendLine("<action name=\"set_green_light\" task=\"nome task\" minutes=\"N\"/>");
+                    sb.AppendLine("<action name=\"set_mission_dates\" start=\"dd/MM/yyyy HH:mm\" end=\"dd/MM/yyyy HH:mm\"/>");
+                    sb.AppendLine("<action name=\"set_task_dates\" task=\"nome\" start=\"dd/MM/yyyy HH:mm\" end=\"dd/MM/yyyy HH:mm\"/>");
+                    sb.AppendLine("<action name=\"add_task_window\" task=\"nome\" start=\"dd/MM/yyyy HH:mm\" end=\"dd/MM/yyyy HH:mm\"/>");
+                    sb.AppendLine("<action name=\"remove_task_window\" task=\"nome\" index=\"N\"/>");
+                    sb.AppendLine("<action name=\"move_task_window\" task=\"nome\" index=\"N\" start=\"dd/MM/yyyy HH:mm\" end=\"dd/MM/yyyy HH:mm\"/>");
+                    sb.AppendLine("<action name=\"complete_waypoint\" callsign=\"callsign waypoint\"/>");
+                    sb.AppendLine("AZIONE PUNTEGGIO: crea una scheda punteggio per questo task:");
+                    sb.AppendLine("<action name=\"fill_score\" task=\"nome task opzionale\" pattuglia=\"ID\" tipologia=\"tipo\" durata=\"N\" inizio=\"HH:mm\" fine=\"HH:mm\" ff=\"si|no\" pm=\"si|no\" bivacco=\"N\" aiuto=\"N\" op_nd=\"N\" marcatura=\"N\" fascia=\"N\" squalificato=\"N\" interferenza=\"N\" antisportivo=\"N\" joule=\"N\" sacco=\"N\" difensori=\"N\" ribelli=\"N\" civili=\"N\" fasi=\"si|no|-,si|no|-,...\" note_pattuglia=\"testo\" note_arbitro=\"testo\"/>");
+                    sb.AppendLine("Per fill_score: fasi è una lista di 7 valori separati da virgola (si=fatto, no=non fatto, -=non applicabile/vuoto). Tutti i campi sono opzionali tranne pattuglia. Non mostrare mai i valori di punteggio all'utente (la scheda è cieca).");
+                    sb.AppendLine("Il sistema eseguirà le azioni automaticamente. Conferma sempre all'utente.");
+                }
+            }
+            catch { }
+        }
+        // --- /missiontak/{id}/... ---
+        else if (TryExtractGuid(url, "/missiontak/", out var missionId))
+        {
+            try
+            {
+                var mission = await MissionSuiteService.GetAsync(missionId);
+                if (mission != null)
+                {
+                    label = $"Missione: {mission.Name}";
+                    sb.AppendLine($"\n--- CONTESTO: MISSIONE ---");
+                    sb.AppendLine($"Nome: {mission.Name}");
+                    sb.AppendLine($"Stato: {mission.Status}");
+                    if (!string.IsNullOrEmpty(mission.Descrizione)) sb.AppendLine($"Descrizione: {mission.Descrizione}");
+                    if (mission.StartDateTime.HasValue) sb.AppendLine($"Inizio: {mission.StartDateTime.Value.ToLocalTime():dd/MM/yyyy HH:mm}");
+                    if (mission.EndDateTime.HasValue) sb.AppendLine($"Fine: {mission.EndDateTime.Value.ToLocalTime():dd/MM/yyyy HH:mm}");
+
+                    var allTasks = await TaskService.GetAllAsync();
+                    var tasks = allTasks.Where(t => t.MissionTAKSuiteId == missionId).ToList();
+                    _contextTasks = tasks.Select(t => (t.Id, t.Name)).ToList();
+                    if (tasks.Any())
+                    {
+                        sb.AppendLine($"\nTask ({tasks.Count}):");
+                        foreach (var t in tasks.OrderBy(t => t.Status).ThenBy(t => t.Name))
+                        {
+                            var gl = t.GreenLightDateTime.HasValue ? $" GL:{t.GreenLightDateTime.Value.ToLocalTime():HH:mm}" : "";
+                            var start = t.StartDateTime.HasValue ? $" Inizio:{t.StartDateTime.Value.ToLocalTime():dd/MM HH:mm}" : "";
+                            var end   = t.EndDateTime.HasValue   ? $" Fine:{t.EndDateTime.Value.ToLocalTime():dd/MM HH:mm}"   : "";
+                            sb.AppendLine($"  - {t.Name} [{t.Status}]{gl}{start}{end} {(t.Priority != null ? $"P:{t.Priority.Name}" : "")}");
+                            if (!string.IsNullOrEmpty(t.TimeWindowsJson))
+                            {
+                                try
+                                {
+                                    var wins = System.Text.Json.JsonSerializer.Deserialize<List<TAKSuite.Data.Models.TaskTimeWindow>>(t.TimeWindowsJson);
+                                    if (wins != null && wins.Any())
+                                        for (int wi = 0; wi < wins.Count; wi++)
+                                            sb.AppendLine($"      Finestra {wi+1}: {wins[wi].StartDateTime?.ToLocalTime():dd/MM HH:mm} → {wins[wi].EndDateTime?.ToLocalTime():dd/MM HH:mm}");
+                                }
+                                catch { }
+                            }
+                        }
+
+                        var glTasks = tasks.Where(t => t.GreenLightDateTime.HasValue).OrderBy(t => t.GreenLightDateTime).ToList();
+                        if (glTasks.Any())
+                        {
+                            sb.AppendLine($"\nLuci verdi ({glTasks.Count}):");
+                            foreach (var t in glTasks)
+                                sb.AppendLine($"  - {t.Name}: {t.GreenLightDateTime!.Value.ToLocalTime():dd/MM HH:mm} ({t.Durata ?? 0} min)");
+                        }
+                    }
+                    var docs = await DocService.GetAllByOwnerIdAsync(mission);
+                    if (docs.Any())
+                    {
+                        sb.AppendLine($"\nDocumenti ({docs.Count}):");
+                        foreach (var d in docs)
+                            sb.AppendLine($"  - {d.Name}{(string.IsNullOrEmpty(d.Description) ? "" : $" — {d.Description}")} [{d.DocumentType?.Description ?? d.Type}]");
+                    }
+
+                    _contextMissionId    = missionId;
+                    _contextTakMissionUid = mission.TakMissionUid;
+
+                    // Carica waypoints TAK (silent fail se TAK non connesso)
+                    if (!string.IsNullOrEmpty(mission.TakMissionUid))
+                    {
+                        try
+                        {
+                            var wpts = await WaypointService.GetAllWaypointsAsync(mission.TakMissionUid);
+                            _contextWaypoints = wpts.Select(w => (w.Uid, w.Callsign ?? w.Uid)).ToList();
+                            if (_contextWaypoints.Any())
+                            {
+                                sb.AppendLine($"\nWaypoint TAK ({_contextWaypoints.Count}):");
+                                foreach (var w in wpts.OrderBy(w => w.Color == ATAKHelper.COLOR_WAYPOINT_COMPLETED))
+                                {
+                                    var stato = w.Color == ATAKHelper.COLOR_WAYPOINT_COMPLETED ? "[completato]" : "[da completare]";
+                                    var wCoord = (w.Lat.HasValue && w.Lon.HasValue && !(w.Lat == 0 && w.Lon == 0))
+                                        ? $" lat={w.Lat:F6} lon={w.Lon:F6}" : "";
+                                    sb.AppendLine($"  - {w.Callsign} {stato}{wCoord}");
+                                    if (w.AttachmentUidList?.Any() == true)
+                                    {
+                                        try
+                                        {
+                                            var attachments = await AttachmentService.GetAllAsync(w.Uid);
+                                            if (attachments?.Any() == true)
+                                                foreach (var a in attachments)
+                                                    sb.AppendLine($"      Allegato: {Uri.UnescapeDataString(a.Name ?? "")} ({a.LastUpdateTime.ToLocalTime():dd/MM/yyyy HH:mm})");
+                                        }
+                                        catch { }
+                                    }
+                                }
+                            }
+                            // All non-waypoint TAK points (objectives, POI, …)
+                            try
+                            {
+                                var allPts = await WaypointService.GetAllMissionPointsAsync(mission.TakMissionUid);
+                                var extras = allPts.Where(p => !wpts.Any(w => w.Uid == p.Uid)).ToList();
+                                if (extras.Any())
+                                {
+                                    sb.AppendLine($"\nAltri punti TAK (obiettivi/POI, {extras.Count}):");
+                                    foreach (var p in extras.OrderBy(p => p.Callsign ?? p.Uid))
+                                        sb.AppendLine($"  - {p.Callsign ?? p.Uid}: lat={p.Lat:F6} lon={p.Lon:F6}");
+                                }
+                            }
+                            catch { }
+                        }
+                        catch { }
+                    }
+
+                    // URL di navigazione utili
+                    var baseUri = Nav.BaseUri.TrimEnd('/');
+                    sb.AppendLine($"\nURL documenti missione: {baseUri}/missiontak/{missionId}/documents");
+                    sb.AppendLine($"URL waypoint semplice: {baseUri}/missiontak/{missionId}/waypoints-simple");
+
+                    sb.AppendLine("\n--- AZIONI DISPONIBILI ---");
+                    sb.AppendLine("Puoi eseguire le seguenti azioni includendo i tag nel messaggio:");
+                    sb.AppendLine("<action name=\"set_green_light\" task=\"nome task\" minutes=\"N\"/>");
+                    sb.AppendLine("<action name=\"set_mission_dates\" start=\"dd/MM/yyyy HH:mm\" end=\"dd/MM/yyyy HH:mm\"/>");
+                    sb.AppendLine("<action name=\"set_task_dates\" task=\"nome\" start=\"dd/MM/yyyy HH:mm\" end=\"dd/MM/yyyy HH:mm\"/>");
+                    sb.AppendLine("<action name=\"add_task_window\" task=\"nome\" start=\"dd/MM/yyyy HH:mm\" end=\"dd/MM/yyyy HH:mm\"/>");
+                    sb.AppendLine("<action name=\"remove_task_window\" task=\"nome\" index=\"N\"/> (N=indice 1-based della finestra)");
+                    sb.AppendLine("<action name=\"move_task_window\" task=\"nome\" index=\"N\" start=\"dd/MM/yyyy HH:mm\" end=\"dd/MM/yyyy HH:mm\"/>");
+                    sb.AppendLine("<action name=\"complete_waypoint\" callsign=\"callsign waypoint\"/>");
+                    sb.AppendLine("<action name=\"set_waypoint_color\" callsign=\"callsign waypoint\" color=\"rosso|verde|blu|giallo|arancione|bianco|nero|ciano|magenta\"/>");
+                    sb.AppendLine("Il sistema eseguirà le azioni automaticamente. Conferma sempre all'utente cosa hai fatto.");
+                }
+            }
+            catch { }
+        }
+        else
+        {
+            label = "Generale";
+            sb.AppendLine("\nNon c'è un contesto specifico selezionato. Puoi rispondere a domande generali su TAKSuite.");
+        }
+
+        // Connected TAK clients with real-time positions
+        try
+        {
+            var subs = await SubscriptionClient.GetAllSubscriptionsAsync(null, null, null, null);
+            var clients = subs?.Data?.ToList() ?? new();
+            if (clients.Any())
+            {
+                var enriched = await Task.WhenAll(clients.Select(async c =>
+                {
+                    double? lat = null, lon = null;
+                    try
+                    {
+                        var xml = await MartiClient.GetInfoAsync(c.ClientUid);
+                        if (!string.IsNullOrEmpty(xml))
+                        {
+                            var xdoc = XDocument.Parse(xml);
+                            var pt   = xdoc.Root?.Element("point");
+                            if (double.TryParse((string?)pt?.Attribute("lat"),
+                                    System.Globalization.NumberStyles.Float,
+                                    System.Globalization.CultureInfo.InvariantCulture, out var la)
+                             && double.TryParse((string?)pt?.Attribute("lon"),
+                                    System.Globalization.NumberStyles.Float,
+                                    System.Globalization.CultureInfo.InvariantCulture, out var lo)
+                             && !(la == 0 && lo == 0))
+                            { lat = la; lon = lo; }
+                        }
+                    }
+                    catch { }
+                    return (c, lat, lon);
+                }));
+
+                sb.AppendLine($"\n--- CLIENT CONNESSI TAK ({clients.Count}) ---");
+                foreach (var (c, lat, lon) in enriched.OrderBy(x => x.c.Team).ThenBy(x => x.c.Callsign))
+                {
+                    var pos = (lat.HasValue && lon.HasValue)
+                        ? $" lat={lat:F6} lon={lon:F6}"
+                        : " (posizione non disponibile)";
+                    sb.AppendLine($"  - {c.Callsign ?? c.ClientUid} Team:{c.Team ?? "—"}{pos}");
+                }
+            }
+        }
+        catch { }
+
+        return (sb.ToString(), label);
+    }
+
+    private static bool TryExtractGuid(string url, string prefix, out Guid id)
+    {
+        id = Guid.Empty;
+        var idx = url.IndexOf(prefix, StringComparison.OrdinalIgnoreCase);
+        if (idx < 0) return false;
+        var start = idx + prefix.Length;
+        var end = url.IndexOf('/', start);
+        var segment = end < 0 ? url[start..] : url[start..end];
+        return Guid.TryParse(segment, out id);
+    }
+}

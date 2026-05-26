@@ -1,0 +1,718 @@
+@page "/taskdetail/{TaskId:guid}/score"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@inject TaskService TaskService
+@inject TaskScoreService ScoreService
+@inject ScoreConfigService ConfigService
+@inject ToastService ToastService
+@inject NavigationManager Navigation
+
+<style>
+    .score-section { font-size: .85rem; font-weight: 600; text-transform: uppercase;
+                     letter-spacing: .05em; color: var(--bs-secondary-color);
+                     border-bottom: 1px solid var(--bs-border-color); margin-bottom: .5rem; padding-bottom: .25rem; margin-top: 1rem; }
+    .score-field-row { display: flex; align-items: center; gap: .5rem; margin-bottom: .5rem; }
+    .score-field-label { flex: 1; font-size: .875rem; }
+    .score-field-input { width: 80px; }
+    .score-toggle-row { display: flex; align-items: center; gap: .75rem; margin-bottom: .5rem; }
+    .score-fase-row { display: flex; align-items: center; gap: .5rem; margin-bottom: .4rem; }
+    .score-fase-desc { flex: 1; font-size: .875rem; }
+    .entry-card { border-left: 3px solid var(--bs-primary); }
+    .entry-card.ff { border-left-color: var(--bs-danger); }
+    .badge-ff { background: var(--bs-danger); }
+    .badge-pm { background: var(--bs-success); }
+</style>
+
+<PageTitle>Punteggio — @(_task?.Name ?? "Task")</PageTitle>
+
+@if (_task == null)
+{
+    <p>Caricamento...</p>
+}
+else
+{
+    <!-- Edit Entry Modal -->
+    <Modal @ref="_entryModal" Title="@(_editEntry?.Id == Guid.Empty ? "Nuova scheda punteggio" : "Modifica scheda punteggio")"
+           Size="ModalSize.ExtraLarge" IsScrollable="true">
+        <BodyTemplate>
+            @if (_editEntry != null && _editConfig != null)
+            {
+                var cfg = _editConfig;
+                var fasi = _editFasi;
+                var fasiDefs = cfg.FasiEDefs;
+
+                <!-- Identificazione -->
+                <div class="score-section">Identificazione</div>
+                <div class="row g-2 mb-2">
+                    <div class="col-md-6">
+                        <label class="form-label small mb-1">Identificativo pattuglia *</label>
+                        <input type="text" class="form-control form-control-sm" @bind="_editEntry.IdentificativoPattuglia" placeholder="es. Pattuglia 1" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small mb-1">Tipologia</label>
+                        <input type="text" class="form-control form-control-sm" @bind="_editEntry.Tipologia" placeholder="es. Assalto" />
+                    </div>
+                </div>
+
+                <!-- Tempistica -->
+                <div class="score-section">Tempistica</div>
+                <div class="row g-2 mb-2">
+                    <div class="col-md-3">
+                        <label class="form-label small mb-1">Durata obj (min)</label>
+                        <input type="number" class="form-control form-control-sm" min="0"
+                               value="@_editEntry.DurataMinuti"
+                               @onchange="e => { _editEntry.DurataMinuti = int.TryParse(e.Value?.ToString(), out var v) ? v : null; RecalcFine(); }" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small mb-1">Inizio obj</label>
+                        <input type="time" class="form-control form-control-sm"
+                               value="@_editEntry.InizioObj"
+                               @onchange="e => { _editEntry.InizioObj = e.Value?.ToString(); RecalcFine(); }" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small mb-1">Fine obj</label>
+                        <input type="time" class="form-control form-control-sm"
+                               value="@_editEntry.FineObj"
+                               @onchange="e => _editEntry.FineObj = e.Value?.ToString()" />
+                    </div>
+                    <div class="col-md-3 d-flex flex-column gap-2 justify-content-end">
+                        <div class="score-toggle-row">
+                            <input type="checkbox" class="form-check-input" id="ff" @bind="_editEntry.FuoriFinestra" />
+                            <label for="ff" class="form-check-label small text-danger fw-semibold">F.F. (Fuori Finestra)</label>
+                        </div>
+                        <div class="score-toggle-row">
+                            <input type="checkbox" class="form-check-input" id="pm" @bind="_editEntry.PunteggioMinimo" />
+                            <label for="pm" class="form-check-label small text-success fw-semibold">Punteggio minimo</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Penalità -->
+                <div class="score-section">Penalità</div>
+                <div class="row g-2">
+                    <div class="col-md-6">
+                        @ScoreField("Bivacco", @<input type="number" class="form-control form-control-sm score-field-input" min="0" max="@MaxOrNull(cfg.MaxBivacco)"
+                                   value="@_editEntry.Bivacco" @onchange="e => _editEntry.Bivacco = ParseInt(e.Value)" />)
+                        @ScoreField("Aiuto cartografico", @<input type="number" class="form-control form-control-sm score-field-input" min="0" max="@MaxOrNull(cfg.MaxAiutoCartografico)"
+                                   value="@_editEntry.AiutoCartografico" @onchange="e => _editEntry.AiutoCartografico = ParseInt(e.Value)" />)
+                        @ScoreField("Operatore non dichiarato", @<input type="number" class="form-control form-control-sm score-field-input" min="0" max="@MaxOrNull(cfg.MaxOperatoreNonDichiarato)"
+                                   value="@_editEntry.OperatoreNonDichiarato" @onchange="e => _editEntry.OperatoreNonDichiarato = ParseInt(e.Value)" />)
+                        @ScoreField("Marcatura ASG assente", @<input type="number" class="form-control form-control-sm score-field-input" min="0" max="@MaxOrNull(cfg.MaxMarcaturaAsgAssente)"
+                                   value="@_editEntry.MarcaturaAsgAssente" @onchange="e => _editEntry.MarcaturaAsgAssente = ParseInt(e.Value)" />)
+                        @ScoreField("Fascia non esposta/manomessa", @<input type="number" class="form-control form-control-sm score-field-input" min="0" max="@MaxOrNull(cfg.MaxFasciaNonEsposta)"
+                                   value="@_editEntry.FasciaNonEsposta" @onchange="e => _editEntry.FasciaNonEsposta = ParseInt(e.Value)" />)
+                    </div>
+                    <div class="col-md-6">
+                        @ScoreField("Operatore squalificato", @<input type="number" class="form-control form-control-sm score-field-input" min="0" max="@MaxOrNull(cfg.MaxOperatoreSqualificato)"
+                                   value="@_editEntry.OperatoreSqualificato" @onchange="e => _editEntry.OperatoreSqualificato = ParseInt(e.Value)" />)
+                        @ScoreField("Interferenza arbitrale", @<input type="number" class="form-control form-control-sm score-field-input" min="0" max="@MaxOrNull(cfg.MaxInterferenzaArbitrale)"
+                                   value="@_editEntry.InterferenzaArbitrale" @onchange="e => _editEntry.InterferenzaArbitrale = ParseInt(e.Value)" />)
+                        @ScoreField("Comportamento antisportivo", @<input type="number" class="form-control form-control-sm score-field-input" min="0" max="@MaxOrNull(cfg.MaxComportamentoAntisportivo)"
+                                   value="@_editEntry.ComportamentoAntisportivo" @onchange="e => _editEntry.ComportamentoAntisportivo = ParseInt(e.Value)" />)
+                        @ScoreField("ASG over joule", @<input type="number" class="form-control form-control-sm score-field-input" min="0" max="@MaxOrNull(cfg.MaxAsgOverJoule)"
+                                   value="@_editEntry.AsgOverJoule" @onchange="e => _editEntry.AsgOverJoule = ParseInt(e.Value)" />)
+                        @ScoreField("Sacco dei rifiuti", @<input type="number" class="form-control form-control-sm score-field-input" min="0" max="@MaxOrNull(cfg.MaxSaccoRifiuti)"
+                                   value="@_editEntry.SaccoRifiuti" @onchange="e => _editEntry.SaccoRifiuti = ParseInt(e.Value)" />)
+                    </div>
+                </div>
+
+                <!-- Punteggio positivo -->
+                <div class="score-section">Punteggio</div>
+                <div class="row g-2 mb-2">
+                    <div class="col-md-6">
+                        @ScoreField("Difensori eliminati", @<input type="number" class="form-control form-control-sm score-field-input" min="0" max="@MaxOrNull(cfg.MaxDifensoriEliminati)"
+                                   value="@_editEntry.DifensoriEliminati" @onchange="e => _editEntry.DifensoriEliminati = ParseInt(e.Value)" />)
+                        @ScoreField("Ribelli colpiti", @<input type="number" class="form-control form-control-sm score-field-input" min="0" max="@MaxOrNull(cfg.MaxRibelliColpiti)"
+                                   value="@_editEntry.RibelliColpiti" @onchange="e => _editEntry.RibelliColpiti = ParseInt(e.Value)" />)
+                    </div>
+                    <div class="col-md-6">
+                        @ScoreField("Civili colpiti", @<input type="number" class="form-control form-control-sm score-field-input" min="0" max="@MaxOrNull(cfg.MaxCiviliColpiti)"
+                                   value="@_editEntry.CiviliColpiti" @onchange="e => _editEntry.CiviliColpiti = ParseInt(e.Value)" />)
+                    </div>
+                </div>
+
+                <!-- Fasi E -->
+                <div class="score-section">Fasi operative</div>
+                <div class="row g-1 mb-2">
+                    @for (int fi = 0; fi < 7; fi++)
+                    {
+                        var i = fi;
+                        var hasDescModal = !string.IsNullOrWhiteSpace(fasiDefs[i].Descrizione);
+                        if (!hasDescModal && !cfg.MostraFasiENulle) { continue; }
+                        <div class="col-md-6">
+                            <div class="score-fase-row">
+                                <span class="badge bg-secondary" style="min-width:2rem">E@(i+1)</span>
+                                <span class="score-fase-desc">@fasiDefs[i].Descrizione</span>
+                                <div class="form-check form-switch mb-0">
+                                    <input class="form-check-input" type="checkbox" role="switch"
+                                           checked="@(fasi[i] == true)"
+                                           @onchange="e => fasi[i] = e.Value is bool b ? b : false" />
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <!-- Note e contestazioni -->
+                <div class="score-section">Note e contestazioni</div>
+                <div class="row g-2">
+                    <div class="col-md-6">
+                        <label class="form-label small mb-1">Sezione pattuglia incursori</label>
+                        <textarea class="form-control form-control-sm" rows="3"
+                                  @bind="_editEntry.NotePattugliaIncursori" placeholder="Note della pattuglia..."></textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small mb-1">Sezione arbitro</label>
+                        <textarea class="form-control form-control-sm" rows="3"
+                                  @bind="_editEntry.NoteArbitro" placeholder="Note dell'arbitro..."></textarea>
+                    </div>
+                </div>
+            }
+        </BodyTemplate>
+        <FooterTemplate>
+            <Button Color="ButtonColor.Primary" @onclick="SaveEntryAsync" Loading="_saving" LoadingText="Salvataggio...">
+                <Icon Name="IconName.Save" /> Salva
+            </Button>
+            <Button Color="ButtonColor.Secondary" @onclick="() => _entryModal.HideAsync()">Annulla</Button>
+        </FooterTemplate>
+    </Modal>
+
+    <!-- Config Modal -->
+    <Modal @ref="_configModal" Title="Configurazione punteggi" Size="ModalSize.Large" IsScrollable="true">
+        <BodyTemplate>
+            @if (_editConfig != null)
+            {
+                var taskTabCls = _configTabIsTask ? "nav-link active" : "nav-link";
+                var dfltTabCls = !_configTabIsTask ? "nav-link active" : "nav-link";
+                var defs = _editConfig.FasiEDefs;
+
+                <ul class="nav nav-tabs mb-3">
+                    <li class="nav-item">
+                        <a class="@taskTabCls" href="#" @onclick:preventDefault @onclick="SwitchToTaskTab">
+                            Obiettivo
+                            @if (_hasTaskConfig) { <span class="badge bg-primary ms-1">Override</span> }
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="@dfltTabCls" href="#" @onclick:preventDefault @onclick="SwitchToDefaultTab">
+                            @(_missionId.HasValue ? "Missione" : "Globale")
+                            @if (!_configTabIsTask) {
+                                @if (_hasMissionConfig) { <span class="badge bg-info ms-1">Missione</span> }
+                                else { <span class="badge bg-secondary ms-1">DEFAULT</span> }
+                            }
+                        </a>
+                    </li>
+                </ul>
+
+                @if (_configTabIsTask && !_hasTaskConfig)
+                {
+                    <div class="alert alert-warning d-flex align-items-center gap-2 py-2 mb-3" role="alert">
+                        <Icon Name="IconName.ExclamationTriangleFill" />
+                        <small>Nessun override per questo obiettivo — visualizzazione configurazione ereditata. Salvando verrà creato un override specifico.</small>
+                    </div>
+                }
+                else if (!_configTabIsTask)
+                {
+                    <div class="alert alert-info d-flex align-items-center gap-2 py-2 mb-3" role="alert">
+                        <Icon Name="IconName.InfoCircleFill" />
+                        <small>
+                            @if (_hasMissionConfig)
+                            { <text>Configurazione della missione — si applica a tutti gli obiettivi senza override.</text> }
+                            else
+                            { <text>Configurazione DEFAULT globale — si applica a tutte le missioni/obiettivi senza configurazione specifica.</text> }
+                        </small>
+                    </div>
+                }
+
+                <div class="row g-2 mb-3">
+                    @ConfigField("Max Bivacco", @<input type="number" class="form-control form-control-sm" min="0" @bind="_editConfig.MaxBivacco" />)
+                    @ConfigField("Max Aiuto cartografico", @<input type="number" class="form-control form-control-sm" min="0" @bind="_editConfig.MaxAiutoCartografico" />)
+                    @ConfigField("Max Op. non dichiarato", @<input type="number" class="form-control form-control-sm" min="0" @bind="_editConfig.MaxOperatoreNonDichiarato" />)
+                    @ConfigField("Max Marcatura ASG assente", @<input type="number" class="form-control form-control-sm" min="0" @bind="_editConfig.MaxMarcaturaAsgAssente" />)
+                    @ConfigField("Max Fascia non esposta", @<input type="number" class="form-control form-control-sm" min="0" @bind="_editConfig.MaxFasciaNonEsposta" />)
+                    @ConfigField("Max Op. squalificato", @<input type="number" class="form-control form-control-sm" min="0" @bind="_editConfig.MaxOperatoreSqualificato" />)
+                    @ConfigField("Max Interferenza arbitrale", @<input type="number" class="form-control form-control-sm" min="0" @bind="_editConfig.MaxInterferenzaArbitrale" />)
+                    @ConfigField("Max Comportamento antisportivo", @<input type="number" class="form-control form-control-sm" min="0" @bind="_editConfig.MaxComportamentoAntisportivo" />)
+                    @ConfigField("Max ASG over joule", @<input type="number" class="form-control form-control-sm" min="0" @bind="_editConfig.MaxAsgOverJoule" />)
+                    @ConfigField("Max Sacco rifiuti", @<input type="number" class="form-control form-control-sm" min="0" @bind="_editConfig.MaxSaccoRifiuti" />)
+                    @ConfigField("Max Difensori eliminati", @<input type="number" class="form-control form-control-sm" min="0" @bind="_editConfig.MaxDifensoriEliminati" />)
+                    @ConfigField("Max Ribelli colpiti", @<input type="number" class="form-control form-control-sm" min="0" @bind="_editConfig.MaxRibelliColpiti" />)
+                    @ConfigField("Max Civili colpiti", @<input type="number" class="form-control form-control-sm" min="0" @bind="_editConfig.MaxCiviliColpiti" />)
+                </div>
+
+                <div class="score-section d-flex align-items-center justify-content-between">
+                    <span>Fasi operative (E1–E7)</span>
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" id="cfgMostraFasiNulle"
+                               @bind="_editConfig.MostraFasiENulle" />
+                        <label class="form-check-label small" for="cfgMostraFasiNulle">Mostra non eseguite nel riepilogo</label>
+                    </div>
+                </div>
+                <p class="text-muted small">Lascia la descrizione vuota per non mostrare la fase.</p>
+                @for (int i = 0; i < 7; i++)
+                {
+                    var idx = i;
+                    <div class="row g-2 align-items-center mb-2">
+                        <div class="col-auto">
+                            <span class="badge bg-secondary" style="min-width:2.5rem">E@(idx+1)</span>
+                        </div>
+                        <div class="col">
+                            <input type="text" class="form-control form-control-sm"
+                                   placeholder="Descrizione fase (lascia vuoto per nascondere)"
+                                   value="@defs[idx].Descrizione"
+                                   @onchange="e => { defs[idx].Descrizione = e.Value?.ToString() ?? string.Empty; _editConfig.FasiEDefs = defs; }" />
+                        </div>
+                        <div class="col-auto" style="width:110px">
+                            <input type="number" class="form-control form-control-sm" min="0"
+                                   placeholder="Max"
+                                   value="@defs[idx].MaxVal"
+                                   @onchange="e => { defs[idx].MaxVal = ParseInt(e.Value); _editConfig.FasiEDefs = defs; }" />
+                        </div>
+                    </div>
+                }
+            }
+        </BodyTemplate>
+        <FooterTemplate>
+            <Button Color="ButtonColor.Primary" @onclick="SaveConfigAsync" Loading="_savingConfig" LoadingText="Salvataggio...">
+                <Icon Name="IconName.Save" /> Salva
+            </Button>
+            @if (_configTabIsTask && _hasTaskConfig)
+            {
+                <Button Color="ButtonColor.Warning" @onclick="ResetConfigToDefaultAsync">
+                    <Icon Name="IconName.ArrowCounterclockwise" /> Rimuovi override
+                </Button>
+            }
+            <Button Color="ButtonColor.Secondary" @onclick="() => _configModal.HideAsync()">Chiudi</Button>
+        </FooterTemplate>
+    </Modal>
+
+    <!-- Delete Confirm Modal -->
+    <Modal @ref="_deleteModal" Title="Conferma eliminazione">
+        <BodyTemplate>
+            <p>Eliminare la scheda di <strong>@_deletingEntry?.IdentificativoPattuglia</strong>?</p>
+        </BodyTemplate>
+        <FooterTemplate>
+            <Button Color="ButtonColor.Danger" @onclick="ConfirmDeleteAsync" Loading="_deleting" LoadingText="Eliminazione...">
+                <Icon Name="IconName.Trash3Fill" /> Elimina
+            </Button>
+            <Button Color="ButtonColor.Secondary" @onclick="() => _deleteModal.HideAsync()">Annulla</Button>
+        </FooterTemplate>
+    </Modal>
+
+    <PageHeader Title="@($"Punteggio — {_task.Name}")" TitleIcon="IconName.TrophyFill">
+        <ChildContent>
+            <Button Size="ButtonSize.Small" Color="ButtonColor.Secondary" Outline="true"
+                    @onclick="OpenConfigModal" title="Configurazione punteggi">
+                <Icon Name="IconName.GearFill" />
+            </Button>
+            <Button Size="ButtonSize.Small" Color="ButtonColor.Secondary" Outline="true"
+                    @onclick='() => Navigation.NavigateTo($"/taskdetail/{TaskId}/documents")'>
+                <Icon Name="IconName.FolderFill" /> Documenti
+            </Button>
+            <Button Size="ButtonSize.Small" Color="ButtonColor.Secondary" Outline="true"
+                    @onclick='() => Navigation.NavigateTo($"/taskdetail/{TaskId}")'>
+                <Icon Name="IconName.ClipboardCheck" /> Operativo
+            </Button>
+            @if (CanAddEntry)
+            {
+                <Button Size="ButtonSize.Small" Color="ButtonColor.Primary" @onclick="OpenAddEntry">
+                    <Icon Name="IconName.PlusLg" /> Aggiungi scheda
+                </Button>
+            }
+        </ChildContent>
+    </PageHeader>
+
+    @if (!_entries.Any())
+    {
+        <div class="card">
+            <div class="card-body text-center text-muted py-5">
+                <Icon Name="IconName.TrophyFill" Size="IconSize.x3" />
+                <p class="mt-3 mb-0">Nessuna scheda punteggio ancora inserita.</p>
+                @if (_task.AssignedTeam != null)
+                {
+                    <p class="text-muted small mb-0">Team assegnato: <strong>@_task.AssignedTeam.Name</strong></p>
+                }
+                <Button Color="ButtonColor.Primary" Class="mt-3" @onclick="OpenAddEntry">
+                    <Icon Name="IconName.PlusLg" /> Aggiungi prima scheda
+                </Button>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="row g-3">
+            @foreach (var entry in _entries)
+            {
+                <div class="col-12">
+                    <div class="card entry-card @(entry.FuoriFinestra ? "ff" : "")">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <span class="fw-bold"><Icon Name="IconName.PersonFill" /> @entry.IdentificativoPattuglia</span>
+                                @if (!string.IsNullOrEmpty(entry.Tipologia))
+                                {<Badge Color="BadgeColor.Primary">@entry.Tipologia</Badge>}
+                                @if (entry.FuoriFinestra)
+                                {<Badge Color="BadgeColor.Danger">F.F.</Badge>}
+                                @if (entry.PunteggioMinimo)
+                                {<Badge Color="BadgeColor.Success">Punteggio minimo</Badge>}
+                                @if (entry.DurataMinuti.HasValue)
+                                {<span class="text-muted small"><Icon Name="IconName.ClockFill" /> @entry.DurataMinuti min</span>}
+                                @if (!string.IsNullOrEmpty(entry.InizioObj))
+                                {<span class="text-muted small">@entry.InizioObj → @(entry.FineObj ?? "—")</span>}
+                            </div>
+                            <div class="d-flex gap-1">
+                                <Button Size="ButtonSize.Small" Color="ButtonColor.Secondary" Outline="true"
+                                        @onclick="() => OpenEditEntry(entry)">
+                                    <Icon Name="IconName.PencilFill" />
+                                </Button>
+                                <Button Size="ButtonSize.Small" Color="ButtonColor.Danger" Outline="true"
+                                        @onclick="() => OpenDeleteModal(entry)">
+                                    <Icon Name="IconName.Trash3Fill" />
+                                </Button>
+                            </div>
+                        </div>
+                        <div class="card-body py-2">
+                            <div class="row g-2" style="font-size:.82rem">
+                                <!-- Penalità -->
+                                @EntryBadge("Bivacco", entry.Bivacco, "danger")
+                                @EntryBadge("Aiuto cart.", entry.AiutoCartografico, "danger")
+                                @EntryBadge("Op. non dich.", entry.OperatoreNonDichiarato, "danger")
+                                @EntryBadge("Marc. ASG", entry.MarcaturaAsgAssente, "danger")
+                                @EntryBadge("Fascia", entry.FasciaNonEsposta, "danger")
+                                @EntryBadge("Op. squal.", entry.OperatoreSqualificato, "danger")
+                                @EntryBadge("Interf. arb.", entry.InterferenzaArbitrale, "danger")
+                                @EntryBadge("Antisportivo", entry.ComportamentoAntisportivo, "danger")
+                                @EntryBadge("ASG joule", entry.AsgOverJoule, "danger")
+                                @EntryBadge("Civili", entry.CiviliColpiti, "danger")
+                                @EntryBadge("Sacco rif.", entry.SaccoRifiuti, "secondary")
+                                <!-- Positivo -->
+                                @EntryBadge("Difensori", entry.DifensoriEliminati, "success")
+                                @EntryBadge("Ribelli", entry.RibelliColpiti, "success")
+                                <!-- Fasi E -->
+                                @{
+                                    var defs = _effectiveConfig?.FasiEDefs ?? new FaseEDef[7];
+                                    var fasiVals = entry.FasiE;
+                                }
+                                @for (int i = 0; i < 7; i++)
+                                {
+                                    var idx = i;
+                                    var hasDesc = !string.IsNullOrWhiteSpace(defs[idx].Descrizione);
+                                    var val     = fasiVals[idx];
+                                    if (val == true || (val == false && _effectiveConfig?.MostraFasiENulle == true && hasDesc))
+                                    {
+                                        <div class="col-auto" title="@defs[idx].Descrizione">
+                                            <span class="badge @(val == true ? "bg-success" : "bg-danger")">
+                                                E@(idx+1) @(val == true ? "✓" : "✗")
+                                            </span>
+                                        </div>
+                                    }
+                                }
+                            </div>
+                            @if (!string.IsNullOrEmpty(entry.NotePattugliaIncursori) || !string.IsNullOrEmpty(entry.NoteArbitro))
+                            {
+                                <div class="mt-2 pt-2 border-top row g-2" style="font-size:.8rem">
+                                    @if (!string.IsNullOrEmpty(entry.NotePattugliaIncursori))
+                                    {
+                                        <div class="col-md-6">
+                                            <span class="text-muted">Pattuglia:</span> @entry.NotePattugliaIncursori
+                                        </div>
+                                    }
+                                    @if (!string.IsNullOrEmpty(entry.NoteArbitro))
+                                    {
+                                        <div class="col-md-6">
+                                            <span class="text-muted">Arbitro:</span> @entry.NoteArbitro
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public Guid TaskId { get; set; }
+
+    private TaskEntity? _task;
+    private List<TaskScoreEntry> _entries = new();
+    private ScoreConfig? _effectiveConfig;
+    private bool _hasTaskConfig;
+    private bool _hasMissionConfig;
+    private Guid? _missionId;
+    private bool _configTabIsTask = true;
+
+    // Entry modal
+    private Modal _entryModal = default!;
+    private TaskScoreEntry? _editEntry;
+    private ScoreConfig? _editConfig;
+    private bool?[] _editFasi = new bool?[7];
+    private bool _saving;
+
+    // Config modal
+    private Modal _configModal = default!;
+    private bool _savingConfig;
+
+    // Delete modal
+    private Modal _deleteModal = default!;
+    private TaskScoreEntry? _deletingEntry;
+    private bool _deleting;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _task = await TaskService.GetAsync(TaskId);
+        if (_task == null) return;
+        _missionId = _task.MissionTAKSuiteId;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _entries        = await ScoreService.GetByTaskAsync(TaskId);
+        _effectiveConfig = await ConfigService.GetEffectiveAsync(TaskId, _missionId);
+        _hasTaskConfig   = (await ConfigService.GetByTaskAsync(TaskId)) != null;
+        _hasMissionConfig = _missionId.HasValue && (await ConfigService.GetByMissionAsync(_missionId.Value)) != null;
+        StateHasChanged();
+    }
+
+    // ── Entry CRUD ────────────────────────────────────────────────────────────
+
+    private bool CanAddEntry => _task?.AssignedTeam == null || _entries.Count == 0;
+
+    private async Task OpenAddEntry()
+    {
+        if (!CanAddEntry) return;
+        _editConfig = await ConfigService.GetEffectiveAsync(TaskId, _missionId);
+        _editEntry = new TaskScoreEntry
+        {
+            Id = Guid.Empty,
+            TaskEntityId = TaskId,
+            IdentificativoPattuglia = _task?.AssignedTeam?.Name ?? "",
+            Tipologia = string.IsNullOrEmpty(_task?.TipologiaObiettivo) ? null : _task.TipologiaObiettivo,
+        };
+        _editFasi = Enumerable.Repeat((bool?)false, 7).ToArray();
+        await _entryModal.ShowAsync();
+    }
+
+    private async Task OpenEditEntry(TaskScoreEntry entry)
+    {
+        _editConfig = await ConfigService.GetEffectiveAsync(TaskId, _missionId);
+        _editEntry = new TaskScoreEntry
+        {
+            Id = entry.Id,
+            TaskEntityId = entry.TaskEntityId,
+            IdentificativoPattuglia = entry.IdentificativoPattuglia,
+            Tipologia = entry.Tipologia,
+            DurataMinuti = entry.DurataMinuti,
+            InizioObj = entry.InizioObj,
+            FineObj = entry.FineObj,
+            FuoriFinestra = entry.FuoriFinestra,
+            PunteggioMinimo = entry.PunteggioMinimo,
+            Bivacco = entry.Bivacco,
+            AiutoCartografico = entry.AiutoCartografico,
+            OperatoreNonDichiarato = entry.OperatoreNonDichiarato,
+            MarcaturaAsgAssente = entry.MarcaturaAsgAssente,
+            FasciaNonEsposta = entry.FasciaNonEsposta,
+            OperatoreSqualificato = entry.OperatoreSqualificato,
+            InterferenzaArbitrale = entry.InterferenzaArbitrale,
+            ComportamentoAntisportivo = entry.ComportamentoAntisportivo,
+            AsgOverJoule = entry.AsgOverJoule,
+            SaccoRifiuti = entry.SaccoRifiuti,
+            DifensoriEliminati = entry.DifensoriEliminati,
+            RibelliColpiti = entry.RibelliColpiti,
+            CiviliColpiti = entry.CiviliColpiti,
+            FasiEJson = entry.FasiEJson,
+            MostraFasiENulle = entry.MostraFasiENulle,
+            NotePattugliaIncursori = entry.NotePattugliaIncursori,
+            NoteArbitro = entry.NoteArbitro,
+            CreatedAt = entry.CreatedAt,
+        };
+        _editFasi = _editEntry.FasiE;
+        await _entryModal.ShowAsync();
+    }
+
+    private async Task SaveEntryAsync()
+    {
+        if (_editEntry == null) return;
+        _saving = true;
+        try
+        {
+            _editEntry.FasiE = _editFasi;
+            if (_editEntry.Id == Guid.Empty)
+                await ScoreService.AddAsync(_editEntry);
+            else
+                await ScoreService.UpdateAsync(_editEntry);
+
+            await _entryModal.HideAsync();
+            await LoadAsync();
+            ToastService.Notify(new(ToastType.Success, "Punteggio", "Scheda salvata."));
+        }
+        finally { _saving = false; }
+    }
+
+    private async Task OpenDeleteModal(TaskScoreEntry entry)
+    {
+        _deletingEntry = entry;
+        await _deleteModal.ShowAsync();
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_deletingEntry == null) return;
+        _deleting = true;
+        try
+        {
+            await ScoreService.DeleteAsync(_deletingEntry.Id);
+            await _deleteModal.HideAsync();
+            await LoadAsync();
+            ToastService.Notify(new(ToastType.Success, "Punteggio", "Scheda eliminata."));
+        }
+        finally { _deleting = false; }
+    }
+
+    // ── Config ────────────────────────────────────────────────────────────────
+
+    private async Task LoadTabConfig()
+    {
+        if (_configTabIsTask)
+        {
+            var taskCfg = await ConfigService.GetByTaskAsync(TaskId);
+            _editConfig = taskCfg != null
+                ? CloneConfig(taskCfg)
+                : CloneConfig(await ConfigService.GetEffectiveAsync(TaskId, _missionId));
+        }
+        else
+        {
+            ScoreConfig? cfg = _missionId.HasValue
+                ? await ConfigService.GetByMissionAsync(_missionId.Value)
+                : null;
+            _editConfig = CloneConfig(cfg ?? await ConfigService.GetDefaultAsync());
+        }
+    }
+
+    private async Task SwitchToTaskTab()
+    {
+        _configTabIsTask = true;
+        await LoadTabConfig();
+    }
+
+    private async Task SwitchToDefaultTab()
+    {
+        _configTabIsTask = false;
+        await LoadTabConfig();
+    }
+
+    private async Task OpenConfigModal()
+    {
+        _configTabIsTask = true;
+        await LoadTabConfig();
+        await _configModal.ShowAsync();
+    }
+
+    private async Task SaveConfigAsync()
+    {
+        if (_editConfig == null) return;
+        _savingConfig = true;
+        try
+        {
+            if (_configTabIsTask)
+                await ConfigService.SaveForTaskAsync(_editConfig, TaskId);
+            else if (_missionId.HasValue)
+                await ConfigService.SaveForMissionAsync(_editConfig, _missionId.Value);
+            else
+                await ConfigService.SaveDefaultAsync(_editConfig);
+
+            await _configModal.HideAsync();
+            await LoadAsync();
+            ToastService.Notify(new(ToastType.Success, "Configurazione", "Salvata."));
+        }
+        finally { _savingConfig = false; }
+    }
+
+    private async Task ResetConfigToDefaultAsync()
+    {
+        await ConfigService.DeleteForTaskAsync(TaskId);
+        _hasTaskConfig = false;
+        _hasMissionConfig = _missionId.HasValue && (await ConfigService.GetByMissionAsync(_missionId.Value)) != null;
+        _effectiveConfig = await ConfigService.GetEffectiveAsync(TaskId, _missionId);
+        await LoadTabConfig();
+        var msg = _hasMissionConfig ? "Override rimosso. Usa configurazione missione." : "Ripristinata al DEFAULT.";
+        ToastService.Notify(new(ToastType.Info, "Configurazione", msg));
+        StateHasChanged();
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private void RecalcFine()
+    {
+        if (_editEntry == null) return;
+        if (!string.IsNullOrEmpty(_editEntry.InizioObj) && _editEntry.DurataMinuti.HasValue)
+        {
+            if (TimeSpan.TryParse(_editEntry.InizioObj, out var ts))
+            {
+                var fine = ts.Add(TimeSpan.FromMinutes(_editEntry.DurataMinuti.Value));
+                _editEntry.FineObj = $"{fine.Hours:00}:{fine.Minutes:00}";
+            }
+        }
+    }
+
+    private static string? MaxOrNull(int max) => max > 0 ? max.ToString() : null;
+    private static int ParseInt(object? v) => int.TryParse(v?.ToString(), out var r) ? Math.Max(0, r) : 0;
+
+    private static string FaseToString(bool? v) => v switch { true => "si", false => "no", _ => "" };
+    private static bool? ParseFase(string? s) => s switch { "si" => true, "no" => false, _ => null };
+
+    private static ScoreConfig CloneConfig(ScoreConfig src) => new()
+    {
+        Id = src.Id, TaskEntityId = src.TaskEntityId, MissionTAKSuiteId = src.MissionTAKSuiteId,
+        MaxBivacco = src.MaxBivacco, MaxAiutoCartografico = src.MaxAiutoCartografico,
+        MaxOperatoreNonDichiarato = src.MaxOperatoreNonDichiarato, MaxMarcaturaAsgAssente = src.MaxMarcaturaAsgAssente,
+        MaxFasciaNonEsposta = src.MaxFasciaNonEsposta, MaxOperatoreSqualificato = src.MaxOperatoreSqualificato,
+        MaxInterferenzaArbitrale = src.MaxInterferenzaArbitrale, MaxComportamentoAntisportivo = src.MaxComportamentoAntisportivo,
+        MaxAsgOverJoule = src.MaxAsgOverJoule, MaxSaccoRifiuti = src.MaxSaccoRifiuti,
+        MaxDifensoriEliminati = src.MaxDifensoriEliminati, MaxRibelliColpiti = src.MaxRibelliColpiti,
+        MaxCiviliColpiti = src.MaxCiviliColpiti,
+        MostraFasiENulle = src.MostraFasiENulle,
+        FasiEJson = src.FasiEJson
+    };
+
+    // Render helpers (RenderFragment delegates)
+    private RenderFragment ScoreField(string label, RenderFragment input) => __builder =>
+    {
+        __builder.OpenElement(0, "div");
+        __builder.AddAttribute(1, "class", "score-field-row mb-1");
+        __builder.OpenElement(2, "span");
+        __builder.AddAttribute(3, "class", "score-field-label");
+        __builder.AddContent(4, label);
+        __builder.CloseElement();
+        __builder.AddContent(5, input);
+        __builder.CloseElement();
+    };
+
+    private RenderFragment ConfigField(string label, RenderFragment input) => __builder =>
+    {
+        __builder.OpenElement(0, "div");
+        __builder.AddAttribute(1, "class", "col-md-6");
+        __builder.OpenElement(2, "label");
+        __builder.AddAttribute(3, "class", "form-label small mb-1");
+        __builder.AddContent(4, label);
+        __builder.CloseElement();
+        __builder.AddContent(5, input);
+        __builder.CloseElement();
+    };
+
+    private RenderFragment EntryBadge(string label, int value, string color) => __builder =>
+    {
+        if (value <= 0) return;
+        __builder.OpenElement(0, "div");
+        __builder.AddAttribute(1, "class", "col-auto");
+        __builder.OpenElement(2, "span");
+        __builder.AddAttribute(3, "class", $"badge bg-{color}");
+        __builder.AddContent(4, $"{label}: {value}");
+        __builder.CloseElement();
+        __builder.CloseElement();
+    };
+}

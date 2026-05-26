@@ -32,9 +32,9 @@
             <ValidationSummary class="text-danger" role="alert" />
             <div class="input-group mb-3">
                 <span class="input-group-text"><i class="bi bi-person"></i></span>
-                <InputText @bind-Value="Input.Email" id="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="Email" />
+                <InputText @bind-Value="Input.EmailOrNick" id="Input.EmailOrNick" class="form-control" autocomplete="username" aria-required="true" placeholder="Email o Nickname" />
             </div>
-            <ValidationMessage For="() => Input.Email" class="text-danger" />
+            <ValidationMessage For="() => Input.EmailOrNick" class="text-danger" />
             <div class="input-group mb-3">
                 <span class="input-group-text"><i class="bi bi-lock"></i></span>
                 <InputText type="password" @bind-Value="Input.Password" id="Input.Password" class="form-control" autocomplete="current-password" aria-required="true" placeholder="Password" />
@@ -75,7 +75,22 @@
 
     public async Task LoginUser()
     {
-        var result = await SignInManager.PasswordSignInAsync(Input.Email, Input.Password, Input.RememberMe, lockoutOnFailure: false);
+        string userName = Input.EmailOrNick.Trim();
+
+        if (!userName.Contains('@'))
+        {
+            var allAtakUsers = await _userServiceAtak.GetAllAsync();
+            var atakUser = allAtakUsers.FirstOrDefault(u =>
+                string.Equals(u.Nick, userName, StringComparison.OrdinalIgnoreCase));
+
+            if (atakUser != null)
+            {
+                var appUser = UserManager.Users.FirstOrDefault(u => u.UserId == atakUser.Id);
+                userName = appUser?.UserName ?? appUser?.Email ?? Input.EmailOrNick;
+            }
+        }
+
+        var result = await SignInManager.PasswordSignInAsync(userName, Input.Password, Input.RememberMe, lockoutOnFailure: false);
         if (result.Succeeded)
         {
             Logger.LogInformation("User logged in.");
@@ -122,8 +137,7 @@
     private sealed class InputModel
     {
         [Required]
-        [EmailAddress]
-        public string Email { get; set; } = "";
+        public string EmailOrNick { get; set; } = "";
 
         [Required]
         [DataType(DataType.Password)]
