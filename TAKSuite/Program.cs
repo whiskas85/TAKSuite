@@ -112,6 +112,8 @@ builder.Services.AddSingleton(sp => new FileManagerApiClient(sp.GetRequiredServi
 builder.Services.AddSingleton(sp => new GroupsApiClient(sp.GetRequiredService<MartiHttpClientProvider>().HttpClient));
 builder.Services.AddSingleton(sp => new VideoConnectionManagerV2Client(sp.GetRequiredService<MartiHttpClientProvider>().HttpClient));
 builder.Services.AddSingleton(sp => new DataFeedApiClient(sp.GetRequiredService<MartiHttpClientProvider>().HttpClient));
+builder.Services.AddSingleton(sp => new ContactsApiClient(sp.GetRequiredService<MartiHttpClientProvider>().HttpClient));
+builder.Services.AddSingleton<TakTrafficLogger>();
 builder.Services.AddSingleton<CachedDataService>();      // Cached Data Service
 builder.Services.AddSingleton<CoTManager>();      // CoTManager
 builder.Services.AddTransient<WebSocketManagerCustom>();
@@ -154,6 +156,7 @@ builder.Services.AddTransient<TakSettingsService>();
 builder.Services.AddTransient<TakSubscriptionService>();
 builder.Services.AddSingleton<PhotoAutoJoinService>();
 builder.Services.AddSingleton<NavRefreshService>();
+builder.Services.AddSingleton<AtakMapsService>();
 
 
 
@@ -223,6 +226,9 @@ lifetime.ApplicationStarted.Register(() =>
     });
 
     Task.Run(() => cotApiClient.StartKeepAliveLoop(cancellationToken));
+    var udpLogFile = Path.Combine(logDir, $"udp-cot-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+    Task.Run(() => cotApiClient.StartUdpListeningAsync(8089, cancellationToken, logFile: udpLogFile));
+    Task.Run(() => cotApiClient.StartUdpListeningAsync(6969, cancellationToken, "239.2.3.1", udpLogFile));
 });
 
 // Configura il ciclo di vita dell'app

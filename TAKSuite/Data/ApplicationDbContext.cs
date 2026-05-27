@@ -39,6 +39,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<TaskScoreEntry> TaskScoreEntries { get; set; }
     public DbSet<ScoreConfig> ScoreConfigs { get; set; }
+    public DbSet<AtakMapSource> AtakMapSources { get; set; }
 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -201,5 +202,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasForeignKey(c => c.TaskEntityId)
             .IsRequired(false)
             .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<AtakMapSource>()
+            .HasIndex(m => m.FileName)
+            .IsUnique();
     }
 }

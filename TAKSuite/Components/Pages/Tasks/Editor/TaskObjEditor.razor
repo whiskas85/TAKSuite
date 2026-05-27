@@ -352,7 +352,7 @@ else
         if (taskEntity == null) return;
         taskEntity.LastModified = DateTime.UtcNow;
         await taskService.UpdateAsync(taskEntity);
-        NavRefreshService.NotifyNavChanged();
+        NavRefreshService.NotifyTaskNameChanged(taskEntity.Id, taskEntity.Name);
         if (_previewOpen) await RefreshPreview();
     }
 

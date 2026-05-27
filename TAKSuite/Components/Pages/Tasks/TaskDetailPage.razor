@@ -51,6 +51,10 @@ else
                         @onclick='() => Navigation.NavigateTo($"/missiontak/{_mission.Id}")'>
                     <Icon Name="IconName.ArrowLeft" /> @_mission.Name
                 </Button>
+                <Button Color="ButtonColor.Secondary" Outline="true"
+                        @onclick='() => Navigation.NavigateTo($"/missiontak/{_mission.Id}/map")'>
+                    <Icon Name="IconName.MapFill" /> Mappa
+                </Button>
             }
             @if (!string.IsNullOrEmpty(_task.PoiUid) && !string.IsNullOrEmpty(_mission?.TakMissionUid))
             {

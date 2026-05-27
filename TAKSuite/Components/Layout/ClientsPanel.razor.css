@@ -1,8 +1,28 @@
+/* Area scrollabile: padding in fondo per non nascondere il footer fisso */
+.clients-scroll-content {
+    padding-bottom: 4rem;
+}
+
+/* ── Footer selettore: fisso in fondo all'offcanvas ── */
+.view-mode-selector {
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    width: var(--bs-offcanvas-width, 400px);
+    padding: 0.5rem 1rem;
+    background: var(--bs-body-bg);
+    border-top: 1px solid var(--bs-border-color);
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, .25);
+    z-index: 1060;
+}
+
+/* ── Card ── */
 .client-card {
     background: var(--bs-body-bg);
     border: 1px solid var(--bs-border-color);
     border-radius: .5rem;
     overflow: hidden;
+    /* border-left color iniettato inline per team — corre su tutta l'altezza */
 }
 
 .client-card-header {
@@ -55,4 +75,22 @@
 
 .team-name {
     letter-spacing: .04em;
+}
+
+/* ── Sub-card: dispositivo (dentro gruppo utente) ── */
+.device-sub-card {
+    background: var(--bs-tertiary-bg, rgba(0,0,0,.04));
+    border: 1px solid var(--bs-border-color);
+    border-radius: .35rem;
+    padding: .3rem .55rem;
+    font-size: .82rem;
+}
+
+/* ── Sub-card: utente (dentro gruppo colore) ── */
+.user-sub-card {
+    background: var(--bs-tertiary-bg, rgba(0,0,0,.04));
+    border: 1px solid var(--bs-border-color);
+    border-radius: .35rem;
+    padding: .3rem .55rem;
+    font-size: .82rem;
 }

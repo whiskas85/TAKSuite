@@ -407,7 +407,7 @@ else
 
             _task.LastModified = DateTime.UtcNow;
             await TaskService.UpdateAsync(_task);
-            NavRefreshService.NotifyNavChanged();
+            NavRefreshService.NotifyTaskNameChanged(_task.Id, _task.Name);
             ToastService.Notify(new(ToastType.Success, "Task", "Configurazione salvata"));
         }
         finally

@@ -27,6 +27,14 @@ namespace TAKSuite.Data.ServicesTak
             return ParseAllPoints(data);
         }
 
+        // Come GetAllMissionPointsAsync ma include anche gli item con lat=0/lon=0
+        // (disegni freehand e cerchi che non hanno coordinate nel payload sommario)
+        public async Task<List<TakPoint>> GetAllMissionUidsAsync(string missionUid)
+        {
+            var data = await _client.GetMissionDataAsync(missionUid);
+            return ParseAllUids(data);
+        }
+
         private List<TakPoint> ParseAllPoints(string data)
         {
             var result = new List<TakPoint>();
@@ -45,6 +53,37 @@ namespace TAKSuite.Data.ServicesTak
                         var lat = loc.GetProperty("lat").GetDouble();
                         var lon = loc.GetProperty("lon").GetDouble();
                         if (lat == 0 && lon == 0) continue;
+                        result.Add(new TakPoint(uidStr, callsign, lat, lon));
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+            return result;
+        }
+
+        private List<TakPoint> ParseAllUids(string data)
+        {
+            var result = new List<TakPoint>();
+            if (string.IsNullOrEmpty(data)) return result;
+            try
+            {
+                using var doc = JsonDocument.Parse(data);
+                var uids = doc.RootElement.GetProperty("data")[0].GetProperty("uids");
+                foreach (var uid in uids.EnumerateArray())
+                {
+                    try
+                    {
+                        var uidStr = uid.GetProperty("data").GetString() ?? string.Empty;
+                        if (string.IsNullOrEmpty(uidStr)) continue;
+                        var details = uid.GetProperty("details");
+                        var callsign = details.TryGetProperty("callsign", out var cs) ? cs.GetString() : null;
+                        double lat = 0, lon = 0;
+                        if (details.TryGetProperty("location", out var loc))
+                        {
+                            lat = loc.GetProperty("lat").GetDouble();
+                            lon = loc.GetProperty("lon").GetDouble();
+                        }
                         result.Add(new TakPoint(uidStr, callsign, lat, lon));
                     }
                     catch { }

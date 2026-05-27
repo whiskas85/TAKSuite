@@ -13,7 +13,7 @@
 Href="/"
 ImageSrc="images/tak trasp.png"
 Title="TAK Suite"
-BadgeText="v3.9.52"
+BadgeText="v4.0.2"
 DataProvider="Sidebar2DataProvider"
 WidthUnit="Unit.Px"
 Width="300"/>
@@ -79,22 +79,27 @@ Width="300"/>
                 new NavItem { Id = $"8.{counter++}", Href = "/settings/phone-contacts", IconName = IconName.TelephoneInboundFill, Text = "Rubrica Telefonica", ParentId = "8" },
                 new NavItem { Id = $"8.{counter++}", Href = "/settings/document-types", IconName = IconName.TagFill, Text = "Tipologie Documento", ParentId = "8" },
                 new NavItem { Id = $"8.{counter++}", Href = "/settings/ai", IconName = IconName.Robot, Text = "Impostazioni AI", ParentId = "8" },
+                new NavItem { Id = $"8.{counter++}", Href = "/settings/atak-maps", IconName = IconName.MapFill, Text = "ATAK Maps", ParentId = "8" },
 
             new NavItem { Id = "10", Href = "", IconName = IconName.Display, Text = "System" },
                 new NavItem { Id = "10.0", Href = "/system/log", IconName = IconName.FileTextFill, Text = "Log", ParentId = "10" },
 
         };
 
+        // Fetch all data in parallel to avoid sequential DB round-trips
+        var missionsTask = MissionSuiteService.GetAllAsync();
+        var allTasksTask = TaskService.GetAllAsync();
+        var teamsTask = TeamService.GetAllAsync();
+        await Task.WhenAll(missionsTask, allTasksTask, teamsTask);
 
-
-
-        navItems = await RetrieveAllMissions(navItems.ToList(), "Missioni");
-        navItems = await RetrieveAllTeams(navItems.ToList(), "Teams");
+        navItems = await RetrieveAllMissions(navItems.ToList(), "Missioni", await missionsTask, await allTasksTask);
+        navItems = await RetrieveAllTeams(navItems.ToList(), "Teams", await teamsTask);
 
         return navItems;
     }
 
-    private async Task<IEnumerable<NavItem>> RetrieveAllMissions(IList<NavItem> navItems, string listTitle)
+    private async Task<IEnumerable<NavItem>> RetrieveAllMissions(IList<NavItem> navItems, string listTitle,
+        IEnumerable<MissionSuite> missions, IEnumerable<TaskEntity> allTasksEnum)
     {
         var parentId = navItems.FirstOrDefault(x => x.Text == listTitle)?.Id;
         if (parentId == null) return navItems;
@@ -116,8 +121,7 @@ Width="300"/>
                 ParentId = parentId
             });
 
-        var missions = await MissionSuiteService.GetAllAsync();
-        var allTasks = await TaskService.GetAllAsync();
+        var allTasks = allTasksEnum;
         var tasksByMission = allTasks
             .Where(t => t.MissionTAKSuiteId.HasValue)
             .GroupBy(t => t.MissionTAKSuiteId!.Value)
@@ -187,6 +191,14 @@ Width="300"/>
                 Href = $"/missiontak/{mission.Id}",
                 IconName = IconName.Activity,
                 Text = "Operativo",
+                ParentId = missionMenuId
+            });
+            navItems.Add(new NavItem
+            {
+                Id = $"{missionMenuId}.map",
+                Href = $"/missiontak/{mission.Id}/map",
+                IconName = IconName.MapFill,
+                Text = "Mappa",
                 ParentId = missionMenuId
             });
             navItems.Add(new NavItem
@@ -330,18 +342,11 @@ Width="300"/>
         return navItems;
     }
 
-    private async Task<IEnumerable<NavItem>> RetrieveAllTeams(IList<NavItem> navItems, string teamsTitle)
+    private async Task<IEnumerable<NavItem>> RetrieveAllTeams(IList<NavItem> navItems, string teamsTitle, IEnumerable<Team> teams)
     {
         var id = navItems.FirstOrDefault(x => x.Text == teamsTitle)?.Id;
         if (id != null)
         {
-            // if (ConnectedAtakUser == null) 
-            //     return new List<NavItem>();
-            // if (ConnectedAtakUser.Team == null)
-            //     return new List<NavItem>();
-
-            // var teams = await TeamService.GetSubTeamsAsync(ConnectedAtakUser.Team, true);
-            var teams = await TeamService.GetAllAsync();
 
             foreach (var team in teams)
             {
@@ -387,6 +392,7 @@ Width="300"/>
         currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
         NavigationManager.LocationChanged += OnLocationChanged;
         NavRefreshService.OnNavChanged += OnNavRefreshed;
+        NavRefreshService.OnTaskNameChanged += OnTaskNameChanged;
     }
 
     private void OnNavRefreshed()
@@ -396,10 +402,20 @@ Width="300"/>
         _ = InvokeAsync(StateHasChanged);
     }
 
+    private void OnTaskNameChanged(Guid taskId, string newName)
+    {
+        if (navItems == null) return;
+        var operativoItem = navItems.FirstOrDefault(n => n.Href == $"/taskdetail/{taskId}");
+        if (operativoItem == null) return;
+        var parentItem = navItems.FirstOrDefault(n => n.Id == operativoItem.ParentId);
+        if (parentItem != null)
+            parentItem.Text = newName;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
         currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
-        navItems = null;
         StateHasChanged();
     }
 
@@ -407,6 +423,7 @@ Width="300"/>
     {
         NavigationManager.LocationChanged -= OnLocationChanged;
         NavRefreshService.OnNavChanged -= OnNavRefreshed;
+        NavRefreshService.OnTaskNameChanged -= OnTaskNameChanged;
     }
 }
 

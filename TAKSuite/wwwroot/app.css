@@ -140,6 +140,36 @@ h1:focus {
     margin-top: 5px;
 }
 
+/* ── Mappa TAK — label Leaflet (prefisso .leaflet-container per battere la specificità di Leaflet) ── */
+.leaflet-container .takmap-label {
+    background: rgba(0, 0, 0, 0.65) !important;
+    border: none !important;
+    border-radius: 3px !important;
+    color: #fff !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    padding: 1px 5px !important;
+    white-space: nowrap !important;
+    box-shadow: none !important;
+    line-height: 1.4 !important;
+}
+.leaflet-container .takmap-label::before { display: none !important; }
+
+/* ── Label MIL modifier: nessun background, testo con outline bianco/nero stile ATAK ── */
+.leaflet-container .takmap-label-mil {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: #fff !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000 !important;
+    white-space: nowrap !important;
+    padding: 0 !important;
+    line-height: 1.5 !important;
+}
+.leaflet-container .takmap-label-mil::before { display: none !important; }
+
 /* ── AI Chat Panel (global — scoped CSS non raggiunge elementi fuori dal componente) ── */
 
 /* Footer offcanvas: input a tutta larghezza */
@@ -154,4 +184,37 @@ h1:focus {
 /* User message bubble: testo scuro su primary lime */
 .ai-msg--user .ai-msg-bubble {
     color: #000 !important;
+}
+
+/* ── Mappa TAK — cursore: freccia normale invece del grab ── */
+.leaflet-grab { cursor: crosshair !important; }
+.leaflet-dragging .leaflet-grab { cursor: grabbing !important; }
+
+/* ── Mappa TAK — box coordinate UTM ── */
+.leaflet-container .takmap-utm-box {
+    background: rgba(0, 0, 0, 0.72);
+    border-radius: 4px;
+    padding: 3px 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-family: 'Courier New', monospace;
+    color: #fff;
+    white-space: nowrap;
+    pointer-events: none;
+    user-select: none;
+    min-width: 230px;
+}
+.takmap-utm-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    color: #39FF14;
+    font-family: inherit;
+}
+.takmap-utm-val {
+    font-family: inherit;
+    color: #fff;
+    letter-spacing: .04em;
 }

@@ -1,6 +1,7 @@
 @page "/settings/tak"
 @attribute [Authorize]
 @rendermode InteractiveServer
+@implements IDisposable
 
 @using Microsoft.AspNetCore.Authorization
 @using System.Net.Http.Headers
@@ -11,10 +12,13 @@
 @using TAKSuite.Data.Models
 @using TAKSuite.Data.Services
 @using TAKSuite.TAK
+@using TAKSuite.TAK.Helper
 @using TakLib
 
 @inject TakSettingsService SettingsService
 @inject TakClientProvider TakProvider
+@inject CoTApiClient CotClient
+@inject IJSRuntime JS
 
 <PageTitle>Connessione TAK</PageTitle>
 
@@ -42,9 +46,9 @@
 
     <div class="row g-4">
 
-        <!-- Connection -->
+        @* ── Connessione ──────────────────────────────────────────────────────── *@
         <div class="col-12 col-lg-6">
-            <div class="card">
+            <div class="card h-100">
                 <div class="card-header"><Icon Name="IconName.Wifi" /> Connessione</div>
                 <div class="card-body">
                     <div class="mb-3">
@@ -69,9 +73,9 @@
             </div>
         </div>
 
-        <!-- Identity -->
+        @* ── Identità ─────────────────────────────────────────────────────────── *@
         <div class="col-12 col-lg-6">
-            <div class="card">
+            <div class="card h-100">
                 <div class="card-header"><Icon Name="IconName.PersonBadge" /> Identità</div>
                 <div class="card-body">
                     <div class="mb-3">
@@ -82,11 +86,101 @@
                         <label class="form-label">Client UID</label>
                         <input class="form-control" @bind="_settings.ClientUid" placeholder="TAKSUITE-SERVER" />
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label">Ruolo</label>
+                        <select class="form-select" @bind="_settings.Role">
+                            @foreach (var r in Roles)
+                            {
+                                <option value="@r.Value" title="@r.Note">@r.Label@(string.IsNullOrEmpty(r.Note) ? "" : $" — {r.Note}")</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-1">
+                        <label class="form-label">Colore ATAK</label>
+                        <div class="d-flex flex-wrap gap-2">
+                            @foreach (var c in AtakColors)
+                            {
+                                var isSelected = string.Equals(_settings.Color, c.Name, StringComparison.OrdinalIgnoreCase);
+                                var checkColor = c.IsDark ? "#fff" : "#000";
+                                <button type="button"
+                                        class="color-swatch @(isSelected ? "color-swatch--selected" : "")"
+                                        style="background-color:@c.Hex"
+                                        title="@c.Name"
+                                        @onclick="() => _settings.Color = c.Name">
+                                    @if (isSelected)
+                                    {
+                                        <Icon Name="IconName.CheckLg" style="@($"color:{checkColor}")" />
+                                    }
+                                </button>
+                            }
+                        </div>
+                        @if (!string.IsNullOrEmpty(_settings.Color))
+                        {
+                            <div class="mt-1 small text-muted">Selezionato: <strong>@_settings.Color</strong></div>
+                        }
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Certificate Status -->
+        @* ── Posizione ────────────────────────────────────────────────────────── *@
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header"><Icon Name="IconName.GeoAltFill" /> Posizione</div>
+                <div class="card-body">
+                    <div class="row g-3 align-items-start">
+
+                        <div class="col-12 col-md-5">
+                            <label class="form-label">Inserisci coordinata</label>
+                            <div class="input-group mb-2">
+                                <input class="form-control"
+                                       @bind="_coordInput"
+                                       @bind:event="oninput"
+                                       placeholder="32T 371610 4993569 · 45.12,8.45 · URL Google Maps" />
+                                <button class="btn btn-outline-primary" type="button" @onclick="ParseCoordInputAsync">
+                                    <Icon Name="IconName.GeoAltFill" /> Imposta
+                                </button>
+                            </div>
+                            <div class="form-text text-muted small mb-3">
+                                Formati supportati: UTM (32T 371610 4993569), WGS84 decimale (45.12, 8.45), URL Google Maps
+                            </div>
+
+                            @if (_settings.Latitude.HasValue && _settings.Longitude.HasValue)
+                            {
+                                var lat = _settings.Latitude.Value;
+                                var lon = _settings.Longitude.Value;
+                                var utm = FormatUtm(lat, lon);
+                                <div class="p-2 rounded border mb-2 small">
+                                    <div class="d-flex gap-2 align-items-center mb-1">
+                                        <Icon Name="IconName.GeoAltFill" class="text-primary" />
+                                        <strong>UTM:</strong> <span class="font-monospace">@utm</span>
+                                    </div>
+                                    <div class="d-flex gap-2 align-items-center">
+                                        <Icon Name="IconName.Globe" class="text-secondary" />
+                                        <strong>WGS84:</strong> <span class="font-monospace">@lat.ToString("F6"), @lon.ToString("F6")</span>
+                                    </div>
+                                </div>
+                                <button class="btn btn-sm btn-outline-danger" @onclick="ClearPosition">
+                                    <Icon Name="IconName.Trash" /> Rimuovi posizione
+                                </button>
+                            }
+                            else
+                            {
+                                <div class="text-muted small fst-italic">Nessuna posizione impostata.</div>
+                            }
+                        </div>
+
+                        <div class="col-12 col-md-7">
+                            <label class="form-label">Seleziona dalla mappa <span class="text-muted small">(click per posizionare)</span></label>
+                            <div id="coord-picker-map" style="height:280px;border-radius:.5rem;border:1px solid var(--bs-border-color)"></div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* ── Certificato ──────────────────────────────────────────────────────── *@
         <div class="col-12 col-lg-6">
             <div class="card">
                 <div class="card-header"><Icon Name="IconName.PatchCheckFill" /> Certificato</div>
@@ -125,7 +219,7 @@
             </div>
         </div>
 
-        <!-- Enrollment -->
+        @* ── Enrollment ───────────────────────────────────────────────────────── *@
         <div class="col-12 col-lg-6">
             <div class="card">
                 <div class="card-header"><Icon Name="IconName.KeyFill" /> Enrollment (CSR)</div>
@@ -162,20 +256,184 @@
     </div>
 </div>
 
+@* Stili inline per i swatches colore *@
+<style>
+    .color-swatch {
+        width: 36px;
+        height: 36px;
+        border-radius: 6px;
+        border: 2px solid transparent;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: transform .1s, border-color .1s;
+        padding: 0;
+    }
+    .color-swatch:hover { transform: scale(1.15); }
+    .color-swatch--selected { border-color: var(--bs-body-color) !important; transform: scale(1.15); }
+</style>
+
 @code {
+    // ── Dati ─────────────────────────────────────────────────────────────────────
+
     private TakSettings _settings = new();
-    private bool _saving;
-    private bool _reconnecting;
-    private bool _enrolling;
-    private string? _errorMessage;
-    private string? _successMessage;
+    private bool _saving, _reconnecting, _enrolling;
+    private string? _errorMessage, _successMessage;
     private byte[]? _uploadedBytes;
     private List<string> _enrollLog = new();
+
+    // Coordinate picker
+    private string _coordInput = "";
+    private DotNetObjectReference<TakConnectionPage>? _mapRef;
+    private bool _mapInitialized;
+
+    // ── Lookup table: ruoli ───────────────────────────────────────────────────────
+
+    private static readonly (string Value, string Label, string Note)[] Roles =
+    {
+        ("Team Member",      "Team Member",      "Default — operatore generico"),
+        ("Team Lead",        "Team Lead",        "Capo squadra"),
+        ("HQ",               "HQ",               "Quartier generale"),
+        ("Sniper",           "Sniper",           ""),
+        ("Medic",            "Medic",            ""),
+        ("Forward Observer", "Forward Observer", "Osservatore avanzato"),
+        ("RTO",              "RTO",              "Radio Telephone Operator"),
+        ("K9",               "K9",               "Unità cinofila"),
+        ("JTAC",             "JTAC",             "Joint Terminal Attack Controller"),
+        ("XO",               "XO",              "Executive Officer"),
+        ("Instructor",       "Instructor",       ""),
+        ("Safety Officer",   "Safety Officer",   ""),
+    };
+
+    // ── Lookup table: colori ATAK ─────────────────────────────────────────────────
+
+    private static readonly (string Name, string Hex, bool IsDark)[] AtakColors =
+    {
+        ("White",      "#e0e0e0", false),
+        ("Yellow",     "#ffc107", false),
+        ("Orange",     "#fd7e14", false),
+        ("Maroon",     "#800000", true),
+        ("Red",        "#dc3545", true),
+        ("Purple",     "#9b59b6", true),
+        ("Dark Blue",  "#003087", true),
+        ("Blue",       "#0d6efd", true),
+        ("Cyan",       "#00bcd4", false),
+        ("Teal",       "#008080", true),
+        ("Green",      "#198754", true),
+        ("Dark Green", "#1a5c2a", true),
+        ("Brown",      "#795548", true),
+        ("Magenta",    "#e91e96", true),
+    };
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
     protected override async Task OnInitializedAsync()
     {
         _settings = await SettingsService.GetOrCreateAsync();
     }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_mapInitialized)
+        {
+            _mapInitialized = true;
+            _mapRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("coordPicker.init",
+                "coord-picker-map",
+                _settings.Latitude,
+                _settings.Longitude,
+                _mapRef);
+        }
+    }
+
+    public void Dispose()
+    {
+        _mapRef?.Dispose();
+        _ = JS.InvokeVoidAsync("coordPicker.dispose");
+    }
+
+    // ── Coordinate picker ─────────────────────────────────────────────────────────
+
+    [JSInvokable]
+    public async Task OnMapClick(double lat, double lon)
+    {
+        _settings.Latitude  = Math.Round(lat, 6);
+        _settings.Longitude = Math.Round(lon, 6);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ParseCoordInputAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_coordInput)) return;
+
+        double lat, lon;
+        bool ok = TryParseGoogleMapsUrl(_coordInput, out lat, out lon)
+               || GeoUtils.TryParseCoordinate(_coordInput, out lat, out lon);
+
+        if (ok)
+        {
+            _settings.Latitude  = Math.Round(lat, 6);
+            _settings.Longitude = Math.Round(lon, 6);
+            _coordInput = "";
+            _errorMessage = null;
+            await JS.InvokeVoidAsync("coordPicker.setMarker", lat, lon);
+        }
+        else
+        {
+            _errorMessage = "Formato non riconosciuto. Usa: UTM (32T 371610 4993569), WGS84 (45.12, 8.45) o URL Google Maps.";
+        }
+    }
+
+    private void ClearPosition()
+    {
+        _settings.Latitude  = null;
+        _settings.Longitude = null;
+    }
+
+    private static bool TryParseGoogleMapsUrl(string url, out double lat, out double lon)
+    {
+        lat = 0; lon = 0;
+        if (!url.Contains("google.com/maps", StringComparison.OrdinalIgnoreCase)) return false;
+
+        // https://www.google.com/maps/@lat,lon,zoom  or  .../place/.../@lat,lon,zoom
+        var atIdx = url.LastIndexOf('@');
+        if (atIdx >= 0)
+        {
+            var after = url[(atIdx + 1)..];
+            var parts = after.Split(',');
+            if (parts.Length >= 2
+                && double.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out lat)
+                && double.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out lon)
+                && lat is >= -90 and <= 90 && lon is >= -180 and <= 180)
+                return true;
+        }
+
+        // https://maps.google.com/maps?q=lat,lon
+        var qIdx = url.IndexOf("q=", StringComparison.OrdinalIgnoreCase);
+        if (qIdx >= 0)
+        {
+            qIdx += 2;
+            var qEnd = url.IndexOf('&', qIdx);
+            var qVal = qEnd < 0 ? url[qIdx..] : url[qIdx..qEnd];
+            var parts = qVal.Split(',');
+            if (parts.Length >= 2
+                && double.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out lat)
+                && double.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out lon)
+                && lat is >= -90 and <= 90 && lon is >= -180 and <= 180)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static string FormatUtm(double lat, double lon)
+    {
+        var (zone, band, e, n) = GeoUtils.LatLonToUtm(lat, lon);
+        return $"{zone}{band} {(int)e} {(int)n}";
+    }
+
+    // ── Save / Reconnect ──────────────────────────────────────────────────────────
 
     private async Task SaveAsync()
     {
@@ -188,6 +446,8 @@
                 _settings.CertificateP12 = _uploadedBytes;
 
             await SettingsService.SaveAsync(_settings);
+            await TakProvider.ReconfigureAsync(_settings);
+            await CotClient.SendSaAsync();
             _uploadedBytes = null;
             _successMessage = "Impostazioni salvate.";
             _settings = await SettingsService.GetOrCreateAsync();
@@ -211,6 +471,7 @@
 
             await SettingsService.SaveAsync(_settings);
             await TakProvider.ReconfigureAsync(_settings);
+            await CotClient.SendSaAsync();
             _uploadedBytes = null;
             _successMessage = "Impostazioni applicate. TakClient riconfigurato.";
             _settings = await SettingsService.GetOrCreateAsync();
@@ -221,6 +482,8 @@
         }
         finally { _reconnecting = false; }
     }
+
+    // ── Upload P12 ────────────────────────────────────────────────────────────────
 
     private async Task OnP12UploadAsync(InputFileChangeEventArgs e)
     {
@@ -235,6 +498,8 @@
             _errorMessage = $"Errore lettura file: {ex.Message}";
         }
     }
+
+    // ── Enrollment ────────────────────────────────────────────────────────────────
 
     private async Task EnrollAsync()
     {

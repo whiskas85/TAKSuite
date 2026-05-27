@@ -1,0 +1,861 @@
+@page "/missiontak/{MissionTakId:guid}/map"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.ModelsTak
+@using TAKSuite.Data.Services
+@using TAKSuite.Data.ServicesTak
+@using TAKSuite.TAK.CoT
+@using TAKSuite.TAK.MartiApi
+@using TAKSuite.TAK
+@using System.Xml.Linq
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@inject MissionSuiteEntityServices MissionSuiteService
+@inject TaskService TaskService
+@inject WaypointService WaypointService
+@inject ParckingService ParckingService
+@inject SubscriptionApiClient SubscriptionClient
+@inject ContactsApiClient ContactsClient
+@inject CoTManager CoTManager
+@inject MartiApiClient MartiClient
+@inject TakClientProvider TakProvider
+@inject IJSRuntime JS
+@inject AtakMapsService AtakMapsService
+@implements IDisposable
+
+<PageTitle>Mappa — @(_mission?.Name ?? "Missione")</PageTitle>
+
+@if (_mission == null)
+{
+    <div class="d-flex justify-content-center align-items-center" style="height:60vh">
+        <Spinner Type="SpinnerType.Border" Color="SpinnerColor.Success" />
+    </div>
+}
+else
+{
+    <div class="takmap-page">
+        <div class="takmap-toolbar">
+            <div class="d-flex align-items-center gap-2">
+                <Icon Name="IconName.MapFill" />
+                <span class="fw-semibold">@_mission.Name</span>
+                @if (_loading)
+                {
+                    <Spinner Type="SpinnerType.Border" Size="SpinnerSize.Small" Color="SpinnerColor.Secondary" />
+                }
+                else
+                {
+                    <Badge Color="BadgeColor.Secondary">@_userCount utenti</Badge>
+                    <Badge Color="BadgeColor.Primary">@_waypointCount WP</Badge>
+                    <Badge Color="BadgeColor.Warning" TextColor="TextColor.Dark">@_parkingCount P</Badge>
+                    @if (_shapeCount > 0)
+                    {
+                        <Badge Color="BadgeColor.Danger">@_shapeCount forme</Badge>
+                    }
+                }
+                @if (_error != null)
+                {
+                    <span class="text-danger small" title="@_error"><Icon Name="IconName.ExclamationTriangleFill" /> Errore</span>
+                }
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-secondary" @onclick="FitToMarkersAsync" title="Centra su tutti i marker">
+                    <Icon Name="IconName.Fullscreen" />
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" @onclick="RefreshAsync" title="Aggiorna">
+                    <Icon Name="IconName.ArrowRepeat" />
+                </button>
+            </div>
+        </div>
+
+        @if (_atakMapsUpdate)
+        {
+            <div class="takmap-update-bar">
+                <Icon Name="IconName.CloudArrowDownFill" />
+                Nuova versione ATAK Maps disponibile —
+                <a href="/settings/atak-maps" class="takmap-update-link">Aggiorna</a>
+                <button class="takmap-update-close" @onclick="() => _atakMapsUpdate = false" title="Chiudi">✕</button>
+            </div>
+        }
+
+        <div class="takmap-body">
+            <div id="takmap-leaflet" class="takmap-map"></div>
+
+            @if (_teamSummary.Count > 0)
+            {
+                <div class="takmap-legend">
+                    <div class="takmap-legend-title">Squadre</div>
+                    @foreach (var t in _teamSummary)
+                    {
+                        <div class="takmap-legend-row">
+                            <span class="takmap-legend-dot" style="background:@t.Color"></span>
+                            <span class="takmap-legend-label">@(string.IsNullOrEmpty(t.Name) ? "—" : t.Name) (@t.Count)</span>
+                        </div>
+                    }
+                    @if (_waypointCount > 0)
+                    {
+                        <div class="takmap-legend-row mt-1">
+                            <span class="takmap-legend-dot" style="background:#0d6efd"></span>
+                            <span class="takmap-legend-label">Waypoint (@_waypointCount)</span>
+                        </div>
+                    }
+                    @if (_parkingCount > 0)
+                    {
+                        <div class="takmap-legend-row">
+                            <span class="takmap-legend-dot" style="background:#fd7e14;border-radius:3px"></span>
+                            <span class="takmap-legend-label">Parcheggi (@_parkingCount)</span>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid MissionTakId { get; set; }
+
+    private record MapMarker(
+        [property: JsonPropertyName("uid")] string Uid,
+        [property: JsonPropertyName("callsign")] string Callsign,
+        [property: JsonPropertyName("lat")] double Lat,
+        [property: JsonPropertyName("lon")] double Lon,
+        [property: JsonPropertyName("team")] string Team,
+        [property: JsonPropertyName("teamColor")] string TeamColor,
+        [property: JsonPropertyName("lastReportSec")] double LastReportSec,
+        [property: JsonPropertyName("battery")] int? Battery
+    );
+
+    private record PointMarker(
+        [property: JsonPropertyName("lat")] double Lat,
+        [property: JsonPropertyName("lon")] double Lon,
+        [property: JsonPropertyName("name")] string Name,
+        [property: JsonPropertyName("color")] string Color,
+        [property: JsonPropertyName("cotType")] string CotType = "",
+        [property: JsonPropertyName("sidc")] string Sidc = "",
+        [property: JsonPropertyName("modifiers")] Dictionary<string, string>? Modifiers = null,
+        [property: JsonPropertyName("isSpotmap")] bool IsSpotmap = false,
+        [property: JsonPropertyName("taskId")] string? TaskId = null,
+        [property: JsonPropertyName("taskName")] string? TaskName = null
+    );
+
+    private record ShapePoint(
+        [property: JsonPropertyName("lat")] double Lat,
+        [property: JsonPropertyName("lon")] double Lon
+    );
+
+    private record RouteWp(
+        [property: JsonPropertyName("lat")]     double  Lat,
+        [property: JsonPropertyName("lon")]     double  Lon,
+        [property: JsonPropertyName("name")]    string? Name,
+        [property: JsonPropertyName("isNamed")] bool    IsNamed
+    );
+
+    private record RouteMarker(
+        [property: JsonPropertyName("uid")]         string        Uid,
+        [property: JsonPropertyName("name")]        string        Name,
+        [property: JsonPropertyName("color")]       string        Color,        // hex #RRGGBB
+        [property: JsonPropertyName("opacity")]     double        Opacity,      // 0.0–1.0
+        [property: JsonPropertyName("strokeWeight")]double        StrokeWeight,
+        [property: JsonPropertyName("strokeStyle")] string        StrokeStyle,
+        [property: JsonPropertyName("method")]      string?       Method,
+        [property: JsonPropertyName("routeType")]   string?       RouteType,
+        [property: JsonPropertyName("direction")]   string?       Direction,
+        [property: JsonPropertyName("waypoints")]   List<RouteWp> Waypoints
+    );
+
+    private record ShapeMarker(
+        [property: JsonPropertyName("name")] string Name,
+        [property: JsonPropertyName("shapeType")] string ShapeType,
+        [property: JsonPropertyName("points")] List<ShapePoint> Points,
+        [property: JsonPropertyName("strokeColor")] string StrokeColor,
+        [property: JsonPropertyName("strokeWeight")] double StrokeWeight,
+        [property: JsonPropertyName("strokeStyle")] string StrokeStyle,
+        [property: JsonPropertyName("fillColor")] string? FillColor,
+        [property: JsonPropertyName("fillOpacity")] double FillOpacity = 0.0,
+        [property: JsonPropertyName("radius")] double? Radius = null,
+        [property: JsonPropertyName("showLabel")] bool ShowLabel = false,
+        [property: JsonPropertyName("showCenter")] bool ShowCenter = false
+    );
+
+    private record TeamSummary(string Name, string Color, int Count);
+
+    private MissionSuite? _mission;
+    private List<SubscriptionInfo> _clients = new();
+    private readonly Dictionary<string, int> _batteryCache = new();
+    private readonly Dictionary<string, (double Lat, double Lon)> _positionCache = new();
+    private readonly Dictionary<string, string> _teamCache = new();
+    private readonly Dictionary<string, (string Callsign, string Team, string Role, long LastSeenMs)> _cotSeenClients = new();
+    private List<TeamSummary> _teamSummary = new();
+
+    private bool _loading;
+    private string? _error;
+    private int _userCount;
+    private int _waypointCount;
+    private int _parkingCount;
+
+    private bool _mapInitialized;
+    private bool _atakMapsUpdate;
+    private Guid _currentMissionId;
+    private System.Threading.Timer? _refreshTimer;
+
+    protected override void OnInitialized()
+    {
+        CoTManager.CoTMessageReceived += OnCoTMessage;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_currentMissionId == MissionTakId) return;
+        var firstLoad = _currentMissionId == Guid.Empty;
+        _currentMissionId = MissionTakId;
+        _mission = await MissionSuiteService.GetAsync(MissionTakId);
+
+        if (!firstLoad && _mapInitialized)
+        {
+            ResetState();
+            _refreshTimer?.Dispose();
+            await JS.InvokeVoidAsync("takMap.init", "takmap-leaflet", $"takmap-view-{MissionTakId}");
+            await RefreshAsync();
+            _refreshTimer = new System.Threading.Timer(
+                _ => InvokeAsync(async () => await RefreshClientsAsync()),
+                null,
+                TimeSpan.FromSeconds(30),
+                TimeSpan.FromSeconds(30));
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_mapInitialized && _mission != null)
+        {
+            await JS.InvokeVoidAsync("takMap.init", "takmap-leaflet", $"takmap-view-{MissionTakId}");
+            _mapInitialized = true;
+
+            var visibleMaps = await AtakMapsService.GetVisibleMapsAsync();
+            if (visibleMaps.Count > 0)
+            {
+                var layersJson = JsonSerializer.Serialize(visibleMaps.Select(m => new
+                {
+                    m.Id, m.Name, m.Url, m.SourceType, m.Layers, m.MinZoom, m.MaxZoom, m.Attribution
+                }));
+                await JS.InvokeVoidAsync("takMap.setCustomLayers", layersJson);
+            }
+
+            await RefreshAsync();
+            _refreshTimer = new System.Threading.Timer(
+                _ => InvokeAsync(async () => await RefreshClientsAsync()),
+                null,
+                TimeSpan.FromSeconds(30),
+                TimeSpan.FromSeconds(30));
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var (available, _) = await AtakMapsService.CheckUpdateAsync();
+                    if (available) { _atakMapsUpdate = true; await InvokeAsync(StateHasChanged); }
+                }
+                catch { }
+            });
+        }
+    }
+
+    private void ResetState()
+    {
+        _waypoints = new(); _parkings = new(); _shapes = new(); _routes = new();
+        _clients = new(); _teamSummary = new();
+        _batteryCache.Clear(); _positionCache.Clear(); _teamCache.Clear();
+        _waypointCount = 0; _parkingCount = 0; _shapeCount = 0; _userCount = 0;
+
+        _error = null;
+    }
+
+    private void OnCoTMessage(CoTManager.CoTMessageEventArgs e)
+    {
+        TryExtractCotData(e.Message);
+
+        _ = InvokeAsync(PushMarkersAsync);
+    }
+
+    private async Task RefreshAsync()
+    {
+        _loading = true;
+        _error = null;
+        StateHasChanged();
+        try
+        {
+            var clientsTask = RefreshClientsInternalAsync();
+            var missionPointsTask = RefreshMissionPointsAsync();
+            await Task.WhenAll(clientsTask, missionPointsTask);
+            await PushMarkersAsync();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _loading = false; StateHasChanged(); }
+    }
+
+    private async Task RefreshClientsAsync()
+    {
+        try
+        {
+            await RefreshClientsInternalAsync();
+            await PushMarkersAsync();
+        }
+        catch { }
+    }
+
+    private async Task RefreshClientsInternalAsync()
+    {
+        var result = await SubscriptionClient.GetAllSubscriptionsAsync(null, null, null, null);
+        _clients = result?.Data?.ToList() ?? new();
+
+        var selfTeam = string.IsNullOrEmpty(TakProvider.Color) ? "Cyan" : TakProvider.Color;
+        foreach (var self in _clients.Where(IsSelf))
+        {
+            self.Team = selfTeam;
+            self.Callsign = TakProvider.Callsign;
+            self.Role = TakProvider.Role;
+        }
+        if (!string.IsNullOrEmpty(TakProvider.ClientUid))
+            lock (_teamCache) { _teamCache[TakProvider.ClientUid] = selfTeam; }
+
+        // Populate positions directly from /contacts/all (includes lat/lon not in schema → AdditionalProperties)
+        try
+        {
+            var contacts = await ContactsClient.GetAllContactsLiteAsync(null, null, null);
+            if (contacts != null)
+            {
+                foreach (var c in contacts)
+                {
+                    if (string.IsNullOrEmpty(c.Uid)) continue;
+                    if (c.AdditionalProperties.TryGetValue("lat", out var latObj) &&
+                        c.AdditionalProperties.TryGetValue("lon", out var lonObj) &&
+                        latObj is System.Text.Json.JsonElement latEl &&
+                        lonObj is System.Text.Json.JsonElement lonEl)
+                    {
+                        var lat = latEl.GetDouble();
+                        var lon = lonEl.GetDouble();
+                        if (lat != 0 || lon != 0)
+                            lock (_positionCache) { _positionCache[c.Uid] = (lat, lon); }
+                    }
+                }
+            }
+        }
+        catch { }
+
+        // Fallback: enrich via GetCotByUidAsync for clients still missing a position
+        var uids = _clients
+            .SelectMany(c => new[] { c.ClientUid, c.SubscriptionUid })
+            .Where(u => !string.IsNullOrEmpty(u))
+            .Distinct()
+            .Where(u => { lock (_positionCache) { return !_positionCache.ContainsKey(u!); } });
+        await Task.WhenAll(uids.Select(EnrichFromCotAsync));
+
+        // Merge UDP-only devices (not connected to server but seen via CoT multicast)
+        var serverUids = new HashSet<string>(
+            _clients.SelectMany(c => new[] { c.ClientUid, c.SubscriptionUid }).Where(u => u != null)!,
+            StringComparer.OrdinalIgnoreCase);
+        lock (_cotSeenClients)
+        {
+            foreach (var (uid, info) in _cotSeenClients)
+            {
+                if (serverUids.Contains(uid)) continue;
+                lock (_positionCache) { if (!_positionCache.ContainsKey(uid)) continue; }
+                _clients.Add(new SubscriptionInfo
+                {
+                    ClientUid              = uid,
+                    Callsign               = info.Callsign,
+                    Team                   = info.Team,
+                    Role                   = info.Role,
+                    LastReportMilliseconds = info.LastSeenMs
+                });
+            }
+        }
+    }
+
+    private List<PointMarker> _waypoints = new();
+    private List<PointMarker> _parkings  = new();
+    private List<ShapeMarker> _shapes    = new();
+    private List<RouteMarker> _routes    = new();
+    private int _shapeCount;
+
+    private static List<ShapePoint> ParseLinkPoints(XElement? container)
+    {
+        if (container == null) return new();
+        var result = new List<ShapePoint>();
+        foreach (var link in container.Elements("link"))
+        {
+            var s = (string?)link.Attribute("point");
+            if (string.IsNullOrEmpty(s)) continue;
+            var parts = s.Split(',');
+            if (parts.Length >= 2
+                && double.TryParse(parts[0], System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var la)
+                && double.TryParse(parts[1], System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var lo))
+                result.Add(new ShapePoint(la, lo));
+        }
+        return result;
+    }
+
+    private async Task RefreshMissionPointsAsync()
+    {
+        if (string.IsNullOrEmpty(_mission?.TakMissionUid)) return;
+        try
+        {
+            var allPoints = await WaypointService.GetAllMissionUidsAsync(_mission.TakMissionUid);
+
+            // Build UID → task-id lookup for this mission
+            var allTasks = await TaskService.GetAllAsync();
+            var uidToTaskId   = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var uidToTaskName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var task in allTasks.Where(t => t.MissionTAKSuiteId == MissionTakId))
+            {
+                foreach (var uid in task.Uids)
+                    if (!string.IsNullOrEmpty(uid)) { uidToTaskId.TryAdd(uid, task.Id.ToString()); uidToTaskName.TryAdd(uid, task.Name); }
+                foreach (var link in task.PoiLinks)
+                    if (!string.IsNullOrEmpty(link.Uid)) { uidToTaskId.TryAdd(link.Uid, task.Id.ToString()); uidToTaskName.TryAdd(link.Uid, task.Name); }
+            }
+
+            var fetched = await Task.WhenAll(allPoints.Select(async p =>
+            {
+                string cotType = "", sidc = "", color = "#0d6efd", iconsetpath = "";
+                string callsign = p.Callsign ?? "";
+                double lat = p.Lat, lon = p.Lon;
+                Dictionary<string, string>? milsymMods = null;
+                bool isSpotmap = false;
+                string? shapeType = null;
+                List<ShapePoint>? shapePoints = null;
+                string strokeHex = "#ff0000";
+                double strokeWeight = 2.0;
+                string strokeStyle = "solid";
+                string? fillHex = null;
+                double fillOpacity = 0.0;
+                double? radius = null;
+                bool showLabel = false;
+                bool showCenter = false;
+                RouteMarker? routeInfo = null;
+                string? taskId   = uidToTaskId.TryGetValue(p.Uid, out var tid) ? tid : null;
+                string? taskName = taskId != null && uidToTaskName.TryGetValue(p.Uid, out var tn) ? tn : null;
+
+                try
+                {
+                    var xml = await MartiClient.GetInfoAsync(p.Uid);
+                    if (!string.IsNullOrEmpty(xml))
+                    {
+                        var doc    = XDocument.Parse(xml);
+                        var ev     = doc.Root!;
+                        cotType    = (string?)ev.Attribute("type") ?? "";
+                        var pt     = ev.Element("point");
+                        var detail = ev.Element("detail");
+
+                        if (double.TryParse((string?)pt?.Attribute("lat"), System.Globalization.NumberStyles.Float,
+                                System.Globalization.CultureInfo.InvariantCulture, out var xmlLat) && xmlLat != 0)
+                            lat = xmlLat;
+                        if (double.TryParse((string?)pt?.Attribute("lon"), System.Globalization.NumberStyles.Float,
+                                System.Globalization.CultureInfo.InvariantCulture, out var xmlLon) && xmlLon != 0)
+                            lon = xmlLon;
+
+                        callsign    = (string?)detail?.Element("contact")?.Attribute("callsign") ?? callsign;
+                        iconsetpath = (string?)detail?.Element("usericon")?.Attribute("iconsetpath") ?? "";
+
+                        if (cotType == "b-m-r")
+                        {
+                            routeInfo = ParseRouteFromXml(p.Uid, callsign, detail);
+                        }
+                        else if (cotType.StartsWith("u-d-", StringComparison.OrdinalIgnoreCase))
+                        {
+                            showCenter = (string?)detail?.Element("__shapeExtras")?.Attribute("cpvis") == "true";
+
+                            if (cotType == "u-d-f-m")
+                            {
+                                // Freehand: stroke in nested XML inside link[@line] attribute
+                                var linkEl = detail?.Elements("link").FirstOrDefault(l => l.Attribute("line") != null);
+                                var innerXml = (string?)linkEl?.Attribute("line");
+                                if (!string.IsNullOrEmpty(innerXml))
+                                {
+                                    try
+                                    {
+                                        var inner = XDocument.Parse(innerXml);
+                                        var innerDetail = inner.Root?.Element("detail");
+                                        shapePoints = ParseLinkPoints(innerDetail);
+                                        if (int.TryParse((string?)innerDetail?.Element("strokeColor")?.Attribute("value"), out var sc))
+                                            strokeHex = ArgbToHex(sc);
+                                        if (double.TryParse((string?)innerDetail?.Element("strokeWeight")?.Attribute("value"),
+                                                System.Globalization.NumberStyles.Float,
+                                                System.Globalization.CultureInfo.InvariantCulture, out var sw))
+                                            strokeWeight = sw;
+                                        strokeStyle = (string?)innerDetail?.Element("strokeStyle")?.Attribute("value") ?? "solid";
+                                    }
+                                    catch { }
+                                }
+                                shapeType = "polyline";
+                            }
+                            else if (cotType.StartsWith("u-d-c", StringComparison.OrdinalIgnoreCase))
+                            {
+                                var ellipseEl = detail?.Element("shape")?.Element("ellipse");
+                                if (ellipseEl != null
+                                    && double.TryParse((string?)ellipseEl.Attribute("major"),
+                                        System.Globalization.NumberStyles.Float,
+                                        System.Globalization.CultureInfo.InvariantCulture, out var radiusM)
+                                    && radiusM > 0 && lat != 0)
+                                {
+                                    shapePoints = new List<ShapePoint> { new ShapePoint(lat, lon) };
+                                    radius = radiusM;
+                                }
+                                if (int.TryParse((string?)detail?.Element("strokeColor")?.Attribute("value"), out var scC))
+                                    strokeHex = ArgbToHex(scC);
+                                if (double.TryParse((string?)detail?.Element("strokeWeight")?.Attribute("value"),
+                                        System.Globalization.NumberStyles.Float,
+                                        System.Globalization.CultureInfo.InvariantCulture, out var swC))
+                                    strokeWeight = swC;
+                                strokeStyle = (string?)detail?.Element("strokeStyle")?.Attribute("value") ?? "solid";
+                                if (int.TryParse((string?)detail?.Element("fillColor")?.Attribute("value"), out var fvC))
+                                {
+                                    var (hex, alpha) = ArgbToHexAlpha(fvC);
+                                    fillHex = hex;
+                                    fillOpacity = alpha;
+                                }
+                                showLabel = (string?)detail?.Element("labels_on")?.Attribute("value") == "true";
+                                shapeType = "circle";
+                            }
+                            else
+                            {
+                                // u-d-f (polyline/polygon), u-d-r (rectangle), other drawings
+                                shapePoints = ParseLinkPoints(detail);
+                                if (int.TryParse((string?)detail?.Element("strokeColor")?.Attribute("value"), out var sc2))
+                                    strokeHex = ArgbToHex(sc2);
+                                if (double.TryParse((string?)detail?.Element("strokeWeight")?.Attribute("value"),
+                                        System.Globalization.NumberStyles.Float,
+                                        System.Globalization.CultureInfo.InvariantCulture, out var sw2))
+                                    strokeWeight = sw2;
+                                strokeStyle = (string?)detail?.Element("strokeStyle")?.Attribute("value") ?? "solid";
+                                if (int.TryParse((string?)detail?.Element("fillColor")?.Attribute("value"), out var fv))
+                                {
+                                    var (hex, alpha) = ArgbToHexAlpha(fv);
+                                    fillHex = hex;
+                                    fillOpacity = alpha;
+                                }
+                                showLabel = (string?)detail?.Element("labels_on")?.Attribute("value") == "true";
+
+                                bool isClosed = shapePoints?.Count >= 2
+                                    && shapePoints[0].Lat == shapePoints[^1].Lat
+                                    && shapePoints[0].Lon == shapePoints[^1].Lon;
+                                shapeType = cotType == "u-d-r" ? "rectangle"
+                                          : (fillHex != null || isClosed) ? "polygon"
+                                          : "polyline";
+                            }
+                        }
+                        else
+                        {
+                            // Point marker
+                            var milsymEl = detail?.Element("__milsym");
+                            sidc = (string?)milsymEl?.Attribute("id") ?? "";
+                            if (milsymEl != null)
+                            {
+                                var mods = milsymEl.Elements("unitmodifier")
+                                    .Select(e => (code: (string?)e.Attribute("code") ?? "", val: e.Value ?? ""))
+                                    .Where(t => !string.IsNullOrEmpty(t.code) && !string.IsNullOrEmpty(t.val))
+                                    .ToDictionary(t => t.code, t => t.val);
+                                if (mods.Count > 0) milsymMods = mods;
+                            }
+
+                            var colorArgbStr = (string?)detail?.Element("color")?.Attribute("argb");
+                            if (int.TryParse(colorArgbStr, out var argb))
+                                color = ArgbToHex(argb);
+
+                            isSpotmap = iconsetpath.Contains("SPOTMAP", StringComparison.OrdinalIgnoreCase);
+                        }
+                    }
+                }
+                catch { }
+
+                return (lat, lon, callsign, color, cotType, sidc, iconsetpath, milsymMods,
+                        shapeType, shapePoints, strokeHex, strokeWeight, strokeStyle, fillHex, fillOpacity, radius, showLabel, showCenter, isSpotmap, taskId, taskName, routeInfo);
+            }));
+
+            _waypoints = new();
+            _parkings  = new();
+            _shapes    = new();
+            _routes    = new();
+
+            foreach (var r in fetched)
+            {
+                var (lat, lon, callsign, color, cotType, sidc, iconsetpath, milsymMods,
+                     shapeType, shapePoints, strokeHex, strokeWeight, strokeStyle, fillHex, fillOpacity, radius, showLabel, showCenter, isSpotmap, taskId, taskName, routeInfo) = r;
+
+                if (routeInfo != null) { _routes.Add(routeInfo); continue; }
+
+                if (shapeType != null)
+                {
+                    var minPts = shapeType == "circle" ? 1 : 2;
+                    if (shapePoints?.Count >= minPts)
+                        _shapes.Add(new ShapeMarker(callsign, shapeType, shapePoints,
+                                    strokeHex, strokeWeight, strokeStyle, fillHex, fillOpacity, radius, showLabel, showCenter));
+                }
+                else
+                {
+                    if (lat == 0 && lon == 0) continue;
+                    var marker = new PointMarker(lat, lon, callsign, color, cotType, sidc, milsymMods, isSpotmap, taskId, taskName);
+                    if (iconsetpath.Contains("parking", StringComparison.OrdinalIgnoreCase))
+                        _parkings.Add(marker);
+                    else
+                        _waypoints.Add(marker);
+                }
+            }
+
+            _waypointCount = _waypoints.Count;
+            _parkingCount  = _parkings.Count;
+            _shapeCount    = _shapes.Count;
+        }
+        catch { }
+    }
+
+    private async Task PushMarkersAsync()
+    {
+        if (!_mapInitialized) return;
+
+        var users = BuildUserMarkers();
+        _userCount = users.Count;
+        _teamSummary = users
+            .GroupBy(m => m.Team)
+            .OrderBy(g => string.IsNullOrEmpty(g.Key) ? "zzz" : g.Key)
+            .Select(g => new TeamSummary(g.Key, g.First().TeamColor, g.Count()))
+            .ToList();
+
+        try
+        {
+            await JS.InvokeVoidAsync("takMap.updateMarkers",       JsonSerializer.Serialize(users));
+            await JS.InvokeVoidAsync("takMap.updateMissionPoints", JsonSerializer.Serialize(_waypoints), JsonSerializer.Serialize(_parkings));
+            await JS.InvokeVoidAsync("takMap.updateShapes",        JsonSerializer.Serialize(_shapes));
+            await JS.InvokeVoidAsync("takMap.updateRoutes",        JsonSerializer.Serialize(_routes));
+        }
+        catch { }
+
+        StateHasChanged();
+    }
+
+    private List<MapMarker> BuildUserMarkers()
+    {
+        var result = new List<MapMarker>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Server-connected clients
+        foreach (var c in _clients)
+        {
+            var uid = c.ClientUid ?? c.SubscriptionUid;
+            if (string.IsNullOrEmpty(uid) || !seen.Add(uid)) continue;
+            var pos = GetPosition(c);
+            if (!pos.HasValue) continue;
+            var team     = GetTeam(c);
+            var callsign = IsSelf(c) ? TakProvider.Callsign : (c.Callsign ?? uid);
+            var lastSec  = (DateTimeOffset.UtcNow - DateTimeOffset.FromUnixTimeMilliseconds(c.LastReportMilliseconds)).TotalSeconds;
+            result.Add(new MapMarker(uid, callsign, pos.Value.Lat, pos.Value.Lon, team, TeamColor(team), lastSec, GetBattery(c)));
+        }
+
+        // UDP-only devices visible via multicast but not connected to the server
+        lock (_cotSeenClients)
+        {
+            foreach (var (uid, info) in _cotSeenClients)
+            {
+                if (!seen.Add(uid)) continue;
+                (double Lat, double Lon) pos;
+                lock (_positionCache) { if (!_positionCache.TryGetValue(uid, out pos)) continue; }
+                var lastSec = (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - info.LastSeenMs) / 1000.0;
+                result.Add(new MapMarker(uid, info.Callsign, pos.Lat, pos.Lon, info.Team, TeamColor(info.Team), lastSec, null));
+            }
+        }
+
+        return result;
+    }
+
+    private async Task FitToMarkersAsync()
+    {
+        if (_mapInitialized) await JS.InvokeVoidAsync("takMap.fitToMarkers");
+    }
+
+    private void TryExtractCotData(string xml)
+    {
+        try
+        {
+            var doc = XDocument.Parse(xml);
+            var ev = doc.Root!;
+            var uid = (string?)ev.Attribute("uid");
+            if (string.IsNullOrEmpty(uid)) return;
+            var pt = ev.Element("point");
+            var detail = ev.Element("detail");
+
+            if (ParseBattery((string?)detail?.Element("status")?.Attribute("battery")) is int pct)
+                lock (_batteryCache) { _batteryCache[uid] = pct; }
+
+            var teamStr = (string?)detail?.Element("__group")?.Attribute("name");
+            if (!string.IsNullOrEmpty(teamStr))
+                lock (_teamCache) { _teamCache[uid] = teamStr; }
+
+            var latStr = (string?)pt?.Attribute("lat");
+            var lonStr = (string?)pt?.Attribute("lon");
+            if (double.TryParse(latStr, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var lat)
+             && double.TryParse(lonStr, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var lon)
+             && !(lat == 0 && lon == 0))
+                lock (_positionCache) { _positionCache[uid] = (lat, lon); }
+
+            // Track all CoT-seen devices so UDP-only (off-server) devices can be displayed
+            var callsignSeen = (string?)detail?.Element("contact")?.Attribute("callsign") ?? uid;
+            var roleSeen     = (string?)detail?.Element("__group")?.Attribute("role") ?? "";
+            lock (_cotSeenClients) { _cotSeenClients[uid] = (callsignSeen, teamStr ?? "", roleSeen, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()); }
+        }
+        catch { }
+    }
+
+    private async Task EnrichFromCotAsync(string? uid)
+    {
+        if (string.IsNullOrEmpty(uid)) return;
+        try { var xml = await MartiClient.GetInfoAsync(uid); if (!string.IsNullOrEmpty(xml)) TryExtractCotData(xml); }
+        catch { }
+    }
+
+    private (double Lat, double Lon)? GetPosition(SubscriptionInfo c)
+    {
+        lock (_positionCache)
+        {
+            if (!string.IsNullOrEmpty(c.ClientUid) && _positionCache.TryGetValue(c.ClientUid, out var v)) return v;
+            if (!string.IsNullOrEmpty(c.SubscriptionUid) && _positionCache.TryGetValue(c.SubscriptionUid, out var v2)) return v2;
+        }
+        return null;
+    }
+
+    private string GetTeam(SubscriptionInfo c)
+    {
+        if (IsSelf(c)) return string.IsNullOrEmpty(TakProvider.Color) ? "Cyan" : TakProvider.Color;
+        if (!string.IsNullOrEmpty(c.Team)) return c.Team;
+        lock (_teamCache)
+        {
+            if (!string.IsNullOrEmpty(c.ClientUid) && _teamCache.TryGetValue(c.ClientUid, out var t)) return t;
+            if (!string.IsNullOrEmpty(c.SubscriptionUid) && _teamCache.TryGetValue(c.SubscriptionUid, out var t2)) return t2;
+        }
+        return "";
+    }
+
+    private int? GetBattery(SubscriptionInfo c)
+    {
+        var direct = ParseBattery(c.Battery) ?? ParseBattery(c.Metrics?.Battery);
+        if (direct.HasValue) return direct;
+        lock (_batteryCache)
+        {
+            if (!string.IsNullOrEmpty(c.ClientUid) && _batteryCache.TryGetValue(c.ClientUid, out var v)) return v;
+            if (!string.IsNullOrEmpty(c.SubscriptionUid) && _batteryCache.TryGetValue(c.SubscriptionUid, out var v2)) return v2;
+        }
+        return null;
+    }
+
+    private bool IsSelf(SubscriptionInfo c) =>
+        (!string.IsNullOrEmpty(TakProvider.ClientUid) && c.ClientUid == TakProvider.ClientUid)
+        || string.Equals(c.TakClient, "TAKSuite", StringComparison.OrdinalIgnoreCase);
+
+    private static int? ParseBattery(string? s)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return null;
+        var clean = s.Trim().TrimEnd('%');
+        if (int.TryParse(clean, out var vi) && vi >= 0 && vi <= 100) return vi;
+        if (double.TryParse(clean, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var vd))
+        {
+            if (vd is >= 0 and <= 1) return (int)Math.Round(vd * 100);
+            if (vd is > 1 and <= 100) return (int)Math.Round(vd);
+        }
+        return null;
+    }
+
+    private static string TeamColor(string? team) => (team ?? "").ToLowerInvariant() switch
+    {
+        "white" or "bianco"      => "#e0e0e0",
+        "yellow" or "giallo"     => "#ffc107",
+        "orange" or "arancione"  => "#fd7e14",
+        "maroon" or "bordeaux"   => "#800000",
+        "red" or "rosso"         => "#dc3545",
+        "purple" or "viola"      => "#9b59b6",
+        "dark blue" or "blu scuro" => "#003087",
+        "blue" or "blu"          => "#0d6efd",
+        "cyan" or "ciano"        => "#00bcd4",
+        "teal" or "turchese"     => "#008080",
+        "green" or "verde"       => "#198754",
+        "dark green" or "verde scuro" => "#1a5c2a",
+        "brown" or "marrone"     => "#795548",
+        "magenta"                => "#e91e96",
+        _                        => "#6c757d"
+    };
+
+    private static string ArgbToHex(int? color)
+    {
+        if (!color.HasValue) return "#0d6efd";
+        var c = (uint)color.Value;
+        var r = (c >> 16) & 0xFF;
+        var g = (c >> 8) & 0xFF;
+        var b = c & 0xFF;
+        return $"#{r:X2}{g:X2}{b:X2}";
+    }
+
+    private static (string Hex, double Alpha) ArgbToHexAlpha(int color)
+    {
+        var c = (uint)color;
+        var a = (c >> 24) & 0xFF;
+        var r = (c >> 16) & 0xFF;
+        var g = (c >> 8) & 0xFF;
+        var b = c & 0xFF;
+        return ($"#{r:X2}{g:X2}{b:X2}", Math.Round(a / 255.0, 2));
+    }
+
+    private static RouteMarker? ParseRouteFromXml(string uid, string callsign, XElement? detail)
+    {
+        if (detail == null) return null;
+
+        var waypoints = new List<RouteWp>();
+        foreach (var link in detail.Elements("link"))
+        {
+            var wpType = (string?)link.Attribute("type") ?? "";
+            if (wpType != "b-m-p-w" && wpType != "b-m-p-c") continue;
+            var wpPoint = (string?)link.Attribute("point") ?? "";
+            var parts   = wpPoint.Split(',');
+            if (parts.Length < 2) continue;
+            if (!double.TryParse(parts[0], System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var wlat)) continue;
+            if (!double.TryParse(parts[1], System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var wlon)) continue;
+            var wpCallsign = (string?)link.Attribute("callsign");
+            waypoints.Add(new RouteWp(wlat, wlon, string.IsNullOrEmpty(wpCallsign) ? null : wpCallsign, wpType == "b-m-p-w"));
+        }
+        if (waypoints.Count < 2) return null;
+
+        var linkAttr = detail.Element("link_attr");
+        var colorStr = (string?)linkAttr?.Attribute("color")
+                    ?? (string?)detail.Element("color")?.Attribute("value")
+                    ?? (string?)detail.Element("strokeColor")?.Attribute("value");
+        int argb = int.TryParse(colorStr, out var ci) ? ci : -65536;
+
+        if (!double.TryParse((string?)detail.Element("strokeWeight")?.Attribute("value"),
+                System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var weight))
+            weight = 2.0;
+
+        var (hex, alpha) = ArgbToHexAlpha(argb);
+        return new RouteMarker(
+            uid, callsign,
+            hex,
+            alpha,
+            weight,
+            (string?)detail.Element("strokeStyle")?.Attribute("value") ?? "solid",
+            (string?)linkAttr?.Attribute("method"),
+            (string?)linkAttr?.Attribute("routetype"),
+            (string?)linkAttr?.Attribute("direction"),
+            waypoints
+        );
+    }
+
+    public void Dispose()
+    {
+        CoTManager.CoTMessageReceived -= OnCoTMessage;
+        _refreshTimer?.Dispose();
+        _ = JS.InvokeVoidAsync("takMap.dispose");
+    }
+}

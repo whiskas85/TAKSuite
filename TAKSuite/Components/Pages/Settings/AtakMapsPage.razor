@@ -1,0 +1,260 @@
+@page "/settings/atak-maps"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@inject AtakMapsService AtakMapsService
+@inject ToastService ToastService
+@implements IDisposable
+
+<PageTitle>ATAK Maps</PageTitle>
+<PageHeader Title="ATAK Maps" TitleIcon="IconName.MapFill"
+            Subtitle="Pacchetto mappe offline per dispositivi ATAK — joshuafuller/ATAK-Maps" />
+
+<div class="container-fluid px-3 py-3" style="max-width:900px">
+
+    @* — Versione installata — *@
+    <div class="card mb-3">
+        <div class="card-header fw-bold d-flex align-items-center gap-2">
+            <Icon Name="IconName.HddFill" /> Versione installata
+        </div>
+        <div class="card-body">
+            @if (_cfg.InstalledVersion != null)
+            {
+                <div class="d-flex flex-wrap gap-3 align-items-center">
+                    <div>
+                        <span class="text-muted small">Versione</span><br />
+                        <Badge Color="BadgeColor.Success" Class="fs-6">@_cfg.InstalledVersion</Badge>
+                    </div>
+                    @if (_cfg.InstalledAt.HasValue)
+                    {
+                        <div>
+                            <span class="text-muted small">Installata il</span><br />
+                            <span class="fw-semibold">@_cfg.InstalledAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</span>
+                        </div>
+                    }
+                    @if (_cfg.FileSizeBytes > 0)
+                    {
+                        <div>
+                            <span class="text-muted small">Dimensione</span><br />
+                            <span>@FormatBytes(_cfg.FileSizeBytes)</span>
+                        </div>
+                    }
+                    @if (_cfg.ZipFileName != null)
+                    {
+                        <div>
+                            <span class="text-muted small">File</span><br />
+                            <span class="font-monospace small">@_cfg.ZipFileName</span>
+                        </div>
+                    }
+                </div>
+                <div class="mt-2">
+                    <span class="text-muted small"><Icon Name="IconName.FolderFill" /> @AtakMapsService.MapsFolder</span>
+                </div>
+            }
+            else
+            {
+                <div class="text-muted">
+                    <Icon Name="IconName.ExclamationCircle" /> Nessuna versione installata.
+                </div>
+            }
+        </div>
+    </div>
+
+    @* — Aggiornamento disponibile — *@
+    @if (_updateAvailable && _latestRelease != null)
+    {
+        <div class="alert alert-info d-flex align-items-center gap-3 mb-3">
+            <Icon Name="IconName.CloudArrowDownFill" Size="IconSize.x2" />
+            <div class="flex-grow-1">
+                <strong>Nuova versione disponibile: @_latestRelease.TagName</strong>
+                <div class="small text-muted">Pubblicata il @_latestRelease.PublishedAt.ToLocalTime().ToString("dd/MM/yyyy")</div>
+            </div>
+        </div>
+    }
+    else if (_checkedForUpdate && !_updateAvailable && _latestRelease != null)
+    {
+        <div class="alert alert-success d-flex align-items-center gap-2 mb-3">
+            <Icon Name="IconName.CheckCircleFill" /> Sei aggiornato all'ultima versione (@_latestRelease.TagName)
+        </div>
+    }
+
+    @* — Download / Aggiornamento — *@
+    <div class="card mb-3">
+        <div class="card-header fw-bold d-flex align-items-center gap-2">
+            <Icon Name="IconName.CloudArrowDownFill" /> Download mappe
+        </div>
+        <div class="card-body">
+
+            @if (AtakMapsService.IsDownloading)
+            {
+                <div class="mb-2 fw-semibold small">Download in corso… @AtakMapsService.DownloadProgress%</div>
+                <Progress>
+                    <ProgressBar Width="@AtakMapsService.DownloadProgress" Color="ProgressColor.Primary" />
+                </Progress>
+                <div class="text-muted small mt-2">Le mappe verranno importate automaticamente al termine del download.</div>
+            }
+            else if (AtakMapsService.LastError != null)
+            {
+                <Alert Color="AlertColor.Danger" Class="mb-3">
+                    <Icon Name="IconName.ExclamationTriangleFill" /> @AtakMapsService.LastError
+                </Alert>
+            }
+
+            <div class="d-flex gap-2 flex-wrap mt-2">
+                <Button Color="ButtonColor.Primary"
+                        Disabled="@AtakMapsService.IsDownloading"
+                        @onclick="DownloadAsync">
+                    <Icon Name="IconName.CloudArrowDownFill" />
+                    @(_cfg.InstalledVersion == null ? "Scarica ora" : "Aggiorna")
+                </Button>
+
+                <Button Color="ButtonColor.Primary" Outline="true"
+                        Disabled="@AtakMapsService.IsDownloading"
+                        @onclick="CheckUpdateAsync">
+                    <Icon Name="IconName.ArrowRepeat" /> Controlla aggiornamenti
+                </Button>
+            </div>
+
+            <div class="mt-3 text-muted small">
+                <Icon Name="IconName.InfoCircle" />
+                Il pacchetto viene scaricato da GitHub (<code>joshuafuller/ATAK-Maps</code>) e importato nel database.
+                Le mappe visibili appaiono nel selettore layer delle mappe.
+            </div>
+        </div>
+    </div>
+
+    @* — Tabella mappe importate — *@
+    @if (_maps.Count > 0)
+    {
+        <div class="card mb-3">
+            <div class="card-header fw-bold d-flex align-items-center justify-content-between gap-2">
+                <span><Icon Name="IconName.Layers" /> Mappe importate</span>
+                <span class="text-muted fw-normal small">
+                    @_maps.Count(m => !m.IsHidden) visibili · @_maps.Count totali
+                </span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Nome</th>
+                                <th style="width:70px">Tipo</th>
+                                <th style="width:110px" class="text-center">Visibile</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var map in _maps)
+                            {
+                                <tr class="@(map.IsHidden ? "text-muted" : "")">
+                                    <td>
+                                        <span class="@(map.IsHidden ? "" : "fw-semibold")">@map.Name</span>
+                                        <div class="text-muted small text-truncate" style="max-width:500px" title="@map.Url">@map.Url</div>
+                                    </td>
+                                    <td>
+                                        <Badge Color="@(map.SourceType == "WMS" ? BadgeColor.Warning : BadgeColor.Secondary)">
+                                            @map.SourceType
+                                        </Badge>
+                                    </td>
+                                    <td class="text-center">
+                                        <Button Color="@(map.IsHidden ? ButtonColor.Secondary : ButtonColor.Success)"
+                                                Size="ButtonSize.ExtraSmall"
+                                                @onclick="@(() => ToggleHiddenAsync(map))">
+                                            @(map.IsHidden ? "Nascosta" : "Visibile")
+                                        </Button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+    else if (_cfg.InstalledVersion != null && !AtakMapsService.IsDownloading)
+    {
+        <div class="alert alert-warning">
+            <Icon Name="IconName.ExclamationTriangle" /> Nessuna mappa importata. Prova a scaricare nuovamente il pacchetto.
+        </div>
+    }
+
+    @* — File presenti nella cartella — *@
+    @if (_files.Count > 0)
+    {
+        <div class="card mb-3">
+            <div class="card-header fw-bold d-flex align-items-center gap-2">
+                <Icon Name="IconName.FolderFill" /> File ZIP nella cartella
+            </div>
+            <ul class="list-group list-group-flush">
+                @foreach (var f in _files)
+                {
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span class="font-monospace small">@f.Name</span>
+                        <span class="text-muted small">@FormatBytes(f.Length)</span>
+                    </li>
+                }
+            </ul>
+        </div>
+    }
+
+</div>
+
+@code {
+    private AtakMapsConfig _cfg = new();
+    private AtakMapsService.GhRelease? _latestRelease;
+    private bool _updateAvailable;
+    private bool _checkedForUpdate;
+    private List<FileInfo> _files = new();
+    private List<AtakMapSource> _maps = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        AtakMapsService.StateChanged += OnServiceStateChanged;
+        _cfg = AtakMapsService.GetConfig();
+        _files = AtakMapsService.GetInstalledFiles().ToList();
+        _maps = await AtakMapsService.GetAllMapsAsync();
+    }
+
+    private void OnServiceStateChanged()
+    {
+        _cfg = AtakMapsService.GetConfig();
+        _files = AtakMapsService.GetInstalledFiles().ToList();
+        _ = InvokeAsync(async () =>
+        {
+            _maps = await AtakMapsService.GetAllMapsAsync();
+            StateHasChanged();
+        });
+    }
+
+    private async Task DownloadAsync()
+    {
+        _ = Task.Run(() => AtakMapsService.DownloadLatestAsync());
+    }
+
+    private async Task CheckUpdateAsync()
+    {
+        _latestRelease = await AtakMapsService.GetLatestReleaseAsync();
+        _cfg = AtakMapsService.GetConfig();
+        _updateAvailable = _latestRelease != null && _latestRelease.TagName != _cfg.InstalledVersion;
+        _checkedForUpdate = true;
+        StateHasChanged();
+    }
+
+    private async Task ToggleHiddenAsync(AtakMapSource map)
+    {
+        map.IsHidden = !map.IsHidden;
+        await AtakMapsService.SetHiddenAsync(map.Id, map.IsHidden);
+        StateHasChanged();
+    }
+
+    private static string FormatBytes(long bytes) => bytes switch
+    {
+        >= 1_073_741_824 => $"{bytes / 1_073_741_824.0:F1} GB",
+        >= 1_048_576     => $"{bytes / 1_048_576.0:F1} MB",
+        >= 1_024         => $"{bytes / 1_024.0:F1} KB",
+        _                => $"{bytes} B"
+    };
+
+    public void Dispose() => AtakMapsService.StateChanged -= OnServiceStateChanged;
+}

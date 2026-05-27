@@ -20,6 +20,11 @@
                 @onclick="() => SwitchTab(Tab.Daily)">
             <Icon Name="IconName.CalendarFill" /> Log giornaliero
         </Button>
+        <Button Size="ButtonSize.Small"
+                Color="@(_tab == Tab.Tak ? ButtonColor.Primary : ButtonColor.Secondary)"
+                @onclick="() => SwitchTab(Tab.Tak)">
+            <Icon Name="IconName.Wifi" /> TAK Traffic
+        </Button>
 
         <div style="width:1px; background:#444; height:24px; margin:0 4px;"></div>
 
@@ -71,10 +76,11 @@
 </div>
 
 @code {
-    private enum Tab { Session, Daily }
+    private enum Tab { Session, Daily, Tak }
 
     private List<string> _sessionFiles = [];
     private List<string> _dailyFiles   = [];
+    private List<string> _takFiles     = [];
     private Tab          _tab          = Tab.Session;
     private string?      _selectedFile;
     private List<string> _lines        = [];
@@ -83,7 +89,13 @@
     private Timer?       _timer;
     private long         _lastSize     = -1;
 
-    private List<string> CurrentFiles => _tab == Tab.Session ? _sessionFiles : _dailyFiles;
+    private List<string> CurrentFiles => _tab switch
+    {
+        Tab.Session => _sessionFiles,
+        Tab.Daily   => _dailyFiles,
+        Tab.Tak     => _takFiles,
+        _           => _sessionFiles
+    };
 
     protected override void OnInitialized()
     {
@@ -110,6 +122,10 @@
             .OrderByDescending(f => f)];
 
         _dailyFiles = [.. Directory.GetFiles(logDir, "app-*.log")
+            .OrderByDescending(f => f)];
+
+        _takFiles = [.. Directory.GetFiles(logDir, "*.log")
+            .Where(f => !Path.GetFileName(f).StartsWith("session-") && !Path.GetFileName(f).StartsWith("app-"))
             .OrderByDescending(f => f)];
     }
 
@@ -171,11 +187,16 @@
 
     private static string LineStyle(string line)
     {
-        if (line.Contains("[FTL]")) return "color:#ff4444;font-weight:bold;background:rgba(255,0,0,.08);padding:0 4px;border-radius:2px;";
-        if (line.Contains("[ERR]")) return "color:#ff6b6b;";
-        if (line.Contains("[WRN]")) return "color:#e3b341;";
-        if (line.Contains("[INF]")) return "color:#3fb950;";
-        if (line.Contains("[DBG]")) return "color:#6e7681;";
+        if (line.Contains("[FTL]"))      return "color:#ff4444;font-weight:bold;background:rgba(255,0,0,.08);padding:0 4px;border-radius:2px;";
+        if (line.Contains("[ERR]"))      return "color:#ff6b6b;";
+        if (line.Contains("[WRN]"))      return "color:#e3b341;";
+        if (line.Contains("[INF]"))      return "color:#3fb950;";
+        if (line.Contains("[DBG]"))      return "color:#6e7681;";
+        if (line.Contains("[SA-TX"))     return "color:#58a6ff;";
+        if (line.Contains("[COT-RX"))    return "color:#a5d6a7;";
+        if (line.Contains("[REST-GET"))  return "color:#ce93d8;";
+        if (line.Contains("[REST-POST")) return "color:#ffb74d;";
+        if (line.Contains("[REST-"))     return "color:#ffcc80;";
         return "color:#c9d1d9;";
     }
 

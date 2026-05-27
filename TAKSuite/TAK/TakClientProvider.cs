@@ -13,8 +13,12 @@ namespace TAKSuite.TAK
 
         public TakClient? Client { get { lock (_lock) return _client; } }
         public bool IsReady => Client != null;
-        public string ClientUid { get; private set; } = "TAKSUITE-SERVER";
-        public string Callsign  { get; private set; } = "TAKSuiteServer";
+        public string ClientUid  { get; private set; } = "TAKSUITE-SERVER";
+        public string Callsign   { get; private set; } = "TAKSuiteServer";
+        public string Role       { get; private set; } = "Team Member";
+        public string Color      { get; private set; } = "";
+        public double? Latitude  { get; private set; }
+        public double? Longitude { get; private set; }
 
         public TakClientProvider(IConfiguration configuration, IServiceScopeFactory scopeFactory)
         {
@@ -65,6 +69,10 @@ namespace TAKSuite.TAK
 
             ClientUid = cfg.ClientUid;
             Callsign  = settings.Callsign;
+            Role      = settings.Role;
+            Color     = settings.Color;
+            Latitude  = settings.Latitude;
+            Longitude = settings.Longitude;
 
             TakClient? old;
             lock (_lock) { old = _client; _client = newClient; }

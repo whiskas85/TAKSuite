@@ -1,0 +1,350 @@
+@page "/takmap"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using TAKSuite.Data.Services
+@using TAKSuite.TAK.CoT
+@using TAKSuite.TAK.MartiApi
+@using TAKSuite.TAK
+@using System.Xml.Linq
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@inject SubscriptionApiClient SubscriptionClient
+@inject CoTManager CoTManager
+@inject MartiApiClient MartiClient
+@inject TakClientProvider TakProvider
+@inject IJSRuntime JS
+@inject AtakMapsService AtakMapsService
+@implements IDisposable
+
+<PageTitle>Mappa TAK</PageTitle>
+
+<div class="takmap-page">
+    <div class="takmap-toolbar">
+        <div class="d-flex align-items-center gap-2">
+            <Icon Name="IconName.MapFill" />
+            <span class="fw-semibold">Mappa TAK</span>
+            @if (_loading)
+            {
+                <Spinner Type="SpinnerType.Border" Size="SpinnerSize.Small" Color="SpinnerColor.Secondary" />
+            }
+            else
+            {
+                <Badge Color="BadgeColor.Secondary">@_markerCount marker</Badge>
+            }
+            @if (_error != null)
+            {
+                <span class="text-danger small" title="@_error"><Icon Name="IconName.ExclamationTriangleFill" /> Errore</span>
+            }
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-secondary" @onclick="FitToMarkersAsync" title="Centra su tutti i marker">
+                <Icon Name="IconName.Fullscreen" />
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" @onclick="RefreshAsync" title="Aggiorna">
+                <Icon Name="IconName.ArrowRepeat" />
+            </button>
+        </div>
+    </div>
+    @if (_atakMapsUpdate)
+    {
+        <div class="takmap-update-bar">
+            <Icon Name="IconName.CloudArrowDownFill" />
+            Nuova versione ATAK Maps disponibile —
+            <a href="/settings/atak-maps" class="takmap-update-link">Aggiorna</a>
+            <button class="takmap-update-close" @onclick="() => _atakMapsUpdate = false" title="Chiudi">✕</button>
+        </div>
+    }
+    <div id="takmap-leaflet" class="takmap-map"></div>
+</div>
+
+@code {
+    private record MapMarker(
+        [property: JsonPropertyName("uid")] string Uid,
+        [property: JsonPropertyName("callsign")] string Callsign,
+        [property: JsonPropertyName("lat")] double Lat,
+        [property: JsonPropertyName("lon")] double Lon,
+        [property: JsonPropertyName("team")] string Team,
+        [property: JsonPropertyName("teamColor")] string TeamColor,
+        [property: JsonPropertyName("cotType")] string? CotType,
+        [property: JsonPropertyName("lastReportSec")] double LastReportSec,
+        [property: JsonPropertyName("battery")] int? Battery
+    );
+
+    private List<SubscriptionInfo> _clients = new();
+    private readonly Dictionary<string, int> _batteryCache = new();
+    private readonly Dictionary<string, (double Lat, double Lon)> _positionCache = new();
+    private readonly Dictionary<string, string> _teamCache = new();
+    private readonly Dictionary<string, string> _cotTypeCache = new();
+
+    private bool _loading;
+    private string? _error;
+    private int _markerCount;
+    private int _pendingRefresh;
+    private bool _mapInitialized;
+    private bool _atakMapsUpdate;
+    private System.Threading.Timer? _refreshTimer;
+
+    protected override void OnInitialized()
+    {
+        CoTManager.CoTMessageReceived += OnCoTMessage;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JS.InvokeVoidAsync("takMap.init", "takmap-leaflet");
+            _mapInitialized = true;
+
+            var visibleMaps = await AtakMapsService.GetVisibleMapsAsync();
+            if (visibleMaps.Count > 0)
+            {
+                var layersJson = System.Text.Json.JsonSerializer.Serialize(visibleMaps.Select(m => new
+                {
+                    m.Id, m.Name, m.Url, m.SourceType, m.Layers, m.MinZoom, m.MaxZoom, m.Attribution
+                }));
+                await JS.InvokeVoidAsync("takMap.setCustomLayers", layersJson);
+            }
+
+            await RefreshAsync();
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var (available, _) = await AtakMapsService.CheckUpdateAsync();
+                    if (available) { _atakMapsUpdate = true; await InvokeAsync(StateHasChanged); }
+                }
+                catch { }
+            });
+            _refreshTimer = new System.Threading.Timer(
+                _ => InvokeAsync(async () => await RefreshAsync()),
+                null,
+                TimeSpan.FromSeconds(30),
+                TimeSpan.FromSeconds(30));
+        }
+    }
+
+    private void OnCoTMessage(CoTManager.CoTMessageEventArgs e)
+    {
+        TryExtractCotData(e.Message);
+        if (System.Threading.Interlocked.Exchange(ref _pendingRefresh, 1) == 0)
+        {
+            _ = Task.Delay(2000).ContinueWith(_ =>
+                InvokeAsync(async () =>
+                {
+                    System.Threading.Interlocked.Exchange(ref _pendingRefresh, 0);
+                    await PushMarkersAsync();
+                }));
+        }
+    }
+
+    private void TryExtractCotData(string xml)
+    {
+        try
+        {
+            var doc = XDocument.Parse(xml);
+            var ev = doc.Root!;
+            var uid = (string?)ev.Attribute("uid");
+            if (string.IsNullOrEmpty(uid)) return;
+
+            var cotType = (string?)ev.Attribute("type");
+            if (!string.IsNullOrEmpty(cotType))
+                lock (_cotTypeCache) { _cotTypeCache[uid] = cotType; }
+
+            var pt = ev.Element("point");
+            var detail = ev.Element("detail");
+
+            if (ParseBattery((string?)detail?.Element("status")?.Attribute("battery")) is int pct)
+                lock (_batteryCache) { _batteryCache[uid] = pct; }
+
+            var teamStr = (string?)detail?.Element("__group")?.Attribute("name");
+            if (!string.IsNullOrEmpty(teamStr))
+                lock (_teamCache) { _teamCache[uid] = teamStr; }
+
+            var latStr = (string?)pt?.Attribute("lat");
+            var lonStr = (string?)pt?.Attribute("lon");
+            if (double.TryParse(latStr, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var lat)
+             && double.TryParse(lonStr, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var lon)
+             && !(lat == 0 && lon == 0))
+            {
+                lock (_positionCache) { _positionCache[uid] = (lat, lon); }
+            }
+        }
+        catch { }
+    }
+
+    private async Task RefreshAsync()
+    {
+        _loading = true;
+        _error = null;
+        StateHasChanged();
+        try
+        {
+            var result = await SubscriptionClient.GetAllSubscriptionsAsync(null, null, null, null);
+            _clients = result?.Data?.ToList() ?? new();
+
+            var selfTeam = string.IsNullOrEmpty(TakProvider.Color) ? "Cyan" : TakProvider.Color;
+            foreach (var self in _clients.Where(IsSelf))
+            {
+                self.Team = selfTeam;
+                self.Callsign = TakProvider.Callsign;
+                self.Role = TakProvider.Role;
+            }
+            if (!string.IsNullOrEmpty(TakProvider.ClientUid))
+                lock (_teamCache) { _teamCache[TakProvider.ClientUid] = selfTeam; }
+
+            var uids = _clients
+                .SelectMany(c => new[] { c.ClientUid, c.SubscriptionUid })
+                .Where(u => !string.IsNullOrEmpty(u))
+                .Distinct();
+            await Task.WhenAll(uids.Select(EnrichFromCotAsync));
+
+            await PushMarkersAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task EnrichFromCotAsync(string? uid)
+    {
+        if (string.IsNullOrEmpty(uid)) return;
+        try
+        {
+            var xml = await MartiClient.GetInfoAsync(uid);
+            if (!string.IsNullOrEmpty(xml)) TryExtractCotData(xml);
+        }
+        catch { }
+    }
+
+    private async Task PushMarkersAsync()
+    {
+        if (!_mapInitialized) return;
+        var markers = BuildMarkers();
+        _markerCount = markers.Count;
+        try
+        {
+            await JS.InvokeVoidAsync("takMap.updateMarkers", JsonSerializer.Serialize(markers));
+        }
+        catch { }
+        StateHasChanged();
+    }
+
+    private List<MapMarker> BuildMarkers()
+    {
+        var result = new List<MapMarker>();
+        var seen = new HashSet<string>();
+
+        foreach (var c in _clients)
+        {
+            var uid = c.ClientUid ?? c.SubscriptionUid;
+            if (string.IsNullOrEmpty(uid) || !seen.Add(uid)) continue;
+
+            var pos = GetPosition(c);
+            if (!pos.HasValue) continue;
+
+            var team = GetTeam(c);
+            var callsign = IsSelf(c) ? TakProvider.Callsign : (c.Callsign ?? uid);
+            var lastSec = (DateTimeOffset.UtcNow - DateTimeOffset.FromUnixTimeMilliseconds(c.LastReportMilliseconds)).TotalSeconds;
+
+            string? cotType;
+            lock (_cotTypeCache) { _cotTypeCache.TryGetValue(uid, out cotType); }
+
+            result.Add(new MapMarker(uid, callsign, pos.Value.Lat, pos.Value.Lon, team, TeamColor(team), cotType, lastSec, GetBattery(c)));
+        }
+        return result;
+    }
+
+    private async Task FitToMarkersAsync()
+    {
+        if (_mapInitialized)
+            await JS.InvokeVoidAsync("takMap.fitToMarkers");
+    }
+
+    private (double Lat, double Lon)? GetPosition(SubscriptionInfo c)
+    {
+        lock (_positionCache)
+        {
+            if (!string.IsNullOrEmpty(c.ClientUid) && _positionCache.TryGetValue(c.ClientUid, out var v)) return v;
+            if (!string.IsNullOrEmpty(c.SubscriptionUid) && _positionCache.TryGetValue(c.SubscriptionUid, out var v2)) return v2;
+        }
+        return null;
+    }
+
+    private string GetTeam(SubscriptionInfo c)
+    {
+        if (IsSelf(c)) return string.IsNullOrEmpty(TakProvider.Color) ? "Cyan" : TakProvider.Color;
+        if (!string.IsNullOrEmpty(c.Team)) return c.Team;
+        lock (_teamCache)
+        {
+            if (!string.IsNullOrEmpty(c.ClientUid) && _teamCache.TryGetValue(c.ClientUid, out var t)) return t;
+            if (!string.IsNullOrEmpty(c.SubscriptionUid) && _teamCache.TryGetValue(c.SubscriptionUid, out var t2)) return t2;
+        }
+        return "";
+    }
+
+    private int? GetBattery(SubscriptionInfo c)
+    {
+        var direct = ParseBattery(c.Battery) ?? ParseBattery(c.Metrics?.Battery);
+        if (direct.HasValue) return direct;
+        lock (_batteryCache)
+        {
+            if (!string.IsNullOrEmpty(c.ClientUid) && _batteryCache.TryGetValue(c.ClientUid, out var v)) return v;
+            if (!string.IsNullOrEmpty(c.SubscriptionUid) && _batteryCache.TryGetValue(c.SubscriptionUid, out var v2)) return v2;
+        }
+        return null;
+    }
+
+    private bool IsSelf(SubscriptionInfo c) =>
+        (!string.IsNullOrEmpty(TakProvider.ClientUid) && c.ClientUid == TakProvider.ClientUid)
+        || string.Equals(c.TakClient, "TAKSuite", StringComparison.OrdinalIgnoreCase);
+
+    private static int? ParseBattery(string? s)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return null;
+        var clean = s.Trim().TrimEnd('%');
+        if (int.TryParse(clean, out var vi) && vi >= 0 && vi <= 100) return vi;
+        if (double.TryParse(clean, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var vd))
+        {
+            if (vd is >= 0 and <= 1) return (int)Math.Round(vd * 100);
+            if (vd is > 1 and <= 100) return (int)Math.Round(vd);
+        }
+        return null;
+    }
+
+    private static string TeamColor(string? team) => (team ?? "").ToLowerInvariant() switch
+    {
+        "white" or "bianco" => "#e0e0e0",
+        "yellow" or "giallo" => "#ffc107",
+        "orange" or "arancione" => "#fd7e14",
+        "maroon" or "bordeaux" => "#800000",
+        "red" or "rosso" => "#dc3545",
+        "purple" or "viola" => "#9b59b6",
+        "dark blue" or "blu scuro" => "#003087",
+        "blue" or "blu" => "#0d6efd",
+        "cyan" or "ciano" => "#00bcd4",
+        "teal" or "turchese" => "#008080",
+        "green" or "verde" => "#198754",
+        "dark green" or "verde scuro" => "#1a5c2a",
+        "brown" or "marrone" => "#795548",
+        "magenta" => "#e91e96",
+        _ => "#6c757d"
+    };
+
+    public void Dispose()
+    {
+        CoTManager.CoTMessageReceived -= OnCoTMessage;
+        _refreshTimer?.Dispose();
+        _ = JS.InvokeVoidAsync("takMap.dispose");
+    }
+}

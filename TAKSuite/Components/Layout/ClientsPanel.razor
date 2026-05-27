@@ -3,6 +3,7 @@
 @using TAKSuite.Data.Services
 @using TAKSuite.Data.Models
 @using TAKSuite.TAK.Helper
+@using TAKSuite.TAK
 @using System.Xml.Linq
 @inject SubscriptionApiClient SubscriptionClient
 @inject CoTManager CoTManager
@@ -10,6 +11,9 @@
 @inject NavigationManager Nav
 @inject MissionSuiteEntityServices MissionSuiteService
 @inject TaskService TaskService
+@inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthState
+@inject TakClientProvider TakProvider
 @implements IDisposable
 
 <Offcanvas @ref="_panel"
@@ -18,6 +22,7 @@
            Size="OffcanvasSize.Regular"
            UseStaticBackdrop="false">
     <BodyTemplate>
+        <div class="clients-scroll-content">
         <div class="clients-toolbar d-flex align-items-center justify-content-between mb-2">
             @if (!string.IsNullOrEmpty(_contextLabel))
             {
@@ -53,90 +58,365 @@
         }
 
         <div class="clients-list">
-            @foreach (var group in _clients
-                .GroupBy(c => c.Team ?? "")
-                .OrderBy(g => string.IsNullOrEmpty(g.Key) ? "zzz" : g.Key))
+
+            @* ── Dispositivi ──────────────────────────────────────────────────────── *@
+            @if (_viewMode == ViewMode.Devices)
             {
-                var teamKey = group.Key;
-                var teamColor = TeamColor(teamKey);
-                <div class="team-group mb-3">
-                    <div class="team-group-header" style="border-left: 4px solid @teamColor; padding-left: .5rem;">
-                        <span class="team-dot" style="background:@teamColor"></span>
-                        <span class="team-name fw-semibold small text-uppercase">
-                            @(string.IsNullOrEmpty(teamKey) ? "Nessun team" : teamKey)
-                        </span>
-                        <span class="text-muted small ms-1">(@group.Count())</span>
-                    </div>
-                    @foreach (var c in group.OrderBy(x => x.Callsign))
-                    {
-                        var battPct  = GetBattery(c);
-                        var battColor = BatteryColor(battPct);
-                        var lastSec  = (DateTimeOffset.UtcNow - DateTimeOffset.FromUnixTimeMilliseconds(c.LastReportMilliseconds)).TotalSeconds;
-                        var lastLabel = FormatLastReport(lastSec);
-                        var pos      = GetPosition(c);
-                        string? utmStr = pos.HasValue ? FormatUtm(pos.Value.Lat, pos.Value.Lon) : null;
-                        <div class="client-card mb-1 mt-1">
-                            <div class="client-card-header d-flex align-items-center gap-2" style="border-left: 3px solid @teamColor">
-                                <Icon Name="IconName.PersonFill" />
-                                <span class="fw-bold flex-grow-1">@(c.Callsign ?? c.ClientUid)</span>
-                                @if (battPct.HasValue)
-                                {
-                                    <span class="client-battery" title="Batteria @battPct%">
-                                        <Icon Name="@BatteryIcon(battPct)" class="@battColor" />
-                                        <span class="client-battery-pct small @battColor">@battPct%</span>
-                                    </span>
-                                }
-                                else if (!string.IsNullOrWhiteSpace(c.Battery))
-                                {
-                                    <span class="small text-muted" title="raw: @c.Battery">
-                                        <Icon Name="IconName.BatteryHalf" /> @c.Battery
-                                    </span>
-                                }
-                            </div>
-                            <div class="client-card-body">
-                                @if (!string.IsNullOrEmpty(c.Role))
-                                {
+                @foreach (var teamGrp in _clients
+                    .GroupBy(c => GetTeam(c))
+                    .OrderBy(g => string.IsNullOrEmpty(g.Key) ? "zzz" : g.Key))
+                {
+                    var teamKey = teamGrp.Key;
+                    var tc = TeamColor(teamKey);
+                    <div class="team-group mb-3">
+                        <div class="team-group-header" style="border-left:4px solid @tc;padding-left:.5rem">
+                            <span class="team-dot" style="background:@tc"></span>
+                            <span class="team-name fw-semibold small text-uppercase">
+                                @(string.IsNullOrEmpty(teamKey) ? "Nessun team" : teamKey)
+                            </span>
+                            <span class="text-muted small ms-1">(@teamGrp.Count())</span>
+                        </div>
+                        @foreach (var c in teamGrp.OrderBy(x => x.Callsign))
+                        {
+                            var battPct  = GetBattery(c);
+                            var battColor = BatteryColor(battPct);
+                            var lastSec  = LastSec(c);
+                            var pos      = GetPosition(c);
+                            string? utmStr = pos.HasValue ? FormatUtm(pos.Value.Lat, pos.Value.Lon) : null;
+                            <div class="client-card mb-1 mt-1" style="border-left:4px solid @tc">
+                                <div class="client-card-header d-flex align-items-center gap-2">
+                                    <Icon Name="IconName.PersonFill" />
+                                    <span class="fw-bold flex-grow-1">@GetCallsign(c)</span>
+                                    @if (battPct.HasValue)
+                                    {
+                                        <span class="client-battery" title="Batteria @battPct%">
+                                            <Icon Name="@BatteryIcon(battPct)" class="@battColor" />
+                                            <span class="client-battery-pct small @battColor">@battPct%</span>
+                                        </span>
+                                    }
+                                    else if (!string.IsNullOrWhiteSpace(c.Battery))
+                                    {
+                                        <span class="small text-muted" title="raw: @c.Battery">
+                                            <Icon Name="IconName.BatteryHalf" /> @c.Battery
+                                        </span>
+                                    }
+                                </div>
+                                <div class="client-card-body">
+                                    @if (!string.IsNullOrEmpty(c.Role))
+                                    {
+                                        <div class="client-row">
+                                            <span class="text-muted small">@c.Role</span>
+                                        </div>
+                                    }
                                     <div class="client-row">
-                                        <span class="text-muted small">@c.Role</span>
+                                        @if (utmStr != null)
+                                        {
+                                            <span class="small text-muted me-2"><Icon Name="IconName.GeoAltFill" /> @utmStr</span>
+                                        }
+                                        <span class="small @LastSecClass(lastSec)">
+                                            <Icon Name="IconName.Clock" /> @FormatLastReport(lastSec)
+                                        </span>
                                     </div>
-                                }
-                                <div class="client-row d-flex gap-3 flex-wrap">
                                     @if (!string.IsNullOrEmpty(c.TakClient))
                                     {
-                                        <span class="small text-muted"><Icon Name="IconName.Phone" /> @c.TakClient @c.TakVersion</span>
+                                        <div class="client-row">
+                                            <span class="small text-muted"><Icon Name="IconName.Phone" /> @c.TakClient @c.TakVersion</span>
+                                        </div>
                                     }
-                                    <span class="small @(lastSec > 600 ? "text-danger" : lastSec > 120 ? "text-warning" : "text-success")">
-                                        <Icon Name="IconName.Clock" /> @lastLabel
-                                    </span>
+                                    @if (!string.IsNullOrEmpty(c.IpAddress))
+                                    {
+                                        <div class="client-row">
+                                            <span class="small text-muted"><Icon Name="IconName.Wifi" /> @c.IpAddress@(string.IsNullOrEmpty(c.Port) ? "" : $":{c.Port}") — @(c.Protocol ?? "—")</span>
+                                        </div>
+                                    }
+                                    @if (!string.IsNullOrEmpty(c.Username) && c.Username != c.Callsign)
+                                    {
+                                        <div class="client-row">
+                                            <span class="small text-muted"><Icon Name="IconName.PersonBadge" /> @c.Username</span>
+                                        </div>
+                                    }
                                 </div>
-                                @if (!string.IsNullOrEmpty(c.IpAddress))
-                                {
-                                    <div class="client-row">
-                                        <span class="small text-muted"><Icon Name="IconName.Wifi" /> @c.IpAddress@(string.IsNullOrEmpty(c.Port) ? "" : $":{c.Port}") — @(c.Protocol ?? "—")</span>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+
+            @* ── Per Utente ───────────────────────────────────────────────────────── *@
+            else if (_viewMode == ViewMode.ByUser)
+            {
+                @foreach (var teamGrp in GetUserGroups()
+                    .GroupBy(ug => ug.Team)
+                    .OrderBy(g => string.IsNullOrEmpty(g.Key) ? "zzz" : g.Key))
+                {
+                    var tc = TeamColor(teamGrp.Key);
+                    <div class="team-group mb-3">
+                        <div class="team-group-header" style="border-left:4px solid @tc;padding-left:.5rem">
+                            <span class="team-dot" style="background:@tc"></span>
+                            <span class="team-name fw-semibold small text-uppercase">
+                                @(string.IsNullOrEmpty(teamGrp.Key) ? "Nessun team" : teamGrp.Key)
+                            </span>
+                            <span class="text-muted small ms-1">(@teamGrp.Count() utenti)</span>
+                        </div>
+                        @foreach (var ug in teamGrp.OrderBy(u => u.Username))
+                        {
+                            var groupKey  = $"u:{ug.Team}|{ug.Username}|{ug.Role}";
+                            var isExpanded = _expandedGroups.Contains(groupKey);
+                            var pref      = ug.PreferredDevice;
+                            var prefPos   = GetPosition(pref);
+                            string? prefUtm = prefPos.HasValue ? FormatUtm(prefPos.Value.Lat, prefPos.Value.Lon) : null;
+                            var bestSec   = ug.Devices.Min(d => LastSec(d));
+                            <div class="client-card mb-1 mt-1" style="border-left:4px solid @tc">
+                                <div class="client-card-header d-flex align-items-center gap-2">
+                                    <Icon Name="IconName.PersonFill" />
+                                    <span class="fw-bold flex-grow-1">@GetCallsign(pref)</span>
+                                    <div class="d-flex gap-1 flex-wrap justify-content-end">
+                                        @foreach (var dev in ug.Devices)
+                                        {
+                                            var bp = GetBattery(dev);
+                                            var bc = BatteryColor(bp);
+                                            @if (bp.HasValue)
+                                            {
+                                                <span class="client-battery" title="@(dev.Callsign ?? dev.ClientUid): @bp%">
+                                                    <Icon Name="@BatteryIcon(bp)" class="@bc" />
+                                                    <span class="client-battery-pct small @bc">@bp%</span>
+                                                </span>
+                                            }
+                                        }
                                     </div>
-                                }
-                                @if (utmStr != null)
-                                {
+                                </div>
+                                <div class="client-card-body">
+                                    @if (!string.IsNullOrEmpty(ug.Role))
+                                    {
+                                        <div class="client-row">
+                                            <span class="text-muted small">@ug.Role</span>
+                                        </div>
+                                    }
                                     <div class="client-row">
-                                        <span class="small text-muted"><Icon Name="IconName.GeoAltFill" /> @utmStr</span>
+                                        @if (prefUtm != null)
+                                        {
+                                            <span class="small text-muted me-2"><Icon Name="IconName.GeoAltFill" /> @prefUtm</span>
+                                        }
+                                        <span class="small @LastSecClass(bestSec)">
+                                            <Icon Name="IconName.Clock" /> @FormatLastReport(bestSec)
+                                        </span>
                                     </div>
-                                }
-                                @if (!string.IsNullOrEmpty(c.Username) && c.Username != c.Callsign)
+                                    @if (ug.Devices.Count > 1)
+                                    {
+                                        <div class="client-row mt-1">
+                                            <button class="btn btn-link btn-sm p-0 small text-muted" @onclick="() => ToggleExpand(groupKey)">
+                                                <Icon Name="@(isExpanded ? IconName.ChevronUp : IconName.ChevronDown)" />
+                                                @(isExpanded ? "Nascondi dispositivi" : $"{ug.Devices.Count} dispositivi")
+                                            </button>
+                                        </div>
+                                    }
+                                    @if (isExpanded)
+                                    {
+                                        @foreach (var dev in ug.Devices.OrderBy(d => d.Callsign))
+                                        {
+                                            var dbp  = GetBattery(dev);
+                                            var dbc  = BatteryColor(dbp);
+                                            var dSec = LastSec(dev);
+                                            var dPos = GetPosition(dev);
+                                            string? dUtm = dPos.HasValue ? FormatUtm(dPos.Value.Lat, dPos.Value.Lon) : null;
+                                            <div class="device-sub-card mt-1">
+                                                <div class="d-flex align-items-center gap-2 mb-1">
+                                                    <Icon Name="IconName.Phone" class="text-muted" />
+                                                    <span class="small fw-semibold flex-grow-1">@(dev.Callsign ?? dev.ClientUid)</span>
+                                                    @if (dbp.HasValue)
+                                                    {
+                                                        <span class="small @dbc"><Icon Name="@BatteryIcon(dbp)" /> @dbp%</span>
+                                                    }
+                                                </div>
+                                                @if (!string.IsNullOrEmpty(dev.Role))
+                                                {
+                                                    <div class="small text-muted">@dev.Role</div>
+                                                }
+                                                <div class="d-flex gap-2 flex-wrap mt-1">
+                                                    @if (dUtm != null)
+                                                    {
+                                                        <span class="small text-muted"><Icon Name="IconName.GeoAltFill" /> @dUtm</span>
+                                                    }
+                                                    <span class="small @LastSecClass(dSec)">
+                                                        <Icon Name="IconName.Clock" /> @FormatLastReport(dSec)
+                                                    </span>
+                                                </div>
+                                                @if (!string.IsNullOrEmpty(dev.IpAddress))
+                                                {
+                                                    <div class="small text-muted mt-1">
+                                                        <Icon Name="IconName.Wifi" /> @dev.IpAddress@(string.IsNullOrEmpty(dev.Port) ? "" : $":{dev.Port}")
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+
+            @* ── Per Colore ───────────────────────────────────────────────────────── *@
+            else
+            {
+                @foreach (var cg in GetColorGroups())
+                {
+                    var tc        = TeamColor(cg.Team);
+                    var colorKey  = $"c:{cg.Team}";
+                    var isExpanded = _expandedGroups.Contains(colorKey);
+                    <div class="client-card mb-2" style="border-left:4px solid @tc">
+                        <div class="client-card-header d-flex align-items-center gap-2">
+                            <span class="team-dot" style="background:@tc;flex-shrink:0"></span>
+                            <span class="fw-bold flex-grow-1 text-uppercase">
+                                @(string.IsNullOrEmpty(cg.Team) ? "Nessun team" : cg.Team)
+                            </span>
+                            <span class="text-muted small">
+                                @cg.UniqueUserCount @(cg.UniqueUserCount == 1 ? "utente" : "utenti")
+                            </span>
+                        </div>
+                        <div class="client-card-body">
+                            <div class="client-row flex-wrap gap-1 mb-1">
+                                @foreach (var ud in cg.UserDetails)
                                 {
-                                    <div class="client-row">
-                                        <span class="small text-muted"><Icon Name="IconName.PersonBadge" /> @c.Username</span>
-                                    </div>
+                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle small">
+                                        <Icon Name="IconName.PersonFill" /> @ud.Username
+                                    </span>
                                 }
                             </div>
+                            @if (cg.PositionsClose && cg.AveragedPosition.HasValue)
+                            {
+                                <div class="client-row">
+                                    <span class="small text-muted me-2">
+                                        <Icon Name="IconName.GeoAltFill" /> @FormatUtm(cg.AveragedPosition.Value.Lat, cg.AveragedPosition.Value.Lon)
+                                    </span>
+                                    <span class="small @LastSecClass(cg.BestLastSec)">
+                                        <Icon Name="IconName.Clock" /> @FormatLastReport(cg.BestLastSec)
+                                    </span>
+                                </div>
+                            }
+                            else
+                            {
+                                @foreach (var ud in cg.UserDetails)
+                                {
+                                    <div class="client-row gap-2 flex-wrap">
+                                        <span class="small fw-semibold text-muted" style="min-width:5rem">@ud.Username:</span>
+                                        @if (ud.Position.HasValue)
+                                        {
+                                            <span class="small text-muted"><Icon Name="IconName.GeoAltFill" /> @FormatUtm(ud.Position.Value.Lat, ud.Position.Value.Lon)</span>
+                                        }
+                                        <span class="small @LastSecClass(ud.BestLastSec)">
+                                            <Icon Name="IconName.Clock" /> @FormatLastReport(ud.BestLastSec)
+                                        </span>
+                                    </div>
+                                }
+                            }
+                            <div class="client-row mt-1">
+                                <button class="btn btn-link btn-sm p-0 small text-muted" @onclick="() => ToggleExpand(colorKey)">
+                                    <Icon Name="@(isExpanded ? IconName.ChevronUp : IconName.ChevronDown)" />
+                                    @(isExpanded ? "Chiudi" : "Vedi componenti")
+                                </button>
+                            </div>
+                            @if (isExpanded)
+                            {
+                                @foreach (var ud in cg.UserDetails)
+                                {
+                                    <div class="user-sub-card mt-1">
+                                        <div class="d-flex align-items-center gap-2 mb-1">
+                                            <Icon Name="IconName.PersonFill" class="text-muted" />
+                                            <span class="small fw-semibold flex-grow-1">@ud.Username</span>
+                                            <div class="d-flex gap-1 flex-wrap">
+                                                @foreach (var bp in ud.Batteries)
+                                                {
+                                                    @if (bp.HasValue)
+                                                    {
+                                                        var bc = BatteryColor(bp);
+                                                        <span class="small @bc">
+                                                            <Icon Name="@BatteryIcon(bp)" /> @bp%
+                                                        </span>
+                                                    }
+                                                }
+                                            </div>
+                                        </div>
+                                        @if (!string.IsNullOrEmpty(ud.Role))
+                                        {
+                                            <div class="small text-muted mb-1">@ud.Role</div>
+                                        }
+                                        <div class="d-flex gap-2 flex-wrap">
+                                            @if (ud.Position.HasValue)
+                                            {
+                                                <span class="small text-muted">
+                                                    <Icon Name="IconName.GeoAltFill" /> @FormatUtm(ud.Position.Value.Lat, ud.Position.Value.Lon)
+                                                </span>
+                                            }
+                                            <span class="small @LastSecClass(ud.BestLastSec)">
+                                                <Icon Name="IconName.Clock" /> @FormatLastReport(ud.BestLastSec)
+                                            </span>
+                                        </div>
+                                    </div>
+                                }
+                            }
                         </div>
-                    }
-                </div>
+                    </div>
+                }
             }
+        </div>
+        </div>@* /clients-scroll-content *@
+
+        <div class="view-mode-selector">
+            <div class="btn-group w-100" role="group">
+                <button type="button"
+                        class="btn btn-sm @(_viewMode == ViewMode.Devices ? "btn-primary" : "btn-outline-secondary")"
+                        @onclick="() => SetViewModeAsync(ViewMode.Devices)"
+                        title="Dispositivi">
+                    <Icon Name="IconName.Phone" /> Dispositivi
+                </button>
+                <button type="button"
+                        class="btn btn-sm @(_viewMode == ViewMode.ByUser ? "btn-primary" : "btn-outline-secondary")"
+                        @onclick="() => SetViewModeAsync(ViewMode.ByUser)"
+                        title="Per Utente">
+                    <Icon Name="IconName.PersonFill" /> Utente
+                </button>
+                <button type="button"
+                        class="btn btn-sm @(_viewMode == ViewMode.ByColor ? "btn-primary" : "btn-outline-secondary")"
+                        @onclick="() => SetViewModeAsync(ViewMode.ByColor)"
+                        title="Per Colore">
+                    <Icon Name="IconName.CircleFill" /> Colore
+                </button>
+            </div>
         </div>
     </BodyTemplate>
 </Offcanvas>
 
 @code {
+    // ── Tipi interni ──────────────────────────────────────────────────────────────
+
+    private enum ViewMode { Devices = 0, ByUser = 1, ByColor = 2 }
+
+    private record UserGroup(
+        string Team,
+        string Username,
+        string Role,
+        SubscriptionInfo PreferredDevice,
+        List<SubscriptionInfo> Devices);
+
+    private record UserDetail(
+        string Username,
+        string Role,
+        (double Lat, double Lon)? Position,
+        double BestLastSec,
+        List<int?> Batteries);
+
+    private record ColorTeamGroup(
+        string Team,
+        int UniqueUserCount,
+        bool PositionsClose,
+        (double Lat, double Lon)? AveragedPosition,
+        double BestLastSec,
+        List<UserDetail> UserDetails);
+
+    // ── Stato ─────────────────────────────────────────────────────────────────────
+
     private Offcanvas _panel = default!;
     private List<SubscriptionInfo> _clients = new();
     private bool _loading;
@@ -146,14 +426,25 @@
     private System.Threading.Timer? _clockTimer;
     private readonly Dictionary<string, int> _batteryCache = new();
     private readonly Dictionary<string, (double Lat, double Lon)> _positionCache = new();
+    private readonly Dictionary<string, string> _teamCache = new();
+    private readonly Dictionary<string, (string Callsign, string Team, string Role, long LastSeenMs)> _cotSeenClients = new();
+
+    private ViewMode _viewMode = ViewMode.Devices;
+    private readonly HashSet<string> _expandedGroups = new();
+    private string? _userId;
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
     public async Task OpenAsync()
     {
         _contextLabel = await BuildContextLabelAsync(Nav.Uri);
+        var auth = await AuthState.GetAuthenticationStateAsync();
+        _userId = auth.User?.Identity?.Name;
+        await LoadViewModeAsync();
         await _panel.ShowAsync();
         await RefreshAsync();
-        _clockTimer ??= new System.Threading.Timer(_ =>
-            InvokeAsync(StateHasChanged), null,
+        _clockTimer ??= new System.Threading.Timer(
+            _ => InvokeAsync(StateHasChanged), null,
             TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
 
@@ -168,16 +459,120 @@
         _clockTimer?.Dispose();
     }
 
+    // ── View mode ─────────────────────────────────────────────────────────────────
+
+    private string ViewModeKey => $"clients-panel-mode-{_userId ?? "anon"}";
+
+    private async Task LoadViewModeAsync()
+    {
+        try
+        {
+            var stored = await JS.InvokeAsync<string?>("localStorage.getItem", ViewModeKey);
+            if (Enum.TryParse<ViewMode>(stored, out var m))
+                _viewMode = m;
+        }
+        catch { }
+    }
+
+    private async Task SetViewModeAsync(ViewMode mode)
+    {
+        _viewMode = mode;
+        try { await JS.InvokeVoidAsync("localStorage.setItem", ViewModeKey, mode.ToString()); }
+        catch { }
+    }
+
+    private void ToggleExpand(string key)
+    {
+        if (!_expandedGroups.Remove(key))
+            _expandedGroups.Add(key);
+    }
+
+    // ── Grouping ──────────────────────────────────────────────────────────────────
+
+    private List<UserGroup> GetUserGroups()
+    {
+        return _clients
+            .GroupBy(c => (
+                Team: GetTeam(c),
+                Username: !string.IsNullOrEmpty(c.Username) ? c.Username : (c.Callsign ?? ""),
+                Role: c.Role ?? ""))
+            .Select(g =>
+            {
+                var preferred =
+                    g.FirstOrDefault(d =>
+                        !string.IsNullOrEmpty(d.Callsign) &&
+                        !string.IsNullOrEmpty(d.Username) &&
+                        d.Callsign == d.Username)
+                    ?? g.OrderByDescending(d => d.LastReportMilliseconds).First();
+                return new UserGroup(g.Key.Team, g.Key.Username, g.Key.Role, preferred, g.ToList());
+            })
+            .ToList();
+    }
+
+    private List<ColorTeamGroup> GetColorGroups()
+    {
+        return GetUserGroups()
+            .GroupBy(ug => ug.Team)
+            .OrderBy(g => string.IsNullOrEmpty(g.Key) ? "zzz" : g.Key)
+            .Select(g =>
+            {
+                var users = g.ToList();
+                var details = users.Select(ug =>
+                {
+                    var pos      = GetPosition(ug.PreferredDevice);
+                    var batteries = ug.Devices.Select(d => GetBattery(d)).ToList();
+                    var bestSec  = ug.Devices.Min(d => LastSec(d));
+                    return new UserDetail(ug.Username, ug.Role, pos, bestSec, batteries);
+                }).ToList();
+
+                var positions = details
+                    .Where(ud => ud.Position.HasValue)
+                    .Select(ud => ud.Position!.Value)
+                    .ToList();
+
+                bool close = AllWithin50m(positions);
+                (double Lat, double Lon)? avgPos = close && positions.Count > 0
+                    ? (positions.Average(p => p.Lat), positions.Average(p => p.Lon))
+                    : null;
+                double bestSec = details.Count > 0 ? details.Min(ud => ud.BestLastSec) : 0;
+
+                return new ColorTeamGroup(g.Key, users.Count, close, avgPos, bestSec, details);
+            })
+            .ToList();
+    }
+
+    // ── Geometria ─────────────────────────────────────────────────────────────────
+
+    private static bool AllWithin50m(List<(double Lat, double Lon)> positions)
+    {
+        if (positions.Count <= 1) return true;
+        var cLat = positions.Average(p => p.Lat);
+        var cLon = positions.Average(p => p.Lon);
+        return positions.All(p => HaversineM(p.Lat, p.Lon, cLat, cLon) <= 50);
+    }
+
+    private static double HaversineM(double lat1, double lon1, double lat2, double lon2)
+    {
+        const double R = 6371000;
+        var dLat = (lat2 - lat1) * Math.PI / 180;
+        var dLon = (lon2 - lon1) * Math.PI / 180;
+        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2)
+              + Math.Cos(lat1 * Math.PI / 180) * Math.Cos(lat2 * Math.PI / 180)
+              * Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+        return R * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+    }
+
+    // ── CoT ───────────────────────────────────────────────────────────────────────
+
     private void OnCoTMessage(CoTManager.CoTMessageEventArgs e)
     {
         TryExtractCotData(e.Message);
-
         if (System.Threading.Interlocked.Exchange(ref _pendingRefresh, 1) == 0)
         {
             _ = Task.Delay(2500).ContinueWith(async _ =>
             {
                 System.Threading.Interlocked.Exchange(ref _pendingRefresh, 0);
-                await InvokeAsync(async () => { await RefreshAsync(); });
+                await InvokeAsync(async () => await RefreshAsync());
             });
         }
     }
@@ -194,13 +589,15 @@
             var pt     = ev.Element("point");
             var detail = ev.Element("detail");
 
-            // battery lives in <detail><status battery="…"/></detail>
             var battStr = (string?)detail?.Element("status")?.Attribute("battery");
             var pct = ParseBattery(battStr);
             if (pct.HasValue)
                 lock (_batteryCache) { _batteryCache[uid] = pct.Value; }
 
-            // position from <point lat="…" lon="…"/>
+            var teamStr = (string?)detail?.Element("__group")?.Attribute("name");
+            if (!string.IsNullOrEmpty(teamStr))
+                lock (_teamCache) { _teamCache[uid] = teamStr; }
+
             var latStr = (string?)pt?.Attribute("lat");
             var lonStr = (string?)pt?.Attribute("lon");
             if (double.TryParse(latStr, System.Globalization.NumberStyles.Float,
@@ -211,6 +608,11 @@
             {
                 lock (_positionCache) { _positionCache[uid] = (lat, lon); }
             }
+
+            // Track all CoT-seen devices so UDP-only (off-server) devices can be displayed
+            var callsignSeen = (string?)detail?.Element("contact")?.Attribute("callsign") ?? uid;
+            var roleSeen     = (string?)detail?.Element("__group")?.Attribute("role") ?? "";
+            lock (_cotSeenClients) { _cotSeenClients[uid] = (callsignSeen, teamStr ?? "", roleSeen, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()); }
         }
         catch { }
     }
@@ -237,23 +639,82 @@
         return null;
     }
 
-    private static string FormatUtm(double lat, double lon)
+    private string GetTeam(SubscriptionInfo c)
     {
-        var (zone, band, e, n) = GeoUtils.LatLonToUtm(lat, lon);
-        return $"{zone}{band} {(int)e} {(int)n}";
+        // Connessione TAKSuite stessa: usa il colore configurato
+        if (IsSelf(c))
+            return string.IsNullOrEmpty(TakProvider.Color) ? "Cyan" : TakProvider.Color;
+
+        if (!string.IsNullOrEmpty(c.Team)) return c.Team;
+        lock (_teamCache)
+        {
+            if (!string.IsNullOrEmpty(c.ClientUid) && _teamCache.TryGetValue(c.ClientUid, out var t)) return t;
+            if (!string.IsNullOrEmpty(c.SubscriptionUid) && _teamCache.TryGetValue(c.SubscriptionUid, out var t2)) return t2;
+        }
+        return "";
     }
+
+    // "TAKSuite" è il platform hardcoded in BuildFullSaMessage — non è un valore utente.
+    private bool IsSelf(SubscriptionInfo c) =>
+        (!string.IsNullOrEmpty(TakProvider.ClientUid) && c.ClientUid == TakProvider.ClientUid)
+        || string.Equals(c.TakClient, "TAKSuite", StringComparison.OrdinalIgnoreCase);
+
+    private string GetCallsign(SubscriptionInfo c) =>
+        IsSelf(c) ? TakProvider.Callsign : (c.Callsign ?? c.ClientUid ?? "—");
+
+    private static double LastSec(SubscriptionInfo c) =>
+        (DateTimeOffset.UtcNow - DateTimeOffset.FromUnixTimeMilliseconds(c.LastReportMilliseconds)).TotalSeconds;
+
+    // ── Refresh ───────────────────────────────────────────────────────────────────
 
     private async Task RefreshAsync()
     {
         _loading = true;
-        _error = null;
+        _error   = null;
         StateHasChanged();
         try
         {
             var result = await SubscriptionClient.GetAllSubscriptionsAsync(null, null, null, null);
             _clients = result?.Data?.ToList() ?? new();
-            // Enrich each client from their latest SA CoT (battery + position)
-            await Task.WhenAll(_clients.Select(c => EnrichFromCotAsync(c.ClientUid)));
+
+            // Applica i dati TAK della propria connessione (il server non restituisce Team/Callsign per sé stesso)
+            var selfTeam = string.IsNullOrEmpty(TakProvider.Color) ? "Cyan" : TakProvider.Color;
+            foreach (var self in _clients.Where(IsSelf))
+            {
+                self.Team     = selfTeam;
+                self.Callsign = TakProvider.Callsign;
+                self.Role     = TakProvider.Role;
+            }
+            if (!string.IsNullOrEmpty(TakProvider.ClientUid))
+                lock (_teamCache) { _teamCache[TakProvider.ClientUid] = selfTeam; }
+
+            var uidsToEnrich = _clients
+                .SelectMany(c => new[] { c.ClientUid, c.SubscriptionUid })
+                .Append(TakProvider.ClientUid)
+                .Where(u => !string.IsNullOrEmpty(u))
+                .Distinct();
+            await Task.WhenAll(uidsToEnrich.Select(EnrichFromCotAsync));
+
+            // Merge UDP-only devices (not connected to server but seen via CoT multicast)
+            var serverUids = new HashSet<string>(
+                _clients.SelectMany(c => new[] { c.ClientUid, c.SubscriptionUid }).Where(u => u != null)!,
+                StringComparer.OrdinalIgnoreCase);
+            lock (_cotSeenClients)
+            {
+                foreach (var (uid, info) in _cotSeenClients)
+                {
+                    if (serverUids.Contains(uid)) continue;
+                    lock (_positionCache) { if (!_positionCache.ContainsKey(uid)) continue; }
+                    _clients.Add(new SubscriptionInfo
+                    {
+                        ClientUid              = uid,
+                        Callsign               = info.Callsign,
+                        Team                   = info.Team,
+                        Role                   = info.Role,
+                        LastReportMilliseconds = info.LastSeenMs
+                    });
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -272,11 +733,12 @@
         try
         {
             var xml = await MartiClient.GetInfoAsync(uid);
-            if (!string.IsNullOrEmpty(xml))
-                TryExtractCotData(xml);
+            if (!string.IsNullOrEmpty(xml)) TryExtractCotData(xml);
         }
         catch { }
     }
+
+    // ── Context label ─────────────────────────────────────────────────────────────
 
     private async Task<string> BuildContextLabelAsync(string url)
     {
@@ -309,20 +771,24 @@
         var idx = url.IndexOf(prefix, StringComparison.OrdinalIgnoreCase);
         if (idx < 0) return false;
         var start = idx + prefix.Length;
-        var end = url.IndexOf('/', start);
+        var end   = url.IndexOf('/', start);
         var segment = end < 0 ? url[start..] : url[start..end];
         return Guid.TryParse(segment, out id);
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // ── Helpers ───────────────────────────────────────────────────────────────────
+
+    private static string FormatUtm(double lat, double lon)
+    {
+        var (zone, band, e, n) = GeoUtils.LatLonToUtm(lat, lon);
+        return $"{zone}{band} {(int)e} {(int)n}";
+    }
 
     private static int? ParseBattery(string? s)
     {
         if (string.IsNullOrWhiteSpace(s)) return null;
         var clean = s.Trim().TrimEnd('%');
-        // Intero 0-100
         if (int.TryParse(clean, out var vi) && vi >= 0 && vi <= 100) return vi;
-        // Decimale 0.0-1.0 → converti in %
         if (double.TryParse(clean, System.Globalization.NumberStyles.Float,
                 System.Globalization.CultureInfo.InvariantCulture, out var vd))
         {
@@ -334,16 +800,16 @@
 
     private static string BatteryColor(int? pct) => pct switch
     {
-        < 20  => "text-danger",
-        < 50  => "text-warning",
-        _     => "text-success"
+        < 20 => "text-danger",
+        < 50 => "text-warning",
+        _    => "text-success"
     };
 
     private static IconName BatteryIcon(int? pct) => pct switch
     {
-        < 20  => IconName.Battery,
-        < 50  => IconName.BatteryHalf,
-        _     => IconName.BatteryFull
+        < 20 => IconName.Battery,
+        < 50 => IconName.BatteryHalf,
+        _    => IconName.BatteryFull
     };
 
     private static string FormatLastReport(double sec) => sec switch
@@ -353,22 +819,25 @@
         _      => $"{(int)(sec / 3600)}h fa"
     };
 
+    private static string LastSecClass(double sec) =>
+        sec > 600 ? "text-danger" : sec > 120 ? "text-warning" : "text-success";
+
     private static string TeamColor(string? team) => (team ?? "").ToLowerInvariant() switch
     {
-        "white"      or "bianco"     => "#e0e0e0",
-        "yellow"     or "giallo"     => "#ffc107",
-        "orange"     or "arancione"  => "#fd7e14",
-        "maroon"     or "bordeaux"   => "#800000",
-        "red"        or "rosso"      => "#dc3545",
-        "purple"     or "viola"      => "#9b59b6",
-        "dark blue"  or "blu scuro"  => "#003087",
-        "blue"       or "blu"        => "#0d6efd",
-        "cyan"       or "ciano"      => "#00bcd4",
-        "teal"       or "turchese"   => "#008080",
-        "green"      or "verde"      => "#198754",
-        "dark green" or "verde scuro"=> "#1a5c2a",
-        "brown"      or "marrone"    => "#795548",
-        "magenta"    or "magenta"    => "#e91e96",
-        _                            => "#6c757d"
+        "white"      or "bianco"      => "#e0e0e0",
+        "yellow"     or "giallo"      => "#ffc107",
+        "orange"     or "arancione"   => "#fd7e14",
+        "maroon"     or "bordeaux"    => "#800000",
+        "red"        or "rosso"       => "#dc3545",
+        "purple"     or "viola"       => "#9b59b6",
+        "dark blue"  or "blu scuro"   => "#003087",
+        "blue"       or "blu"         => "#0d6efd",
+        "cyan"       or "ciano"       => "#00bcd4",
+        "teal"       or "turchese"    => "#008080",
+        "green"      or "verde"       => "#198754",
+        "dark green" or "verde scuro" => "#1a5c2a",
+        "brown"      or "marrone"     => "#795548",
+        "magenta"                     => "#e91e96",
+        _                             => "#6c757d"
     };
 }

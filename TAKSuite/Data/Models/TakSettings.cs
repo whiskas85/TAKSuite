@@ -24,6 +24,14 @@ namespace TAKSuite.Data.Models
 
         public bool HasCertificate => CertificateP12 is { Length: > 0 };
 
+        // Ruolo e colore ATAK
+        public string Role  { get; set; } = "Team Member";
+        public string Color { get; set; } = "";
+
+        // Posizione (WGS84)
+        public double? Latitude  { get; set; }
+        public double? Longitude { get; set; }
+
         public DateTime LastModified { get; set; } = DateTime.UtcNow;
 
         // Template del prompt inviato all'AI (null = usa il default hardcoded)

@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using System.Security.Cryptography.X509Certificates;
+using TAKSuite.Data.Services;
+using TAKSuite.TAK;
 
 namespace TAKSuite.TAK.MartiApi
 {
@@ -7,7 +9,7 @@ namespace TAKSuite.TAK.MartiApi
     {
         public HttpClient HttpClient { get; }
 
-        public MartiHttpClientProvider(IConfiguration configuration)
+        public MartiHttpClientProvider(IConfiguration configuration, TakTrafficLogger logger)
         {
             var martiConfig = configuration.GetSection("MartiServer");
             string serverIp = martiConfig["Ip"] ?? throw new ArgumentNullException("Marti IP not configured.");
@@ -18,11 +20,13 @@ namespace TAKSuite.TAK.MartiApi
             var cert = new X509Certificate2(certPath, certPassword,
                 X509KeyStorageFlags.UserKeySet | X509KeyStorageFlags.PersistKeySet | X509KeyStorageFlags.Exportable);
 
-            var handler = new HttpClientHandler();
-            handler.ClientCertificates.Add(cert);
-            handler.ServerCertificateCustomValidationCallback = (_, _, _, _) => true;
+            var certHandler = new HttpClientHandler();
+            certHandler.ClientCertificates.Add(cert);
+            certHandler.ServerCertificateCustomValidationCallback = (_, _, _, _) => true;
 
-            HttpClient = new HttpClient(handler)
+            var loggingHandler = new TakHttpLoggingHandler(logger) { InnerHandler = certHandler };
+
+            HttpClient = new HttpClient(loggingHandler)
             {
                 BaseAddress = new Uri($"https://{serverIp}:{serverPort}/")
             };
