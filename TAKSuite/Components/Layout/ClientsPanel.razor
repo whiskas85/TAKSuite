@@ -14,6 +14,7 @@
 @inject IJSRuntime JS
 @inject AuthenticationStateProvider AuthState
 @inject TakClientProvider TakProvider
+@inject ProtoCacheService ProtoCache
 @implements IDisposable
 
 <Offcanvas @ref="_panel"
@@ -695,10 +696,33 @@
                 .Distinct();
             await Task.WhenAll(uidsToEnrich.Select(EnrichFromCotAsync));
 
-            // Merge UDP-only devices (not connected to server but seen via CoT multicast)
             var serverUids = new HashSet<string>(
                 _clients.SelectMany(c => new[] { c.ClientUid, c.SubscriptionUid }).Where(u => u != null)!,
                 StringComparer.OrdinalIgnoreCase);
+
+            // Pre-popola caches dal proto cache persistente (sopravvive ai riavvii).
+            // I dati della sessione corrente (_cotSeenClients) hanno precedenza.
+            var protoEntries = ProtoCache.GetAll(10);
+            foreach (var (entry, _) in protoEntries)
+            {
+                if (string.IsNullOrEmpty(entry.Uid)) continue;
+                if (entry.Lat == 0 && entry.Lon == 0) continue;
+
+                lock (_positionCache) { _positionCache.TryAdd(entry.Uid, (entry.Lat, entry.Lon)); }
+                if (!string.IsNullOrEmpty(entry.Team))
+                    lock (_teamCache) { _teamCache.TryAdd(entry.Uid, entry.Team!); }
+
+                lock (_cotSeenClients)
+                {
+                    if (!_cotSeenClients.ContainsKey(entry.Uid))
+                    {
+                        var lastMs = ((DateTimeOffset)DateTime.SpecifyKind(entry.LastSeen, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
+                        _cotSeenClients[entry.Uid] = (entry.Callsign ?? entry.Uid, entry.Team ?? "", entry.Role ?? "", lastMs);
+                    }
+                }
+            }
+
+            // Merge dispositivi UDP-only (non connessi al server, da cache o sessione corrente)
             lock (_cotSeenClients)
             {
                 foreach (var (uid, info) in _cotSeenClients)

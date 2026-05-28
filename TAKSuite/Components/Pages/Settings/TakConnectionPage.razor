@@ -219,6 +219,49 @@
             </div>
         </div>
 
+        @* ── Cache protobuf ───────────────────────────────────────────────────── *@
+        <div class="col-12 col-lg-6">
+            <div class="card">
+                <div class="card-header"><Icon Name="IconName.DatabaseFillCheck" /> Cache punti protobuf</div>
+                <div class="card-body">
+                    <p class="text-muted small">
+                        Punti SA ricevuti via UDP multicast (protobuf, porta 6969) da dispositivi non connessi al server.
+                        La cache è persistente e sopravvive ai riavvii.
+                    </p>
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <label class="form-label">
+                                Stale time <span class="text-muted small">(min)</span>
+                                <span class="ms-1" title="Dopo quanto tempo un punto non aggiornato viene considerato stale (grigio sulla mappa)">
+                                    <Icon Name="IconName.QuestionCircle" style="font-size:.85rem;" />
+                                </span>
+                            </label>
+                            <input type="number" class="form-control" min="1" max="1440"
+                                   @bind="_settings.ProtoStaleMinutes" />
+                            <div class="form-text">Default: 10 min</div>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">
+                                Delete time <span class="text-muted small">(min)</span>
+                                <span class="ms-1" title="Dopo quanto tempo il punto viene rimosso dalla cache e dal DB">
+                                    <Icon Name="IconName.QuestionCircle" style="font-size:.85rem;" />
+                                </span>
+                            </label>
+                            <input type="number" class="form-control" min="1" max="10080"
+                                   @bind="_settings.ProtoDeleteMinutes" />
+                            <div class="form-text">Default: 30 min</div>
+                        </div>
+                    </div>
+                    @if (_settings.ProtoStaleMinutes >= _settings.ProtoDeleteMinutes)
+                    {
+                        <div class="alert alert-warning mt-2 mb-0 py-1 small">
+                            Lo stale time deve essere inferiore al delete time.
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
         @* ── Enrollment ───────────────────────────────────────────────────────── *@
         <div class="col-12 col-lg-6">
             <div class="card">

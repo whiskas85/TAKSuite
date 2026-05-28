@@ -39,7 +39,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     public DbSet<TaskScoreEntry> TaskScoreEntries { get; set; }
     public DbSet<ScoreConfig> ScoreConfigs { get; set; }
-    public DbSet<AtakMapSource> AtakMapSources { get; set; }
+    public DbSet<AtakMapSource>   AtakMapSources   { get; set; }
+    public DbSet<CachedCoTEntry>  CachedCoTEntries { get; set; }
 
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -206,5 +207,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         modelBuilder.Entity<AtakMapSource>()
             .HasIndex(m => m.FileName)
             .IsUnique();
+
+        modelBuilder.Entity<CachedCoTEntry>()
+            .HasKey(e => e.Uid);
     }
 }

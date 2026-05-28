@@ -15,6 +15,9 @@
 @inject TakClientProvider TakProvider
 @inject IJSRuntime JS
 @inject AtakMapsService AtakMapsService
+@inject ProtoCacheService ProtoCache
+@inject TakSettingsService TakSettingsService
+@inject TakSubscriptionService SubscriptionService
 @implements IDisposable
 
 <PageTitle>Mappa TAK</PageTitle>
@@ -31,6 +34,12 @@
             else
             {
                 <Badge Color="BadgeColor.Secondary">@_markerCount marker</Badge>
+            }
+            @if (_activeSubscriptions.Count > 0)
+            {
+                <Badge Color="BadgeColor.Primary" title="Filtro missione attivo: mostrati solo i dispositivi della missione e quelli senza missione">
+                    <Icon Name="IconName.FunnelFill" /> @_activeSubscriptions.Count missione@(_activeSubscriptions.Count > 1 ? "i" : "")
+                </Badge>
             }
             @if (_error != null)
             {
@@ -55,32 +64,83 @@
             <button class="takmap-update-close" @onclick="() => _atakMapsUpdate = false" title="Chiudi">✕</button>
         </div>
     }
-    <div id="takmap-leaflet" class="takmap-map"></div>
+    <div class="takmap-body">
+        <div id="takmap-leaflet" class="takmap-map"></div>
+
+        <div class="takmap-sidebar">
+            <div class="takmap-sb-header">
+                <Icon Name="IconName.PeopleFill" />
+                <span>Tutti i dispositivi</span>
+                <Badge Color="BadgeColor.Secondary">@_allProtoPoints.Count</Badge>
+            </div>
+            <div class="takmap-sb-list">
+                @if (_allProtoPoints.Count == 0)
+                {
+                    <div class="takmap-sb-empty">Nessun dispositivo tracciato</div>
+                }
+                else
+                {
+                    @foreach (var (entry, isStale) in _allProtoPoints)
+                    {
+                        var team     = entry.Team ?? "";
+                        var color    = isStale ? "#888888" : TeamColor(team);
+                        var lastSec  = (DateTime.UtcNow - entry.LastSeen).TotalSeconds;
+                        var timeClass = lastSec < 120 ? "text-success" : lastSec < 600 ? "text-warning" : "text-danger";
+                        var hiddenOnMap = _activeSubscriptions.Count > 0
+                            && entry.MissionName != null
+                            && !_activeSubscriptions.Contains(entry.MissionName);
+
+                        <div class="takmap-sb-item @(isStale ? "takmap-sb-stale" : "") @(hiddenOnMap ? "takmap-sb-offmission" : "")">
+                            <div class="takmap-sb-dot" style="background:@color"></div>
+                            <div class="takmap-sb-info">
+                                <div class="takmap-sb-callsign" title="@entry.Uid">@(entry.Callsign ?? entry.Uid)</div>
+                                @if (!string.IsNullOrEmpty(entry.MissionName))
+                                {
+                                    <span class="badge takmap-sb-mission-badge @(hiddenOnMap ? "bg-secondary" : "bg-primary")">
+                                        @entry.MissionName
+                                    </span>
+                                }
+                                <small class="@timeClass">@FormatLastSec(lastSec)</small>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    </div>
 </div>
 
 @code {
     private record MapMarker(
-        [property: JsonPropertyName("uid")] string Uid,
-        [property: JsonPropertyName("callsign")] string Callsign,
-        [property: JsonPropertyName("lat")] double Lat,
-        [property: JsonPropertyName("lon")] double Lon,
-        [property: JsonPropertyName("team")] string Team,
-        [property: JsonPropertyName("teamColor")] string TeamColor,
-        [property: JsonPropertyName("cotType")] string? CotType,
-        [property: JsonPropertyName("lastReportSec")] double LastReportSec,
-        [property: JsonPropertyName("battery")] int? Battery
+        [property: JsonPropertyName("uid")]           string  Uid,
+        [property: JsonPropertyName("callsign")]      string  Callsign,
+        [property: JsonPropertyName("lat")]           double  Lat,
+        [property: JsonPropertyName("lon")]           double  Lon,
+        [property: JsonPropertyName("team")]          string  Team,
+        [property: JsonPropertyName("teamColor")]     string  TeamColor,
+        [property: JsonPropertyName("cotType")]       string? CotType,
+        [property: JsonPropertyName("lastReportSec")] double  LastReportSec,
+        [property: JsonPropertyName("battery")]       int?    Battery,
+        [property: JsonPropertyName("missionName")]   string? MissionName
     );
 
     private List<SubscriptionInfo> _clients = new();
-    private readonly Dictionary<string, int> _batteryCache = new();
+    private readonly Dictionary<string, int>    _batteryCache  = new();
     private readonly Dictionary<string, (double Lat, double Lon)> _positionCache = new();
-    private readonly Dictionary<string, string> _teamCache = new();
-    private readonly Dictionary<string, string> _cotTypeCache = new();
+    private readonly Dictionary<string, string> _teamCache     = new();
+    private readonly Dictionary<string, string> _cotTypeCache  = new();
+    // Tutti i dispositivi visti in sessione via CoT (UDP + TCP) — stessa logica di ClientsPanel
+    private readonly Dictionary<string, (string Callsign, string Team, string Role, long LastSeenMs, string? MissionName)> _cotSeenDevices = new();
 
+    // Tutti i punti dalla cache (per la sidebar — aggiornato da LoadProtoPoints)
+    private List<(TAKSuite.Data.Models.CachedCoTEntry Entry, bool IsStale)> _allProtoPoints = new();
+
+    private List<string> _activeSubscriptions = new();
+    private int  _staleMinutes = 10;
     private bool _loading;
     private string? _error;
-    private int _markerCount;
-    private int _pendingRefresh;
+    private int  _markerCount;
+    private int  _pendingRefresh;
     private bool _mapInitialized;
     private bool _atakMapsUpdate;
     private System.Threading.Timer? _refreshTimer;
@@ -88,6 +148,21 @@
     protected override void OnInitialized()
     {
         CoTManager.CoTMessageReceived += OnCoTMessage;
+        ProtoCache.CacheChanged += OnProtoCacheChanged;
+    }
+
+    private void OnProtoCacheChanged()
+    {
+        if (System.Threading.Interlocked.Exchange(ref _pendingRefresh, 1) == 0)
+        {
+            _ = Task.Delay(1000).ContinueWith(_ =>
+                InvokeAsync(async () =>
+                {
+                    System.Threading.Interlocked.Exchange(ref _pendingRefresh, 0);
+                    LoadProtoPoints();
+                    await PushMarkersAsync();
+                }));
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -97,14 +172,21 @@
             await JS.InvokeVoidAsync("takMap.init", "takmap-leaflet");
             _mapInitialized = true;
 
-            var visibleMaps = await AtakMapsService.GetVisibleMapsAsync();
-            if (visibleMaps.Count > 0)
+            try
             {
-                var layersJson = System.Text.Json.JsonSerializer.Serialize(visibleMaps.Select(m => new
+                var visibleMaps = await AtakMapsService.GetVisibleMapsAsync();
+                if (visibleMaps.Count > 0)
                 {
-                    m.Id, m.Name, m.Url, m.SourceType, m.Layers, m.MinZoom, m.MaxZoom, m.Attribution
-                }));
-                await JS.InvokeVoidAsync("takMap.setCustomLayers", layersJson);
+                    var layersJson = System.Text.Json.JsonSerializer.Serialize(visibleMaps.Select(m => new
+                    {
+                        m.Id, m.Name, m.Url, m.SourceType, m.Layers, m.MinZoom, m.MaxZoom, m.Attribution
+                    }));
+                    await JS.InvokeVoidAsync("takMap.setCustomLayers", layersJson);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[TakMapPage] GetVisibleMapsAsync error: {ex.Message}");
             }
 
             await RefreshAsync();
@@ -134,6 +216,7 @@
                 InvokeAsync(async () =>
                 {
                     System.Threading.Interlocked.Exchange(ref _pendingRefresh, 0);
+                    LoadProtoPoints(); // ricarica sempre: OnCoTMessage arriva prima di OnProtoCacheChanged
                     await PushMarkersAsync();
                 }));
         }
@@ -172,6 +255,18 @@
             {
                 lock (_positionCache) { _positionCache[uid] = (lat, lon); }
             }
+
+            // Traccia il dispositivo nella sessione corrente (stessa logica di ClientsPanel)
+            var cs          = (string?)detail?.Element("contact")?.Attribute("callsign") ?? uid;
+            var role        = (string?)detail?.Element("__group")?.Attribute("role") ?? "";
+            var missionSeen = (string?)detail?.Element("mission")?.Attribute("name");
+            lock (_cotSeenDevices)
+            {
+                // Aggiorna la missione solo se arriva un valore non-null (SA Multicast non cancella la missione)
+                if (_cotSeenDevices.TryGetValue(uid, out var existing))
+                    missionSeen ??= existing.MissionName;
+                _cotSeenDevices[uid] = (cs, teamStr ?? "", role, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), missionSeen);
+            }
         }
         catch { }
     }
@@ -181,6 +276,27 @@
         _loading = true;
         _error = null;
         StateHasChanged();
+
+        try
+        {
+            var s = await TakSettingsService.GetOrCreateAsync();
+            _staleMinutes = s.ProtoStaleMinutes;
+        }
+        catch { }
+
+        // Carica sottoscrizioni attive per il filtro missione sulla mappa
+        try
+        {
+            var subs = await SubscriptionService.GetAllAsync();
+            _activeSubscriptions = subs
+                .Select(s => s.MissionName)
+                .Where(n => !string.IsNullOrEmpty(n))
+                .ToList();
+        }
+        catch { }
+
+        LoadProtoPoints();
+
         try
         {
             var result = await SubscriptionClient.GetAllSubscriptionsAsync(null, null, null, null);
@@ -201,8 +317,6 @@
                 .Where(u => !string.IsNullOrEmpty(u))
                 .Distinct();
             await Task.WhenAll(uids.Select(EnrichFromCotAsync));
-
-            await PushMarkersAsync();
         }
         catch (Exception ex)
         {
@@ -211,8 +325,16 @@
         finally
         {
             _loading = false;
-            StateHasChanged();
         }
+
+        await PushMarkersAsync();
+        StateHasChanged();
+    }
+
+    // Aggiorna la sidebar (tutti i punti); la mappa legge sempre live da ProtoCache in BuildMarkers
+    private void LoadProtoPoints()
+    {
+        _allProtoPoints = ProtoCache.GetAll(_staleMinutes);
     }
 
     private async Task EnrichFromCotAsync(string? uid)
@@ -244,23 +366,74 @@
         var result = new List<MapMarker>();
         var seen = new HashSet<string>();
 
+        // Punti connessi al server (da SubscriptionInfo)
         foreach (var c in _clients)
         {
             var uid = c.ClientUid ?? c.SubscriptionUid;
-            if (string.IsNullOrEmpty(uid) || !seen.Add(uid)) continue;
+            if (string.IsNullOrEmpty(uid)) continue;
 
             var pos = GetPosition(c);
             if (!pos.HasValue) continue;
 
-            var team = GetTeam(c);
+            if (!seen.Add(uid)) continue;
+
+            var team     = GetTeam(c);
             var callsign = IsSelf(c) ? TakProvider.Callsign : (c.Callsign ?? uid);
-            var lastSec = (DateTimeOffset.UtcNow - DateTimeOffset.FromUnixTimeMilliseconds(c.LastReportMilliseconds)).TotalSeconds;
+            var lastSec  = (DateTimeOffset.UtcNow - DateTimeOffset.FromUnixTimeMilliseconds(c.LastReportMilliseconds)).TotalSeconds;
 
             string? cotType;
             lock (_cotTypeCache) { _cotTypeCache.TryGetValue(uid, out cotType); }
 
-            result.Add(new MapMarker(uid, callsign, pos.Value.Lat, pos.Value.Lon, team, TeamColor(team), cotType, lastSec, GetBattery(c)));
+            result.Add(new MapMarker(uid, callsign, pos.Value.Lat, pos.Value.Lon,
+                team, TeamColor(team), cotType, lastSec, GetBattery(c), null));
         }
+
+        // Punti dalla cache (SA Multicast + missioni) — letti live dal ProtoCache
+        // (non da un campo stale: questo garantisce che i marker siano sempre aggiornati)
+        // Sorgente 2: cache persistente (sopravvive ai riavvii)
+        var missionFilter = _activeSubscriptions.Count > 0
+            ? (IReadOnlyCollection<string>)_activeSubscriptions : null;
+        foreach (var (entry, isStale) in ProtoCache.GetFiltered(_staleMinutes, missionFilter))
+        {
+            if (!seen.Add(entry.Uid)) continue;
+            if (entry.Lat == 0 && entry.Lon == 0) continue;
+
+            var team    = entry.Team ?? "";
+            var lastSec = (DateTime.UtcNow - entry.LastSeen).TotalSeconds;
+            var color   = isStale ? "#888888" : TeamColor(team);
+
+            result.Add(new MapMarker(entry.Uid, entry.Callsign ?? entry.Uid,
+                entry.Lat, entry.Lon, team, color, entry.CotType, lastSec, null,
+                entry.MissionName));
+        }
+
+        // Sorgente 3: dispositivi visti in sessione via CoT (UDP + TCP) non ancora in seen
+        // Regola missione: null = sempre visibile; mission diversa dalla attiva = nascosto
+        lock (_cotSeenDevices)
+        {
+            foreach (var (uid, info) in _cotSeenDevices)
+            {
+                if (!seen.Add(uid)) continue;
+
+                // Filtro missione: stessa logica del proto cache
+                if (_activeSubscriptions.Count > 0
+                    && info.MissionName != null
+                    && !_activeSubscriptions.Contains(info.MissionName))
+                    continue;
+
+                (double Lat, double Lon) pos;
+                lock (_positionCache) { if (!_positionCache.TryGetValue(uid, out pos)) continue; }
+
+                var lastSec = (DateTimeOffset.UtcNow - DateTimeOffset.FromUnixTimeMilliseconds(info.LastSeenMs)).TotalSeconds;
+                var color   = TeamColor(info.Team);
+                string? cotType;
+                lock (_cotTypeCache) { _cotTypeCache.TryGetValue(uid, out cotType); }
+
+                result.Add(new MapMarker(uid, info.Callsign,
+                    pos.Lat, pos.Lon, info.Team, color, cotType, lastSec, null, info.MissionName));
+            }
+        }
+
         return result;
     }
 
@@ -322,28 +495,36 @@
         return null;
     }
 
+    private static string FormatLastSec(double sec)
+    {
+        if (sec < 60)   return $"{(int)sec}s fa";
+        if (sec < 3600) return $"{(int)(sec / 60)}m fa";
+        return $"{(int)(sec / 3600)}h fa";
+    }
+
     private static string TeamColor(string? team) => (team ?? "").ToLowerInvariant() switch
     {
-        "white" or "bianco" => "#e0e0e0",
-        "yellow" or "giallo" => "#ffc107",
-        "orange" or "arancione" => "#fd7e14",
-        "maroon" or "bordeaux" => "#800000",
-        "red" or "rosso" => "#dc3545",
-        "purple" or "viola" => "#9b59b6",
-        "dark blue" or "blu scuro" => "#003087",
-        "blue" or "blu" => "#0d6efd",
-        "cyan" or "ciano" => "#00bcd4",
-        "teal" or "turchese" => "#008080",
-        "green" or "verde" => "#198754",
+        "white" or "bianco"           => "#e0e0e0",
+        "yellow" or "giallo"          => "#ffc107",
+        "orange" or "arancione"       => "#fd7e14",
+        "maroon" or "bordeaux"        => "#800000",
+        "red" or "rosso"              => "#dc3545",
+        "purple" or "viola"           => "#9b59b6",
+        "dark blue" or "blu scuro"    => "#003087",
+        "blue" or "blu"               => "#0d6efd",
+        "cyan" or "ciano"             => "#00bcd4",
+        "teal" or "turchese"          => "#008080",
+        "green" or "verde"            => "#198754",
         "dark green" or "verde scuro" => "#1a5c2a",
-        "brown" or "marrone" => "#795548",
-        "magenta" => "#e91e96",
-        _ => "#6c757d"
+        "brown" or "marrone"          => "#795548",
+        "magenta"                     => "#e91e96",
+        _                             => "#6c757d"
     };
 
     public void Dispose()
     {
         CoTManager.CoTMessageReceived -= OnCoTMessage;
+        ProtoCache.CacheChanged -= OnProtoCacheChanged;
         _refreshTimer?.Dispose();
         _ = JS.InvokeVoidAsync("takMap.dispose");
     }

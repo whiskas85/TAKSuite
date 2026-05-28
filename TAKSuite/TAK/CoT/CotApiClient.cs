@@ -11,15 +11,18 @@ public class CoTApiClient
 {
     private readonly TakClientProvider _takProvider;
     private readonly CachedDataService _cacheData;
-    private readonly TakTrafficLogger _trafficLog;
+    private readonly TakTrafficLogger  _trafficLog;
+    private readonly ProtoCacheService _protoCache;
 
     public Func<string, Task>? ProcessMessageHandler { get; internal set; }
 
-    public CoTApiClient(TakClientProvider takProvider, CachedDataService cacheService, TakTrafficLogger trafficLog)
+    public CoTApiClient(TakClientProvider takProvider, CachedDataService cacheService,
+                        TakTrafficLogger trafficLog, ProtoCacheService protoCache)
     {
         _takProvider = takProvider;
         _cacheData   = cacheService;
         _trafficLog  = trafficLog;
+        _protoCache  = protoCache;
     }
 
     public async Task StartListening(CancellationToken cancellationToken)
@@ -137,7 +140,7 @@ public class CoTApiClient
                         catch { }
                     }
 
-                    _ = ProcessMessage(xml, $"UDP:{port} {from.Address}");
+                    _ = ProcessMessage(xml, $"UDP:{port} {from.Address}", isProto: protoXml != null);
                 }
             }
             catch (OperationCanceledException) { break; }
@@ -178,27 +181,55 @@ public class CoTApiClient
         return xml.ToString();
     }
 
-    private async Task ProcessMessage(string message, string source = "TCP")
+    private async Task ProcessMessage(string message, string source = "TCP", bool isProto = false)
     {
         try
         {
             var doc      = XDocument.Parse(message);
             var uid      = (string?)doc.Root?.Attribute("uid") ?? "?";
             var type     = (string?)doc.Root?.Attribute("type") ?? "?";
-            var callsign = (string?)doc.Root?.Element("detail")?.Element("contact")?.Attribute("callsign") ?? "";
+            var detail   = doc.Root?.Element("detail");
+            var callsign = (string?)detail?.Element("contact")?.Attribute("callsign") ?? "";
             var pt       = doc.Root?.Element("point");
-            var lat      = (string?)pt?.Attribute("lat") ?? "";
-            var lon      = (string?)pt?.Attribute("lon") ?? "";
-            var team     = (string?)doc.Root?.Element("detail")?.Element("__group")?.Attribute("name") ?? "";
+            var latStr   = (string?)pt?.Attribute("lat") ?? "";
+            var lonStr   = (string?)pt?.Attribute("lon") ?? "";
+            var haeStr   = (string?)pt?.Attribute("hae") ?? "0";
+            var team     = (string?)detail?.Element("__group")?.Attribute("name") ?? "";
+            var role     = (string?)detail?.Element("__group")?.Attribute("role") ?? "";
 
             var summary = $"[{source}] uid={uid} type={type}";
             if (!string.IsNullOrEmpty(callsign)) summary += $" cs={callsign}";
             if (!string.IsNullOrEmpty(team))     summary += $" team={team}";
-            if (!string.IsNullOrEmpty(lat))      summary += $" lat={lat} lon={lon}";
+            if (!string.IsNullOrEmpty(latStr))   summary += $" lat={latStr} lon={lonStr}";
             _trafficLog.Write("COT-RX", summary);
 
             if (type?.Contains("a-f-G-U-C") == true)
                 _cacheData?.Add(uid, message, TimeSpan.MaxValue);
+
+            // Cache persistente per tutti i punti con coordinate valide:
+            // - SA Multicast (isProto=true, porta 6969): missionName=null
+            // - CoT da server/missione (TCP): missionName estratto da detail/mission/@name
+            if (uid != "?" && double.TryParse(latStr, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var lat)
+                        && double.TryParse(lonStr, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var lon)
+                        && !(lat == 0 && lon == 0))
+            {
+                double.TryParse(haeStr, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var hae);
+
+                // SA Multicast non ha missione; i CoT da server/missione la portano in detail/mission/@name
+                var missionName = isProto ? null
+                    : (string?)detail?.Element("mission")?.Attribute("name");
+
+                _ = _protoCache.AddOrUpdateAsync(uid, message,
+                    string.IsNullOrEmpty(callsign) ? null : callsign,
+                    type,
+                    lat, lon, hae,
+                    string.IsNullOrEmpty(team) ? null : team,
+                    string.IsNullOrEmpty(role) ? null : role,
+                    string.IsNullOrEmpty(missionName) ? null : missionName);
+            }
 
             if (ProcessMessageHandler != null)
                 await ProcessMessageHandler(message);

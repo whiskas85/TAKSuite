@@ -17,6 +17,12 @@
     z-index: 10;
 }
 
+.takmap-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+}
+
 .takmap-map {
     flex: 1;
     min-height: 0;
@@ -52,3 +58,87 @@
 }
 
     .takmap-update-close:hover { opacity: 1; }
+
+/* ── Sidebar destra ── */
+
+.takmap-sidebar {
+    width: 240px;
+    flex-shrink: 0;
+    border-left: 1px solid var(--bs-border-color);
+    background: var(--bs-body-bg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.takmap-sb-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    border-bottom: 1px solid var(--bs-border-color);
+    flex-shrink: 0;
+}
+
+.takmap-sb-list {
+    overflow-y: auto;
+    flex: 1;
+}
+
+.takmap-sb-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--bs-border-color);
+    transition: background 0.1s;
+}
+
+    .takmap-sb-item:hover { background: var(--bs-tertiary-bg); }
+
+.takmap-sb-stale { opacity: 0.55; }
+
+.takmap-sb-offmission { opacity: 0.4; }
+
+.takmap-sb-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 4px;
+}
+
+.takmap-sb-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+}
+
+.takmap-sb-callsign {
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.takmap-sb-mission-badge {
+    font-size: 9px !important;
+    padding: 1px 5px !important;
+    align-self: flex-start;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.takmap-sb-empty {
+    padding: 20px 12px;
+    text-align: center;
+    color: var(--bs-secondary-color);
+    font-size: 12px;
+}

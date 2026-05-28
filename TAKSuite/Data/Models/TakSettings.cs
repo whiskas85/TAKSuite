@@ -36,5 +36,9 @@ namespace TAKSuite.Data.Models
 
         // Template del prompt inviato all'AI (null = usa il default hardcoded)
         public string? AiPromptTemplate { get; set; }
+
+        // Cache protobuf: soglie in minuti
+        public int ProtoStaleMinutes  { get; set; } = 10;
+        public int ProtoDeleteMinutes { get; set; } = 30;
     }
 }

@@ -114,8 +114,9 @@ builder.Services.AddSingleton(sp => new VideoConnectionManagerV2Client(sp.GetReq
 builder.Services.AddSingleton(sp => new DataFeedApiClient(sp.GetRequiredService<MartiHttpClientProvider>().HttpClient));
 builder.Services.AddSingleton(sp => new ContactsApiClient(sp.GetRequiredService<MartiHttpClientProvider>().HttpClient));
 builder.Services.AddSingleton<TakTrafficLogger>();
-builder.Services.AddSingleton<CachedDataService>();      // Cached Data Service
-builder.Services.AddSingleton<CoTManager>();      // CoTManager
+builder.Services.AddSingleton<CachedDataService>();      // Cached Data Service (server-connected SA)
+builder.Services.AddSingleton<ProtoCacheService>();      // Cache persistente punti protobuf (non connessi)
+builder.Services.AddSingleton<CoTManager>();             // CoTManager
 builder.Services.AddTransient<WebSocketManagerCustom>();
 
 
@@ -192,6 +193,7 @@ var app = builder.Build();
 var lifetime         = app.Services.GetRequiredService<IHostApplicationLifetime>();
 var cotApiClient     = app.Services.GetRequiredService<CoTApiClient>();
 var takProvider      = app.Services.GetRequiredService<TakClientProvider>();
+var protoCache       = app.Services.GetRequiredService<ProtoCacheService>();
 var photoAutoJoinSvc = app.Services.GetRequiredService<PhotoAutoJoinService>(); // sottoscrive CoTManager in ctor
 
 lifetime.ApplicationStarted.Register(() =>
@@ -200,9 +202,51 @@ lifetime.ApplicationStarted.Register(() =>
 
     Task.Run(async () =>
     {
+        // Applica migrazioni EF Core pendenti (crea tabelle nuove se non esistono)
+        try
+        {
+            await using var db = await app.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>().CreateDbContextAsync();
+            await db.Database.MigrateAsync();
+            Log.Information("[Startup] Migrazioni DB applicate");
+        }
+        catch (Exception ex) { Log.Warning(ex, "[Startup] Migrazione DB fallita"); }
+
+        // Guard SQL idempotente: aggiunge MissionName a CachedCoTEntries se mancante.
+        // Bypassa il meccanismo EF Migration — garantisce la colonna anche senza Designer file.
+        try
+        {
+            await using var dbGuard = await app.Services.GetRequiredService<IDbContextFactory<ApplicationDbContext>>().CreateDbContextAsync();
+            await dbGuard.Database.ExecuteSqlRawAsync(@"
+                IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'CachedCoTEntries')
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+                                   WHERE TABLE_NAME = 'CachedCoTEntries' AND COLUMN_NAME = 'MissionName')
+                    BEGIN
+                        ALTER TABLE CachedCoTEntries ADD MissionName NVARCHAR(450) NULL;
+                        IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                                       WHERE name = 'IX_CachedCoTEntries_MissionName'
+                                         AND object_id = OBJECT_ID('CachedCoTEntries'))
+                            CREATE INDEX IX_CachedCoTEntries_MissionName ON CachedCoTEntries(MissionName);
+                    END
+                END");
+            Log.Information("[Startup] Schema CachedCoTEntries verificato");
+        }
+        catch (Exception ex) { Log.Warning(ex, "[Startup] Schema guard CachedCoTEntries fallito"); }
+
         // Carica impostazioni TAK dal DB e riconfigura il client
         try { await takProvider.InitializeFromDbAsync(); }
         catch (Exception ex) { Log.Warning(ex, "[Startup] InitializeFromDbAsync fallito"); }
+
+        // Inizializza cache protobuf (carica da DB, pulisce scaduti)
+        try
+        {
+            using var scope    = app.Services.CreateScope();
+            var settingsSvc    = scope.ServiceProvider.GetRequiredService<TakSettingsService>();
+            var settings       = await settingsSvc.GetOrCreateAsync();
+            await protoCache.InitializeAsync(settings.ProtoDeleteMinutes);
+            Log.Information("[Startup] ProtoCacheService inizializzato ({Count} punti caricati)", protoCache.Count);
+        }
+        catch (Exception ex) { Log.Warning(ex, "[Startup] ProtoCacheService init fallito"); }
 
         // Ripristina sottoscrizioni missioni salvate
         try

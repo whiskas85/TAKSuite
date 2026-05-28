@@ -453,6 +453,7 @@ window.takMap = (function () {
                 var icon = createUserIcon(m.teamColor);
                 var popup = '<b style="font-size:1rem">' + (m.callsign || m.uid) + '</b>' +
                     (m.team ? '<br><span style="color:' + (m.teamColor || '#888') + '">■ ' + m.team + '</span>' : '') +
+                    (m.missionName ? '<br><span style="background:#0d6efd;color:#fff;font-size:10px;padding:1px 7px;border-radius:10px;font-weight:600">📋 ' + m.missionName + '</span>' : '') +
                     (m.battery != null ? '<br>🔋 ' + m.battery + '%' : '') +
                     '<br><span style="' + staleStyle(m.lastReportSec) + '">⏱ ' + formatLastSec(m.lastReportSec) + '</span>';
 

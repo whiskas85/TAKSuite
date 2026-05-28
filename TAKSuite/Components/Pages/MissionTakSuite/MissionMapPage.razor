@@ -23,6 +23,7 @@
 @inject TakClientProvider TakProvider
 @inject IJSRuntime JS
 @inject AtakMapsService AtakMapsService
+@inject ProtoCacheService ProtoCache
 @implements IDisposable
 
 <PageTitle>Mappa — @(_mission?.Name ?? "Missione")</PageTitle>
@@ -350,6 +351,30 @@ else
             .Distinct()
             .Where(u => { lock (_positionCache) { return !_positionCache.ContainsKey(u!); } });
         await Task.WhenAll(uids.Select(EnrichFromCotAsync));
+
+        // Pre-popola _cotSeenClients e _positionCache dalla cache persistente.
+        // Regola missione: mostra null (SA Multicast) + questa missione; nascondi le altre.
+        var thisMission = _mission?.TakMissionUid;
+        var protoAll = ProtoCache.GetAll(10);
+        foreach (var (entry, _) in protoAll)
+        {
+            if (string.IsNullOrEmpty(entry.Uid)) continue;
+            if (entry.Lat == 0 && entry.Lon == 0) continue;
+            // Filtro: null = sempre; questa missione = sì; altra missione = no
+            if (entry.MissionName != null && entry.MissionName != thisMission) continue;
+
+            lock (_positionCache) { _positionCache.TryAdd(entry.Uid, (entry.Lat, entry.Lon)); }
+            if (!string.IsNullOrEmpty(entry.Team))
+                lock (_teamCache) { _teamCache.TryAdd(entry.Uid, entry.Team!); }
+            lock (_cotSeenClients)
+            {
+                if (!_cotSeenClients.ContainsKey(entry.Uid))
+                {
+                    var ms = ((DateTimeOffset)DateTime.SpecifyKind(entry.LastSeen, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
+                    _cotSeenClients[entry.Uid] = (entry.Callsign ?? entry.Uid, entry.Team ?? "", entry.Role ?? "", ms);
+                }
+            }
+        }
 
         // Merge UDP-only devices (not connected to server but seen via CoT multicast)
         var serverUids = new HashSet<string>(
