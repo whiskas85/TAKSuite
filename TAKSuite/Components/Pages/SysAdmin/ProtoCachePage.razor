@@ -1,0 +1,251 @@
+@page "/system/proto-cache"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using TAKSuite.Data.Models
+@using TAKSuite.Data.Services
+@inject ProtoCacheService ProtoCache
+@inject TakSettingsService SettingsService
+@implements IDisposable
+
+<PageTitle>Cache Posizioni SA</PageTitle>
+
+<div class="container-fluid py-3">
+
+    <div class="d-flex align-items-center gap-2 mb-3">
+        <Icon Name="IconName.DatabaseFill" />
+        <h5 class="mb-0">Cache Posizioni SA</h5>
+        <Badge Color="BadgeColor.Secondary">@_entries.Count dispositivi</Badge>
+        <Badge Color="BadgeColor.Warning" TextColor="TextColor.Dark">@_entries.Count(e => e.IsStale) stale</Badge>
+    </div>
+
+    @* ── Impostazioni soglie ──────────────────────────────────────────────── *@
+    <div class="card mb-3">
+        <div class="card-header d-flex align-items-center gap-2">
+            <Icon Name="IconName.Sliders" />
+            <span class="fw-semibold">Soglie</span>
+        </div>
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-auto">
+                    <label class="form-label small">Stale dopo (minuti)</label>
+                    <input type="number" class="form-control form-control-sm" style="width:110px"
+                           @bind="_staleMinutes" min="1" max="1440" />
+                    <div class="form-text">Il punto diventa grigio sulla mappa</div>
+                </div>
+                <div class="col-auto">
+                    <label class="form-label small">Cancella dopo (minuti)</label>
+                    <input type="number" class="form-control form-control-sm" style="width:110px"
+                           @bind="_deleteMinutes" min="1" max="10080" />
+                    <div class="form-text">Il punto viene rimosso dalla cache</div>
+                </div>
+                <div class="col-auto">
+                    <Button Color="ButtonColor.Primary" Size="ButtonSize.Small"
+                            @onclick="SaveSettingsAsync" Loading="_saving">
+                        <Icon Name="IconName.CheckLg" /> Salva
+                    </Button>
+                    @if (_saved)
+                    {
+                        <span class="text-success ms-2 small"><Icon Name="IconName.CheckCircleFill" /> Salvato</span>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── Azioni globali ───────────────────────────────────────────────────── *@
+    <div class="d-flex gap-2 align-items-center mb-3">
+        <Button Color="ButtonColor.Secondary" Size="ButtonSize.Small" @onclick="RefreshAsync">
+            <Icon Name="IconName.ArrowRepeat" /> Aggiorna
+        </Button>
+        <Button Color="ButtonColor.Danger" Size="ButtonSize.Small"
+                @onclick="ClearAllAsync" Disabled="@(_entries.Count == 0)">
+            <Icon Name="IconName.Trash3Fill" /> Svuota cache
+        </Button>
+    </div>
+
+    @* ── Tabella dispositivi ──────────────────────────────────────────────── *@
+    @if (_entries.Count == 0)
+    {
+        <Alert Color="AlertColor.Secondary">
+            <Icon Name="IconName.InfoCircleFill" /> Nessun dispositivo in cache.
+        </Alert>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Callsign</th>
+                        <th>Team</th>
+                        <th>Missione</th>
+                        <th>Lat / Lon</th>
+                        <th>Ultima pos.</th>
+                        <th>Stato</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var (entry, isStale) in _entries)
+                    {
+                        var lastSec = (DateTime.UtcNow - entry.LastSeen).TotalSeconds;
+                        <tr class="@(isStale ? "table-secondary" : "")">
+                            <td>
+                                <span class="fw-semibold">@(entry.Callsign ?? entry.Uid)</span>
+                                <br/>
+                                <small class="text-muted font-monospace" style="font-size:10px">@entry.Uid</small>
+                            </td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(entry.Team))
+                                {
+                                    <span class="badge" style="background:@TeamColor(entry.Team)">@entry.Team</span>
+                                }
+                            </td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(entry.MissionName))
+                                {
+                                    <Badge Color="BadgeColor.Primary">@entry.MissionName</Badge>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">—</span>
+                                }
+                            </td>
+                            <td class="font-monospace small">
+                                @entry.Lat.ToString("F5") / @entry.Lon.ToString("F5")
+                            </td>
+                            <td class="small">
+                                <span class="@TimeClass(lastSec)">@FormatAge(lastSec)</span>
+                                <br/>
+                                <small class="text-muted">@entry.LastSeen.ToLocalTime().ToString("HH:mm:ss")</small>
+                            </td>
+                            <td>
+                                @if (isStale)
+                                {
+                                    <Badge Color="BadgeColor.Warning" TextColor="TextColor.Dark">stale</Badge>
+                                }
+                                else
+                                {
+                                    <Badge Color="BadgeColor.Success">live</Badge>
+                                }
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-danger"
+                                        @onclick="() => RemoveAsync(entry.Uid)"
+                                        title="Rimuovi dalla cache">
+                                    <Icon Name="IconName.Trash3" />
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    private List<(CachedCoTEntry Entry, bool IsStale)> _entries = new();
+    private int  _staleMinutes  = 10;
+    private int  _deleteMinutes = 30;
+    private bool _saving;
+    private bool _saved;
+    private System.Threading.Timer? _refreshTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        ProtoCache.CacheChanged += OnCacheChanged;
+        await LoadSettingsAsync();
+        RefreshEntries();
+        _refreshTimer = new System.Threading.Timer(
+            _ => InvokeAsync(() => { RefreshEntries(); StateHasChanged(); }),
+            null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+    }
+
+    private void OnCacheChanged()
+    {
+        InvokeAsync(() => { RefreshEntries(); StateHasChanged(); });
+    }
+
+    private void RefreshEntries() => _entries = ProtoCache.GetAll(_staleMinutes);
+
+    private async Task RefreshAsync()
+    {
+        await LoadSettingsAsync();
+        RefreshEntries();
+    }
+
+    private async Task LoadSettingsAsync()
+    {
+        try
+        {
+            var s = await SettingsService.GetOrCreateAsync();
+            _staleMinutes  = s.ProtoStaleMinutes;
+            _deleteMinutes = s.ProtoDeleteMinutes;
+        }
+        catch { }
+    }
+
+    private async Task SaveSettingsAsync()
+    {
+        _saving = true;
+        _saved  = false;
+        try
+        {
+            var s = await SettingsService.GetOrCreateAsync();
+            s.ProtoStaleMinutes  = Math.Max(1, _staleMinutes);
+            s.ProtoDeleteMinutes = Math.Max(1, _deleteMinutes);
+            await SettingsService.SaveAsync(s);
+            _saved = true;
+            _ = Task.Delay(3000).ContinueWith(_ => InvokeAsync(() => { _saved = false; StateHasChanged(); }));
+        }
+        catch { }
+        finally { _saving = false; }
+    }
+
+    private async Task RemoveAsync(string uid)
+    {
+        await ProtoCache.RemoveAsync(uid);
+        RefreshEntries();
+    }
+
+    private async Task ClearAllAsync()
+    {
+        await ProtoCache.ClearAllAsync();
+        RefreshEntries();
+    }
+
+    private static string FormatAge(double sec)
+    {
+        if (sec < 60)   return $"{(int)sec}s fa";
+        if (sec < 3600) return $"{(int)(sec / 60)}m fa";
+        return $"{(int)(sec / 3600)}h fa";
+    }
+
+    private static string TimeClass(double sec) =>
+        sec > 600 ? "text-danger" : sec > 120 ? "text-warning" : "text-success";
+
+    private static string TeamColor(string? team) => (team ?? "").ToLowerInvariant() switch
+    {
+        "white" or "bianco"           => "#888",
+        "yellow" or "giallo"          => "#ffc107",
+        "orange" or "arancione"       => "#fd7e14",
+        "maroon" or "bordeaux"        => "#800000",
+        "red" or "rosso"              => "#dc3545",
+        "purple" or "viola"           => "#9b59b6",
+        "dark blue" or "blu scuro"    => "#003087",
+        "blue" or "blu"               => "#0d6efd",
+        "cyan" or "ciano"             => "#00bcd4",
+        "teal" or "turchese"          => "#008080",
+        "green" or "verde"            => "#198754",
+        "dark green" or "verde scuro" => "#1a5c2a",
+        "brown" or "marrone"          => "#795548",
+        "magenta"                     => "#e91e96",
+        _                             => "#6c757d"
+    };
+
+    public void Dispose()
+    {
+        ProtoCache.CacheChanged -= OnCacheChanged;
+        _refreshTimer?.Dispose();
+    }
+}

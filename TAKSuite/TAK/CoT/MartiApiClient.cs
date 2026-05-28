@@ -314,6 +314,10 @@ namespace TAKSuite.TAK.CoT
             {
                 return await TakClient.GetCotByUidAsync(uid);
             }
+            catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return null; // 404 = UID non presente sul server, silenzioso
+            }
             catch (Exception ex)
             {
                 Console.WriteLine($"Eccezione GetInfo: {ex.Message}");
@@ -327,6 +331,10 @@ namespace TAKSuite.TAK.CoT
             {
                 var xml = await TakClient.GetCotByUidAsync(uid);
                 return EventData.LoadFromString(xml);
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return null;
             }
             catch (Exception ex)
             {

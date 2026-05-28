@@ -121,7 +121,8 @@
         [property: JsonPropertyName("cotType")]       string? CotType,
         [property: JsonPropertyName("lastReportSec")] double  LastReportSec,
         [property: JsonPropertyName("battery")]       int?    Battery,
-        [property: JsonPropertyName("missionName")]   string? MissionName
+        [property: JsonPropertyName("missionName")]   string? MissionName,
+        [property: JsonPropertyName("isStale")]       bool    IsStale
     );
 
     private List<SubscriptionInfo> _clients = new();
@@ -384,8 +385,9 @@
             string? cotType;
             lock (_cotTypeCache) { _cotTypeCache.TryGetValue(uid, out cotType); }
 
+            var isStale1 = lastSec > _staleMinutes * 60.0;
             result.Add(new MapMarker(uid, callsign, pos.Value.Lat, pos.Value.Lon,
-                team, TeamColor(team), cotType, lastSec, GetBattery(c), null));
+                team, TeamColor(team), cotType, lastSec, GetBattery(c), null, isStale1));
         }
 
         // Punti dalla cache (SA Multicast + missioni) — letti live dal ProtoCache
@@ -400,11 +402,10 @@
 
             var team    = entry.Team ?? "";
             var lastSec = (DateTime.UtcNow - entry.LastSeen).TotalSeconds;
-            var color   = isStale ? "#888888" : TeamColor(team);
 
             result.Add(new MapMarker(entry.Uid, entry.Callsign ?? entry.Uid,
-                entry.Lat, entry.Lon, team, color, entry.CotType, lastSec, null,
-                entry.MissionName));
+                entry.Lat, entry.Lon, team, TeamColor(team), entry.CotType, lastSec, null,
+                entry.MissionName, isStale));
         }
 
         // Sorgente 3: dispositivi visti in sessione via CoT (UDP + TCP) non ancora in seen
@@ -424,13 +425,13 @@
                 (double Lat, double Lon) pos;
                 lock (_positionCache) { if (!_positionCache.TryGetValue(uid, out pos)) continue; }
 
-                var lastSec = (DateTimeOffset.UtcNow - DateTimeOffset.FromUnixTimeMilliseconds(info.LastSeenMs)).TotalSeconds;
-                var color   = TeamColor(info.Team);
+                var lastSec  = (DateTimeOffset.UtcNow - DateTimeOffset.FromUnixTimeMilliseconds(info.LastSeenMs)).TotalSeconds;
+                var isStale3 = lastSec > _staleMinutes * 60.0;
                 string? cotType;
                 lock (_cotTypeCache) { _cotTypeCache.TryGetValue(uid, out cotType); }
 
                 result.Add(new MapMarker(uid, info.Callsign,
-                    pos.Lat, pos.Lon, info.Team, color, cotType, lastSec, null, info.MissionName));
+                    pos.Lat, pos.Lon, info.Team, TeamColor(info.Team), cotType, lastSec, null, info.MissionName, isStale3));
             }
         }
 

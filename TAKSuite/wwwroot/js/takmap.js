@@ -49,10 +49,13 @@ window.takMap = (function () {
         { id: 'fema-flood',    cat: 'Regionale', name: 'FEMA Zone Alluvionali',  wms: true, url: 'https://hazards.fema.gov/arcgis/services/public/NFHLWMS/MapServer/WMSServer', layers: '12', attr: '© FEMA', maxZoom: 19, transparent: true }
     ];
 
-    function createUserIcon(color) {
-        var bg = color || '#6c757d';
+    function createUserIcon(color, isStale) {
+        var teamColor = color || '#6c757d';
+        var bg     = isStale ? '#888888' : teamColor;
+        var border = isStale ? teamColor  : 'rgba(0,0,0,0.35)';
+        var bw     = isStale ? '3px'      : '2.5px';
         var html = '<div style="width:24px;height:24px;border-radius:50%;background:' + bg +
-            ';border:2.5px solid rgba(0,0,0,0.4);box-shadow:0 2px 5px rgba(0,0,0,0.4)"></div>';
+            ';border:' + bw + ' solid ' + border + ';box-shadow:0 2px 5px rgba(0,0,0,0.4)"></div>';
         return L.divIcon({ html: html, className: '', iconSize: [24, 24], iconAnchor: [12, 12], popupAnchor: [0, -16] });
     }
 
@@ -450,7 +453,7 @@ window.takMap = (function () {
                 seen[m.uid] = true;
 
                 var latlng = [m.lat, m.lon];
-                var icon = createUserIcon(m.teamColor);
+                var icon = createUserIcon(m.teamColor, m.isStale);
                 var popup = '<b style="font-size:1rem">' + (m.callsign || m.uid) + '</b>' +
                     (m.team ? '<br><span style="color:' + (m.teamColor || '#888') + '">■ ' + m.team + '</span>' : '') +
                     (m.missionName ? '<br><span style="background:#0d6efd;color:#fff;font-size:10px;padding:1px 7px;border-radius:10px;font-weight:600">📋 ' + m.missionName + '</span>' : '') +

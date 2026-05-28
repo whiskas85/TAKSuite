@@ -13,7 +13,7 @@
 Href="/"
 ImageSrc="images/tak trasp.png"
 Title="TAK Suite"
-BadgeText="v4.1.3"
+BadgeText="@TAKSuite.AppVersion.Badge"
 DataProvider="Sidebar2DataProvider"
 WidthUnit="Unit.Px"
 Width="300"/>
@@ -82,7 +82,8 @@ Width="300"/>
                 new NavItem { Id = $"8.{counter++}", Href = "/settings/atak-maps", IconName = IconName.MapFill, Text = "ATAK Maps", ParentId = "8" },
 
             new NavItem { Id = "10", Href = "", IconName = IconName.Display, Text = "System" },
-                new NavItem { Id = "10.0", Href = "/system/log", IconName = IconName.FileTextFill, Text = "Log", ParentId = "10" },
+                new NavItem { Id = "10.0", Href = "/system/log",         IconName = IconName.FileTextFill,  Text = "Log",           ParentId = "10" },
+                new NavItem { Id = "10.1", Href = "/system/proto-cache", IconName = IconName.DatabaseFill,  Text = "Cache SA",      ParentId = "10" },
 
         };
 

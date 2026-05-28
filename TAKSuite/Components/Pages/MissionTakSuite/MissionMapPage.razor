@@ -125,7 +125,8 @@ else
         [property: JsonPropertyName("team")] string Team,
         [property: JsonPropertyName("teamColor")] string TeamColor,
         [property: JsonPropertyName("lastReportSec")] double LastReportSec,
-        [property: JsonPropertyName("battery")] int? Battery
+        [property: JsonPropertyName("battery")] int? Battery,
+        [property: JsonPropertyName("isStale")] bool IsStale
     );
 
     private record PointMarker(
@@ -200,10 +201,48 @@ else
     private bool _atakMapsUpdate;
     private Guid _currentMissionId;
     private System.Threading.Timer? _refreshTimer;
+    private int  _pendingCacheRefresh;
 
     protected override void OnInitialized()
     {
-        CoTManager.CoTMessageReceived += OnCoTMessage;
+        CoTManager.CoTMessageReceived  += OnCoTMessage;
+        ProtoCache.CacheChanged        += OnProtoCacheChanged;
+    }
+
+    // Aggiorna mappa/sidebar quando la proto cache cambia (es. keep-alive server, nuovo SA)
+    private void OnProtoCacheChanged()
+    {
+        if (System.Threading.Interlocked.Exchange(ref _pendingCacheRefresh, 1) == 0)
+        {
+            _ = Task.Delay(1000).ContinueWith(_ =>
+                InvokeAsync(async () =>
+                {
+                    System.Threading.Interlocked.Exchange(ref _pendingCacheRefresh, 0);
+                    MergeProtoCacheIntoSession();
+                    await PushMarkersAsync();
+                }));
+        }
+    }
+
+    // Merge leggero: aggiorna _positionCache e _cotSeenClients dalla cache persistente
+    private void MergeProtoCacheIntoSession()
+    {
+        var thisMission = _mission?.TakMissionUid;
+        foreach (var (entry, _) in ProtoCache.GetAll(10))
+        {
+            if (string.IsNullOrEmpty(entry.Uid) || (entry.Lat == 0 && entry.Lon == 0)) continue;
+            if (entry.MissionName != null && entry.MissionName != thisMission) continue;
+
+            lock (_positionCache) { _positionCache[entry.Uid] = (entry.Lat, entry.Lon); }
+            if (!string.IsNullOrEmpty(entry.Team))
+                lock (_teamCache) { _teamCache[entry.Uid] = entry.Team!; }
+
+            var ms = ((DateTimeOffset)DateTime.SpecifyKind(entry.LastSeen, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
+            lock (_cotSeenClients)
+            {
+                _cotSeenClients[entry.Uid] = (entry.Callsign ?? entry.Uid, entry.Team ?? "", entry.Role ?? "", ms);
+            }
+        }
     }
 
     protected override async Task OnParametersSetAsync()
@@ -675,7 +714,7 @@ else
             var team     = GetTeam(c);
             var callsign = IsSelf(c) ? TakProvider.Callsign : (c.Callsign ?? uid);
             var lastSec  = (DateTimeOffset.UtcNow - DateTimeOffset.FromUnixTimeMilliseconds(c.LastReportMilliseconds)).TotalSeconds;
-            result.Add(new MapMarker(uid, callsign, pos.Value.Lat, pos.Value.Lon, team, TeamColor(team), lastSec, GetBattery(c)));
+            result.Add(new MapMarker(uid, callsign, pos.Value.Lat, pos.Value.Lon, team, TeamColor(team), lastSec, GetBattery(c), lastSec > 600));
         }
 
         // UDP-only devices visible via multicast but not connected to the server
@@ -687,7 +726,7 @@ else
                 (double Lat, double Lon) pos;
                 lock (_positionCache) { if (!_positionCache.TryGetValue(uid, out pos)) continue; }
                 var lastSec = (DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - info.LastSeenMs) / 1000.0;
-                result.Add(new MapMarker(uid, info.Callsign, pos.Lat, pos.Lon, info.Team, TeamColor(info.Team), lastSec, null));
+                result.Add(new MapMarker(uid, info.Callsign, pos.Lat, pos.Lon, info.Team, TeamColor(info.Team), lastSec, null, lastSec > 600));
             }
         }
 
@@ -880,6 +919,7 @@ else
     public void Dispose()
     {
         CoTManager.CoTMessageReceived -= OnCoTMessage;
+        ProtoCache.CacheChanged       -= OnProtoCacheChanged;
         _refreshTimer?.Dispose();
         _ = JS.InvokeVoidAsync("takMap.dispose");
     }

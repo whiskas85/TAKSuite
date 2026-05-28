@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Xml.Linq;
+using TAKSuite;
 using TAKSuite.Data.Services;
 using TAKSuite.Data.ServicesTak;
 using TAKSuite.TAK;
@@ -89,6 +90,20 @@ public class CoTApiClient
             _trafficLog.Write("SA-TX", $"callsign={_takProvider.Callsign} uid={_takProvider.ClientUid} lat={_takProvider.Latitude} lon={_takProvider.Longitude}");
         }
         catch (Exception ex) { Console.WriteLine($"[SendSaAsync] {ex.Message}"); }
+
+        // Aggiorna la cache con la posizione del server stesso
+        if (!string.IsNullOrEmpty(_takProvider.ClientUid)
+            && _takProvider.Latitude.HasValue
+            && _takProvider.Longitude.HasValue)
+        {
+            var team = string.IsNullOrEmpty(_takProvider.Color) ? "Cyan" : _takProvider.Color;
+            var role = string.IsNullOrEmpty(_takProvider.Role)  ? "Team Member" : _takProvider.Role;
+            _ = _protoCache.AddOrUpdateAsync(
+                _takProvider.ClientUid, sa,
+                _takProvider.Callsign, "a-f-G-U-C",
+                _takProvider.Latitude.Value, _takProvider.Longitude.Value, 0,
+                team, role, missionName: null);
+        }
     }
 
     public Task SendMessageAsync(string cotXml) =>
@@ -175,7 +190,7 @@ public class CoTApiClient
         var role      = string.IsNullOrEmpty(p.Role)  ? "Team Member" : p.Role;
         xml.Append($"<__group name=\"{groupName}\" role=\"{role}\"/>");
         xml.Append("<status battery=\"100\"/>");
-        xml.Append("<takv device=\"TAKSuite Server\" platform=\"TAKSuite\" os=\"Windows\" version=\"1.0\"/>");
+        xml.Append($"<takv device=\"TAKSuite Server\" platform=\"{AppVersion.Platform}\" os=\"Windows\" version=\"{AppVersion.Version}\"/>");
         xml.Append("</detail>");
         xml.Append("</event>");
         return xml.ToString();

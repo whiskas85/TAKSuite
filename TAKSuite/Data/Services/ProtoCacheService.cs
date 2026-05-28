@@ -150,6 +150,42 @@ public class ProtoCacheService : IDisposable
 
     public int Count { get { lock (_lock) return _cache.Count; } }
 
+    // Rimuove un singolo dispositivo dalla cache in memoria e dal DB
+    public async Task RemoveAsync(string uid)
+    {
+        lock (_lock) { _cache.Remove(uid); }
+        try
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var conn = db.Database.GetDbConnection();
+            await conn.OpenAsync();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "DELETE FROM CachedCoTEntries WHERE Uid = @uid";
+            var p = cmd.CreateParameter(); p.ParameterName = "@uid"; p.Value = uid;
+            cmd.Parameters.Add(p);
+            await cmd.ExecuteNonQueryAsync();
+        }
+        catch (Exception ex) { Console.WriteLine($"[ProtoCacheService] Remove error uid={uid}: {ex.Message}"); }
+        CacheChanged?.Invoke();
+    }
+
+    // Svuota completamente la cache in memoria e nel DB
+    public async Task ClearAllAsync()
+    {
+        lock (_lock) { _cache.Clear(); }
+        try
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync();
+            var conn = db.Database.GetDbConnection();
+            await conn.OpenAsync();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "DELETE FROM CachedCoTEntries";
+            await cmd.ExecuteNonQueryAsync();
+        }
+        catch (Exception ex) { Console.WriteLine($"[ProtoCacheService] ClearAll error: {ex.Message}"); }
+        CacheChanged?.Invoke();
+    }
+
     // ── Privato ───────────────────────────────────────────────────────────────────
 
     private async Task PersistAsync(
